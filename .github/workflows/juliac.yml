@@ -13,10 +13,7 @@ concurrency:
 
 jobs:
   build-and-test:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-22.04, ubuntu-latest]
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
 
@@ -49,20 +46,17 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: juliac-build-${{ matrix.os }}
+          name: juliac-build-self-hosted
           path: artifacts/
 
   test-without-julia:
     needs: build-and-test
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-22.04, ubuntu-latest]
+    runs-on: self-hosted
     steps:
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          name: juliac-build-ubuntu-22.04
+          name: juliac-build-self-hosted
           path: artifacts/
 
       - name: Make executable runnable
@@ -76,10 +70,9 @@ jobs:
 
   test-python:
     needs: build-and-test
-    runs-on: ${{ matrix.os }}
+    runs-on: self-hosted
     strategy:
       matrix:
-        os: [ubuntu-22.04, ubuntu-latest]
         python-version: ['3.9', '3.10', '3.11', '3.12']
     
     steps:
@@ -93,7 +86,7 @@ jobs:
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          name: juliac-build-ubuntu-22.04
+          name: juliac-build-self-hosted
           path: artifacts/
 
       - name: Install Python dependencies
