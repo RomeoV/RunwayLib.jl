@@ -14,7 +14,7 @@ env:
 jobs:
   test:
     name: Julia ${{ matrix.version }} - self-hosted - ${{ matrix.arch }} - ${{ github.event_name }}
-    runs-on: self-hosted
+    runs-on: ${{ vars.USE_SELF_HOSTED == 'true' && 'self-hosted' || 'ubuntu-latest' }}
     timeout-minutes: 60
     permissions: # needed to allow julia-actions/cache to proactively delete old caches that it has created
       actions: write

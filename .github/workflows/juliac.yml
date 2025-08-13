@@ -13,7 +13,10 @@ concurrency:
 
 jobs:
   build-and-test:
-    runs-on: self-hosted
+    strategy:
+      matrix:
+        os: ${{ vars.USE_SELF_HOSTED == 'true' && fromJSON('["self-hosted"]') || fromJSON('["ubuntu-22.04", "ubuntu-latest"]') }}
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -46,17 +49,20 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: juliac-build-self-hosted
+          name: juliac-build-${{ matrix.os }}
           path: artifacts/
 
   test-without-julia:
     needs: build-and-test
-    runs-on: self-hosted
+    strategy:
+      matrix:
+        os: ${{ vars.USE_SELF_HOSTED == 'true' && fromJSON('["self-hosted"]') || fromJSON('["ubuntu-22.04", "ubuntu-latest"]') }}
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          name: juliac-build-self-hosted
+          name: juliac-build-${{ matrix.os }}
           path: artifacts/
 
       - name: Make executable runnable
@@ -70,10 +76,11 @@ jobs:
 
   test-python:
     needs: build-and-test
-    runs-on: self-hosted
     strategy:
       matrix:
+        os: ${{ vars.USE_SELF_HOSTED == 'true' && fromJSON('["self-hosted"]') || fromJSON('["ubuntu-22.04", "ubuntu-latest"]') }}
         python-version: ['3.9', '3.10', '3.11', '3.12']
+    runs-on: ${{ matrix.os }}
     
     steps:
       - uses: actions/checkout@v4
@@ -86,7 +93,7 @@ jobs:
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          name: juliac-build-self-hosted
+          name: juliac-build-${{ matrix.os }}
           path: artifacts/
 
       - name: Install Python dependencies
