@@ -1,24 +1,7 @@
-authors = ["Romeo Valentin <romeov@stanford.edu>"]
 name = "RunwayLib"
 uuid = "c31d23ff-e9b5-4186-8ef8-ce4d62614c67"
 version = "0.1.0"
-
-[compat]
-ADTypes = "1.16.0"
-CEnum = "0.5.0"
-DiffEqBase = "6.179.0"
-ForwardDiff = "1.0.1"
-LinearAlgebra = "1.11.0,1.12.0"
-LinearSolve = "3.23.0"
-Moshi = "0.3.7"
-NonlinearSolveBase = "1.13.0"
-NonlinearSolveFirstOrder = "1.7.0"
-Polyester = "0.7.18"
-PolyesterWeave = "0.2.2"
-PrecompileTools = "1"
-ProbabilisticParameterEstimators = "0.8.0,0.8.1,0.8.2"
-SciMLBase = "2.102.1"
-StatsBase = "0.34.5"
+authors = ["Romeo Valentin <romeov@stanford.edu>"]
 
 [deps]
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
@@ -44,19 +27,30 @@ TypedTables = "9d95f2ec-7b3d-5a63-8d20-e2491e220bb9"
 Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 XLSX = "fdbf4ff8-1666-58a4-91e7-1b58723a45e0"
 
+[sources]
+ForwardDiff = {rev = "rv/remove-quote-assert-string-interpolation", url = "https://github.com/RomeoV/ForwardDiff.jl.git"}
+LinearSolve = {rev = "rv/allow-mmatrix-cache", url = "https://github.com/RomeoV/LinearSolve.jl"}
+SciMLBase = {rev = "as/fix-jet-opt", url = "https://github.com/AayushSabharwal/SciMLBase.jl"}
+
+[compat]
+ADTypes = "1.16.0"
+CEnum = "0.5.0"
+DiffEqBase = "6.179.0"
+ForwardDiff = "1.0.1"
+LinearAlgebra = "1.11.0,1.12.0"
+LinearSolve = "3.23.0"
+Moshi = "0.3.7"
+NonlinearSolveBase = "1.13.0"
+NonlinearSolveFirstOrder = "1.7.0"
+Polyester = "0.7.18"
+PolyesterWeave = "0.2.2"
+PrecompileTools = "1"
+ProbabilisticParameterEstimators = "0.8.0,0.8.1,0.8.2"
+SciMLBase = "2.102.1"
+StatsBase = "0.34.5"
+
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-
-[preferences.LinearSolve]
-LoadMKL_JLL = false
-
-[sources.ForwardDiff]
-rev = "rv/remove-quote-assert-string-interpolation"
-url = "https://github.com/RomeoV/ForwardDiff.jl.git"
-
-[sources.SciMLBase]
-rev = "as/fix-jet-opt"
-url = "https://github.com/AayushSabharwal/SciMLBase.jl"
 
 [targets]
 test = ["Test"]
