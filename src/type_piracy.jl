@@ -8,7 +8,7 @@ import StaticArrays: MMatrix
 # Including this line should allow us to use the upstream LinearSolve.jl again,
 # as opposed to my fork: github.com/RomeoV/LinearSolve.jl/tree/rv/allow-mmatrix-cache
 =#
-function LinearSolve.init_cacheval(alg::CholeskyFactorization, A::MMatrix{S1, S2}, b, u, Pl, Pr,
+function init_cacheval(alg::CholeskyFactorization, A::MMatrix{S1, S2}, b, u, Pl, Pr,
         maxiters::Int, abstol, reltol, verbose::Bool,
         assumptions::OperatorAssumptions) where {S1, S2}
     cholesky(A)
