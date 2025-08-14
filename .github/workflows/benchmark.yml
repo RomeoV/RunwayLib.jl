@@ -15,5 +15,3 @@ jobs:
           julia-version: '1'
           script: "benchmark/benchmarks.jl"
           enable-plots: true
-        env:
-          JULIA_PKG_USE_CLI_GIT: true
