@@ -98,7 +98,7 @@ function pose_optimization_objective(
     error_vectors = [
         # we change the type here from a strongly typed "ProjectionPoint"
         # to a more weakly typed vector because we are about to concatenate them
-        vec(proj - obs)
+        (proj - obs) |> Array
             for (proj, obs) in zip(projected_corners, ps.observed_corners)
     ]
     errors = reduce(vcat, error_vectors)
