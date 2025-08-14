@@ -31,7 +31,7 @@ using StaticArrays
 
     @testset "Pose Estimation Functions" begin
         # Test data for pose estimation
-        runway_corners = SA[
+        runway_corners = [
             WorldPoint(0.0m, -50.0m, 0.0m),
             WorldPoint(0.0m, 50.0m, 0.0m),
             WorldPoint(3000.0m, 50.0m, 0.0m),
@@ -64,7 +64,7 @@ using StaticArrays
             @test_opt RunwayLib.pose_optimization_objective(opt_params_6dof, ps_6dof)
             
             # Test 3-DOF optimization parameters
-            opt_params_3dof = [-500.0, 10.0, 100.0]  # position only
+            opt_params_3dof = SA[-500.0, 10.0, 100.0]  # position only
             
             ps_3dof = PoseOptimizationParams3DOF(
                 runway_corners, projections,
