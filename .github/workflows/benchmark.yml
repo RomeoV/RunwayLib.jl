@@ -1,0 +1,17 @@
+name: Benchmark this PR
+on:
+  pull_request:
+    branches: [ master ]  # change to your default branch
+permissions:
+  contents: read
+  pull-requests: write    # needed to post comments
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: RomeoV/AirspeedVelocity.jl@set-project-toml
+        with:
+          julia-version: '1'
+          script: "benchmark/benchmarks.jl"
+          enable-plots: true
