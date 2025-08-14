@@ -163,13 +163,13 @@ end
 const _CACHE6DOF_STORAGE = Ref{typeof(_SAMPLE_CACHE_6DOF)}()
 const _CACHE3DOF_STORAGE = Ref{typeof(_SAMPLE_CACHE_3DOF)}()
 
-function _get_or_create_cache6dof(u0, ps)
+function _get_or_create_cache(cache_storage, u0, ps)
     expected_u_size = length(u0)
     expected_f_size = 2 * length(ps.observed_corners)  # 2 errors per corner
     
     # Check if we have a cached solver with matching dimensions
-    if isassigned(_CACHE6DOF_STORAGE)
-        cache = _CACHE6DOF_STORAGE[]
+    if isassigned(cache_storage)
+        cache = cache_storage[]
         if length(cache.u) == expected_u_size && length(cache.fu) == expected_f_size
             # Reuse existing cache with reinit
             reinit!(cache, u0; p = ps)
@@ -180,28 +180,7 @@ function _get_or_create_cache6dof(u0, ps)
     # Create new cache for these dimensions
     prob = NonlinearLeastSquaresProblem{false}(POSEOPTFN, u0, ps)
     cache = init(prob, ALG)
-    _CACHE6DOF_STORAGE[] = cache
-    return cache
-end
-
-function _get_or_create_cache3dof(u0, ps)
-    expected_u_size = length(u0)
-    expected_f_size = 2 * length(ps.observed_corners)  # 2 errors per corner
-    
-    # Check if we have a cached solver with matching dimensions
-    if isassigned(_CACHE3DOF_STORAGE)
-        cache = _CACHE3DOF_STORAGE[]
-        if length(cache.u) == expected_u_size && length(cache.fu) == expected_f_size
-            # Reuse existing cache with reinit
-            reinit!(cache, u0; p = ps)
-            return cache
-        end
-    end
-    
-    # Create new cache for these dimensions
-    prob = NonlinearLeastSquaresProblem{false}(POSEOPTFN, u0, ps)
-    cache = init(prob, ALG)
-    _CACHE3DOF_STORAGE[] = cache
+    cache_storage[] = cache
     return cache
 end
 
@@ -230,7 +209,7 @@ function estimatepose6dof(
     )
 
     # Get or create cache for this problem size
-    cache = _get_or_create_cache6dof(u₀, ps)
+    cache = _get_or_create_cache(_CACHE6DOF_STORAGE, u₀, ps)
     solve!(cache)
     sol = (; u = cache.u, retcode = cache.retcode)
 
@@ -263,7 +242,7 @@ function estimatepose3dof(
     )
 
     # Get or create cache for this problem size
-    cache = _get_or_create_cache3dof(u₀, ps)
+    cache = _get_or_create_cache(_CACHE3DOF_STORAGE, u₀, ps)
     solve!(cache)
     sol = (; u = cache.u, retcode = cache.retcode)
 
