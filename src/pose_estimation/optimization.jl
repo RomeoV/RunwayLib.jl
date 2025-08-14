@@ -135,7 +135,75 @@ const ALG = LevenbergMarquardt(; autodiff = AD, linsolve = CholeskyFactorization
 "Camera configuration type for precompilation"
 const CAMCONF4COMP = CAMERA_CONFIG_OFFSET
 
-# Const caches removed - now created per function call to support variable keypoint numbers
+# Adaptive caches - reuse when dimensions match, recreate when they change
+# Create concrete cache types based on the original setup approach
+const _SAMPLE_CACHE_6DOF = let
+    (; runway_corners, projections, true_pos, true_rot) = setup_for_precompile()
+    noise_model = _defaultnoisemodel(projections)
+    ps = PoseOptimizationParams6DOF(
+        runway_corners, projections,
+        CAMERA_CONFIG_OFFSET, noise_model
+    )
+    prob = NonlinearLeastSquaresProblem{false}(POSEOPTFN, rand(6), ps)
+    init(prob, ALG)
+end
+
+const _SAMPLE_CACHE_3DOF = let
+    (; runway_corners, projections, true_pos, true_rot) = setup_for_precompile()
+    noise_model = _defaultnoisemodel(projections)
+    ps = PoseOptimizationParams3DOF(
+        runway_corners, projections,
+        CAMERA_CONFIG_OFFSET, noise_model,
+        true_rot
+    )
+    prob = NonlinearLeastSquaresProblem{false}(POSEOPTFN, rand(3), ps)
+    init(prob, ALG)
+end
+
+const _CACHE6DOF_STORAGE = Ref{typeof(_SAMPLE_CACHE_6DOF)}()
+const _CACHE3DOF_STORAGE = Ref{typeof(_SAMPLE_CACHE_3DOF)}()
+
+function _get_or_create_cache6dof(u0, ps)
+    expected_u_size = length(u0)
+    expected_f_size = 2 * length(ps.observed_corners)  # 2 errors per corner
+    
+    # Check if we have a cached solver with matching dimensions
+    if isassigned(_CACHE6DOF_STORAGE)
+        cache = _CACHE6DOF_STORAGE[]
+        if length(cache.u) == expected_u_size && length(cache.fu) == expected_f_size
+            # Reuse existing cache with reinit
+            reinit!(cache, u0; p = ps)
+            return cache
+        end
+    end
+    
+    # Create new cache for these dimensions
+    prob = NonlinearLeastSquaresProblem{false}(POSEOPTFN, u0, ps)
+    cache = init(prob, ALG)
+    _CACHE6DOF_STORAGE[] = cache
+    return cache
+end
+
+function _get_or_create_cache3dof(u0, ps)
+    expected_u_size = length(u0)
+    expected_f_size = 2 * length(ps.observed_corners)  # 2 errors per corner
+    
+    # Check if we have a cached solver with matching dimensions
+    if isassigned(_CACHE3DOF_STORAGE)
+        cache = _CACHE3DOF_STORAGE[]
+        if length(cache.u) == expected_u_size && length(cache.fu) == expected_f_size
+            # Reuse existing cache with reinit
+            reinit!(cache, u0; p = ps)
+            return cache
+        end
+    end
+    
+    # Create new cache for these dimensions
+    prob = NonlinearLeastSquaresProblem{false}(POSEOPTFN, u0, ps)
+    cache = init(prob, ALG)
+    _CACHE3DOF_STORAGE[] = cache
+    return cache
+end
 
 function estimatepose6dof(
         runway_corners::AbstractVector{<:WorldPoint},
@@ -161,9 +229,8 @@ function estimatepose6dof(
         CAMCONF4COMP, noise_model
     )
 
-    # Create problem and cache for this specific problem size
-    prob = NonlinearLeastSquaresProblem{false}(POSEOPTFN, u₀, ps)
-    cache = init(prob, ALG)
+    # Get or create cache for this problem size
+    cache = _get_or_create_cache6dof(u₀, ps)
     solve!(cache)
     sol = (; u = cache.u, retcode = cache.retcode)
 
@@ -195,9 +262,8 @@ function estimatepose3dof(
         CAMCONF4COMP, noise_model, known_attitude
     )
 
-    # Create problem and cache for this specific problem size
-    prob = NonlinearLeastSquaresProblem{false}(POSEOPTFN, u₀, ps)
-    cache = init(prob, ALG)
+    # Get or create cache for this problem size
+    cache = _get_or_create_cache3dof(u₀, ps)
     solve!(cache)
     sol = (; u = cache.u, retcode = cache.retcode)
 
