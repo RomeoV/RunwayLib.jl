@@ -32,20 +32,20 @@ ForwardDiff = {rev = "rv/remove-quote-assert-string-interpolation", url = "https
 SciMLBase = {rev = "as/fix-jet-opt", url = "https://github.com/AayushSabharwal/SciMLBase.jl"}
 
 [compat]
-ADTypes = "1.16.0"
-CEnum = "0.5.0"
-DiffEqBase = "6.179.0"
-ForwardDiff = "1.0.1"
-LinearAlgebra = "1.11.0,1.12.0"
-LinearSolve = "3.23.0"
+ADTypes = "^1.16.0"
+CEnum = "^0.5.0"
+DiffEqBase = "^6.179.0"
+ForwardDiff = "^1.0.1"
+LinearAlgebra = "^1.11.0"
+LinearSolve = "^3.25.0"
 Moshi = "0.3.7"
-NonlinearSolveBase = "1.13.0"
-NonlinearSolveFirstOrder = "1.7.0"
+NonlinearSolveBase = "^1.13.0"
+NonlinearSolveFirstOrder = "^1.7.0"
 Polyester = "0.7.18"
 PolyesterWeave = "0.2.2"
 PrecompileTools = "1"
 ProbabilisticParameterEstimators = "0.8.0,0.8.1,0.8.2"
-SciMLBase = "2.102.1"
+SciMLBase = "^2.102.1"
 StatsBase = "0.34.5"
 
 [extras]
