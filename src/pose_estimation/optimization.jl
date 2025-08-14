@@ -135,28 +135,7 @@ const ALG = LevenbergMarquardt(; autodiff = AD, linsolve = CholeskyFactorization
 "Camera configuration type for precompilation"
 const CAMCONF4COMP = CAMERA_CONFIG_OFFSET
 
-const PROB6DOF = let
-    (; runway_corners, projections, true_pos, true_rot) = setup_for_precompile()
-    noise_model = _defaultnoisemodel(projections)
-    ps = PoseOptimizationParams6DOF(
-        runway_corners, projections,
-        CAMERA_CONFIG_OFFSET, noise_model
-    )
-    NonlinearLeastSquaresProblem{false}(POSEOPTFN, rand(6), ps)
-end
-const CACHE6DOF = init(PROB6DOF, ALG)
-
-const PROB3DOF = let
-    (; runway_corners, projections, true_pos, true_rot) = setup_for_precompile()
-    noise_model = _defaultnoisemodel(projections)
-    ps = PoseOptimizationParams3DOF(
-        runway_corners, projections,
-        CAMERA_CONFIG_OFFSET, noise_model,
-        true_rot
-    )
-    NonlinearLeastSquaresProblem{false}(POSEOPTFN, rand(3), ps)
-end
-const CACHE3DOF = init(PROB3DOF, ALG)
+# Const caches removed - now created per function call to support variable keypoint numbers
 
 function estimatepose6dof(
         runway_corners::AbstractVector{<:WorldPoint},
@@ -182,9 +161,11 @@ function estimatepose6dof(
         CAMCONF4COMP, noise_model
     )
 
-    reinit!(CACHE6DOF, u₀; p = ps)
-    solve!(CACHE6DOF)
-    sol = (; u = CACHE6DOF.u, retcode = CACHE6DOF.retcode)
+    # Create problem and cache for this specific problem size
+    prob = NonlinearLeastSquaresProblem{false}(POSEOPTFN, u₀, ps)
+    cache = init(prob, ALG)
+    solve!(cache)
+    sol = (; u = cache.u, retcode = cache.retcode)
 
     !successful_retcode(sol.retcode) && throw(OptimizationFailedError(sol.retcode, sol))
     pos = WorldPoint(sol.u[1:3]m)
@@ -214,9 +195,11 @@ function estimatepose3dof(
         CAMCONF4COMP, noise_model, known_attitude
     )
 
-    reinit!(CACHE3DOF, u₀; p = ps)
-    solve!(CACHE3DOF)
-    sol = (; u = CACHE3DOF.u, retcode = CACHE3DOF.retcode)
+    # Create problem and cache for this specific problem size
+    prob = NonlinearLeastSquaresProblem{false}(POSEOPTFN, u₀, ps)
+    cache = init(prob, ALG)
+    solve!(cache)
+    sol = (; u = cache.u, retcode = cache.retcode)
 
     !successful_retcode(sol.retcode) && throw(OptimizationFailedError(sol.retcode, sol))
     pos = WorldPoint(sol.u[1:3]m)
