@@ -105,8 +105,8 @@ Base.@ccallable function estimate_pose_6dof(
     end
 
     # Convert C arrays to Julia arrays
-    runway_corners = unsafe_wrap(Array, runway_corners_, num_points) .* 1m |> SVector{4}
-    projections = unsafe_wrap(Array, projections_, num_points) .* 1px |> SVector{4}
+    runway_corners = unsafe_wrap(Array, runway_corners_, num_points) .* 1m
+    projections = unsafe_wrap(Array, projections_, num_points) .* 1px
 
 
     # Get camera configuration
@@ -159,8 +159,8 @@ Base.@ccallable function estimate_pose_3dof(
     end
 
     # Convert C arrays to Julia arrays
-    runway_corners = unsafe_wrap(Array, runway_corners_, num_points) .* 1m |> SVector{4}
-    projections = unsafe_wrap(Array, projections_, num_points) .* 1px |> SVector{4}
+    runway_corners = unsafe_wrap(Array, runway_corners_, num_points) .* 1m
+    projections = unsafe_wrap(Array, projections_, num_points) .* 1px
     known_rot_c = unsafe_load(known_rotation)
 
     # Convert rotation to Julia type
