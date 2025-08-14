@@ -7,7 +7,7 @@ using StaticArrays
 
 @testset "Pose Estimation" begin
     # Define standard runway corners (4 points forming a rectangle)
-    runway_corners = SA[
+    runway_corners = [
         WorldPoint(0.0m, 25.0m, 0.0m),      # near left  
         WorldPoint(0.0m, -25.0m, 0.0m),     # near right
         WorldPoint(1000.0m, 25.0m, 0.0m),   # far left
@@ -32,8 +32,8 @@ using StaticArrays
         true_projections = [project(true_pos, true_rot, corner, config) for corner in runway_corners]
 
         # Create noisy initial guesses
-        noisy_pos_guess = SA[true_pos.x + 100.0m, true_pos.y - 20.0m, true_pos.z + 30.0m]
-        noisy_rot_guess = SA[true_rot.theta1 + 0.05, true_rot.theta2 - 0.08, true_rot.theta3 + 0.03]rad
+        noisy_pos_guess = [true_pos.x + 100.0m, true_pos.y - 20.0m, true_pos.z + 30.0m]
+        noisy_rot_guess = [true_rot.theta1 + 0.05, true_rot.theta2 - 0.08, true_rot.theta3 + 0.03]rad
 
         @testset "6DOF Estimation" begin
             result = estimatepose6dof(
@@ -67,8 +67,8 @@ using StaticArrays
                 true_projections = [project(case.pos, case.rot, corner, CAMERA_CONFIG_OFFSET) for corner in runway_corners]
                 
                 # Large initial errors
-                noisy_pos = SA[case.pos.x + 200.0m, case.pos.y - 50.0m, case.pos.z + 80.0m]
-                noisy_rot = SA[case.rot.theta1 + 0.1, case.rot.theta2 - 0.15, case.rot.theta3 + 0.08]rad
+                noisy_pos = [case.pos.x + 200.0m, case.pos.y - 50.0m, case.pos.z + 80.0m]
+                noisy_rot = [case.rot.theta1 + 0.1, case.rot.theta2 - 0.15, case.rot.theta3 + 0.08]rad
                 
                 @testset "6DOF" begin
                     result = estimatepose6dof(

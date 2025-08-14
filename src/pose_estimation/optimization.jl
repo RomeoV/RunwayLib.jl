@@ -6,7 +6,6 @@ using SimpleNonlinearSolve.jl and integrating with ProbabilisticParameterEstimat
 noise models.
 """
 
-using StaticArrays: MVector
 
 abstract type AbstractPoseOptimizationParams end
 
@@ -98,8 +97,8 @@ function pose_optimization_objective(
     # Compute reprojection errors
     error_vectors = [
         # we change the type here from a strongly typed "ProjectionPoint"
-        # to a more weakly typed `SVector` because we are about to concatenate them
-        SVector{2}(proj - obs)
+        # to a more weakly typed vector because we are about to concatenate them
+        vec(proj - obs)
             for (proj, obs) in zip(projected_corners, ps.observed_corners)
     ]
     errors = reduce(vcat, error_vectors)
@@ -111,7 +110,7 @@ function pose_optimization_objective(
 end
 
 function setup_for_precompile()
-    runway_corners = SA[
+    runway_corners = [
         WorldPoint(1000.0m, -50.0m, 0.0m),
         WorldPoint(1000.0m, 50.0m, 0.0m),
         WorldPoint(3000.0m, 50.0m, 0.0m),
@@ -143,7 +142,7 @@ const PROB6DOF = let
         runway_corners, projections,
         CAMERA_CONFIG_OFFSET, noise_model
     )
-    NonlinearLeastSquaresProblem{false}(POSEOPTFN, MVector{6}(rand(6)), ps)
+    NonlinearLeastSquaresProblem{false}(POSEOPTFN, rand(6), ps)
 end
 const CACHE6DOF = init(PROB6DOF, ALG)
 
@@ -155,7 +154,7 @@ const PROB3DOF = let
         CAMERA_CONFIG_OFFSET, noise_model,
         true_rot
     )
-    NonlinearLeastSquaresProblem{false}(POSEOPTFN, MVector{3}(rand(3)), ps)
+    NonlinearLeastSquaresProblem{false}(POSEOPTFN, rand(3), ps)
 end
 const CACHE3DOF = init(PROB3DOF, ALG)
 
@@ -171,7 +170,7 @@ function estimatepose6dof(
     u₀ = [
         initial_guess_pos .|> _ustrip(m);
         initial_guess_rot .|> _ustrip(rad)
-    ]
+    ] |> Array
 
     # for precompile we need the correct types
     observed_corners = [
@@ -203,7 +202,7 @@ function estimatepose3dof(
         optimization_config = DEFAULT_OPTIMIZATION_CONFIG
     ) where {T, S}
 
-    u₀ = initial_guess_pos .|> _ustrip(m)
+    u₀ = initial_guess_pos .|> _ustrip(m) |> Array
 
     # for precompile we need the correct types
     observed_corners = [
@@ -215,7 +214,7 @@ function estimatepose3dof(
         CAMCONF4COMP, noise_model, known_attitude
     )
 
-    reinit!(CACHE3DOF, MVector{3}(u₀); p = ps)
+    reinit!(CACHE3DOF, u₀; p = ps)
     solve!(CACHE3DOF)
     sol = (; u = CACHE3DOF.u, retcode = CACHE3DOF.retcode)
 
