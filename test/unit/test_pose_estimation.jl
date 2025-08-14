@@ -89,4 +89,68 @@ using StaticArrays
             end
         end
     end
+
+    @testset "Variable Keypoint Numbers" begin
+        # Test with 8 keypoints (2x4 grid)
+        runway_corners_8 = [
+            WorldPoint(0.0m, 25.0m, 0.0m),      # near left  
+            WorldPoint(0.0m, -25.0m, 0.0m),     # near right
+            WorldPoint(1000.0m, 25.0m, 0.0m),   # far left
+            WorldPoint(1000.0m, -25.0m, 0.0m),  # far right
+            # Additional points
+            WorldPoint(500.0m, 25.0m, 0.0m),    # middle left
+            WorldPoint(500.0m, -25.0m, 0.0m),   # middle right
+            WorldPoint(750.0m, 0.0m, 0.0m),     # center point
+            WorldPoint(250.0m, 0.0m, 0.0m),     # quarter point
+        ]
+
+        # Test with 16 keypoints (4x4 grid)
+        runway_corners_16 = [
+            # First row
+            WorldPoint(0.0m, 37.5m, 0.0m), WorldPoint(0.0m, 12.5m, 0.0m),
+            WorldPoint(0.0m, -12.5m, 0.0m), WorldPoint(0.0m, -37.5m, 0.0m),
+            # Second row
+            WorldPoint(333.0m, 37.5m, 0.0m), WorldPoint(333.0m, 12.5m, 0.0m),
+            WorldPoint(333.0m, -12.5m, 0.0m), WorldPoint(333.0m, -37.5m, 0.0m),
+            # Third row  
+            WorldPoint(667.0m, 37.5m, 0.0m), WorldPoint(667.0m, 12.5m, 0.0m),
+            WorldPoint(667.0m, -12.5m, 0.0m), WorldPoint(667.0m, -37.5m, 0.0m),
+            # Fourth row
+            WorldPoint(1000.0m, 37.5m, 0.0m), WorldPoint(1000.0m, 12.5m, 0.0m),
+            WorldPoint(1000.0m, -12.5m, 0.0m), WorldPoint(1000.0m, -37.5m, 0.0m),
+        ]
+
+        # Ground truth pose
+        true_pos = WorldPoint(-400.0m, 5.0m, 90.0m)
+        true_rot = RotZYX(roll = 0.01, pitch = 0.08, yaw = -0.005)
+
+        for (corners, n_points) in [(runway_corners_8, 8), (runway_corners_16, 16)]
+            @testset "$n_points keypoints" begin
+                # Generate projections
+                true_projections = [project(true_pos, true_rot, corner, CAMERA_CONFIG_OFFSET) for corner in corners]
+                
+                # Initial guesses
+                noisy_pos = [true_pos.x + 150.0m, true_pos.y - 30.0m, true_pos.z + 40.0m]
+                noisy_rot = [true_rot.theta1 + 0.08, true_rot.theta2 - 0.12, true_rot.theta3 + 0.06]rad
+
+                @testset "6DOF with $n_points points" begin
+                    result = estimatepose6dof(
+                        corners, true_projections, CAMERA_CONFIG_OFFSET;
+                        initial_guess_pos = noisy_pos,
+                        initial_guess_rot = noisy_rot
+                    )
+                    test_pose_accuracy(result, true_pos, true_rot; pos_tol=1e-5m, rot_tol=1e-7)
+                end
+
+                @testset "3DOF with $n_points points" begin
+                    result = estimatepose3dof(
+                        corners, true_projections, true_rot, CAMERA_CONFIG_OFFSET;
+                        initial_guess_pos = noisy_pos
+                    )
+                    @test norm(result.pos - true_pos) < 1e-5m
+                    @test result.rot ≈ true_rot
+                end
+            end
+        end
+    end
 end
