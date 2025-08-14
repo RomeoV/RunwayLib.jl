@@ -6,5 +6,7 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
 [sources]
-LinearSolve = {url = "https://github.com/RomeoV/LinearSolve.jl", rev="no-mkl_jll"}
 RunwayLib = {path = ".."}
+
+[preferences.LinearSolve]
+LoadMKL_JLL = false
