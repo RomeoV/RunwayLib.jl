@@ -10,7 +10,7 @@ jobs:
   bench:
     runs-on: ubuntu-latest
     steps:
-      - uses: RomeoV/AirspeedVelocity.jl@set-project-toml
+      - uses: RomeoV/AirspeedVelocity.jl@master
         with:
           julia-version: '1'
           script: "benchmark/benchmarks.jl"
