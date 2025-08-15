@@ -16,12 +16,12 @@ using JET
         WorldPoint(3000.0m, -50.0m, 0.0m),
     ]
 
-    true_pos = WorldPoint(-1300.0m, 0.0m, 80.0m)
-    true_rot = RotZYX(roll=0.03, pitch=0.04, yaw=0.05)
+    true_pos = WorldPoint(-2300.0m, 0.0m, 80.0m)
+    true_rot = RotZYX(roll=0.01, pitch=0.01, yaw=-0.01)
     camconfig = CAMERA_CONFIG_OFFSET
 
     projections = [
-        project(true_pos, true_rot, corner, camconfig) + ProjectionPoint(randn(2)) * px
+        project(true_pos, true_rot, corner, camconfig) + ProjectionPoint(5*randn(2)) * px
         for corner in runway_corners
     ]
 
