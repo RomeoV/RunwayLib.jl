@@ -12,7 +12,7 @@ import unittest
 import numpy as np
 from poseest import (
     WorldPoint, ProjectionPoint, Rotation, CameraConfig,
-    ScalarCovariance, DiagonalCovariance, BlockDiagonalCovariance, FullCovariance,
+    DefaultCovariance, ScalarCovariance, DiagonalCovariance, BlockDiagonalCovariance, FullCovariance,
     estimate_pose_6dof, estimate_pose_3dof,
     InvalidInputError, InsufficientPointsError
 )
@@ -38,6 +38,16 @@ class TestCovarianceSpecification(unittest.TestCase):
         ]
         
         self.known_rotation = Rotation(yaw=0.05, pitch=0.03, roll=0.01)
+    
+    def test_default_covariance(self):
+        """Test default covariance specification."""
+        # Valid default covariance
+        cov = DefaultCovariance()
+        cov.validate(num_points=4)
+        
+        data, cov_type = cov.to_c_array(num_points=4)
+        self.assertEqual(len(data), 1)  # Dummy data
+        self.assertEqual(cov_type.value, 0)  # COV_DEFAULT
     
     def test_scalar_covariance(self):
         """Test scalar covariance specification."""
@@ -195,6 +205,25 @@ class TestCovarianceIntegration(unittest.TestCase):
         ]
         
         self.known_rotation = Rotation(yaw=0.05, pitch=0.03, roll=0.01)
+    
+    def test_6dof_with_default_covariance(self):
+        """Test 6DOF estimation with explicit default covariance."""
+        cov = DefaultCovariance()
+        
+        try:
+            result = estimate_pose_6dof(
+                runway_corners=self.runway_corners,
+                projections=self.projections,
+                camera_config=CameraConfig.OFFSET,
+                covariance=cov
+            )
+            
+            self.assertIsNotNone(result.position)
+            self.assertIsNotNone(result.rotation)
+            
+        except Exception as e:
+            # Accept convergence-related errors for synthetic data
+            self.assertIn("convergence", str(e).lower(), f"Unexpected error: {e}")
     
     def test_6dof_with_scalar_covariance(self):
         """Test 6DOF estimation with scalar covariance."""

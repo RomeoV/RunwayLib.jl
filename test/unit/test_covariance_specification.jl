@@ -39,6 +39,19 @@ using ProbabilisticParameterEstimators: CorrGaussianNoiseModel, covmatrix
 
     @testset "Covariance Data Parsing" begin
         
+        @testset "Default Covariance" begin
+            # Test explicit default covariance type
+            noise_model = RunwayLib.parse_covariance_data(
+                Ptr{Cdouble}(0), RunwayLib.COV_DEFAULT, 4
+            )
+            
+            @test length(noise_model.noisedistributions) == 8  # 4 points * 2 coords
+            @test all(isa.(noise_model.noisedistributions, Normal))
+            # Should match the default noise model
+            default_model = RunwayLib._defaultnoisemodel(projections)
+            @test all(std.(noise_model.noisedistributions) .≈ std.(default_model.noisedistributions))
+        end
+        
         @testset "Scalar Covariance" begin
             # Test scalar covariance parsing
             noise_std = 2.5
@@ -160,12 +173,20 @@ using ProbabilisticParameterEstimators: CorrGaussianNoiseModel, covmatrix
         end
 
         @testset "NULL Pointer Handling" begin
-            # Test that NULL pointer returns default noise model
+            # Test that NULL pointer with COV_DEFAULT works
             noise_model = RunwayLib.parse_covariance_data(
-                Ptr{Cdouble}(0), RunwayLib.COV_SCALAR, 4
+                Ptr{Cdouble}(0), RunwayLib.COV_DEFAULT, 4
             )
             @test length(noise_model.noisedistributions) == 8
             @test all(isa.(noise_model.noisedistributions, Normal))
+            
+            # Test that NULL pointer with other types fails
+            @test_throws ArgumentError RunwayLib.parse_covariance_data(
+                Ptr{Cdouble}(0), RunwayLib.COV_SCALAR, 4
+            )
+            @test_throws ArgumentError RunwayLib.parse_covariance_data(
+                Ptr{Cdouble}(0), RunwayLib.COV_DIAGONAL_FULL, 4
+            )
         end
     end
 
