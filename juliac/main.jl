@@ -4,7 +4,7 @@ using Rotations
 using Unitful, Unitful.DefaultSymbols
 
 function (@main)(args::Vector{String})::Cint
-    runway_corners = [
+    runway_corners = SA[
         WorldPoint(0.0m, -50.0m, 0.0m),
         WorldPoint(0.0m, 50.0m, 0.0m),
         WorldPoint(3000.0m, 50.0m, 0.0m),
