@@ -36,12 +36,8 @@ jobs:
           # Copy the built library
           cp -r juliac/RunwayLibCompiled poseest/poseest/native/
 
-      - name: Create package archive
-        run: |
-          zip -r poseest-python-package.zip poseest
-
       - name: Upload Python package artifact
         uses: actions/upload-artifact@v4
         with:
           name: poseest-python-package
-          path: poseest-python-package.zip
+          path: poseest
