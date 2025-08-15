@@ -10,6 +10,5 @@ Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
 [sources]
 ForwardDiff = {rev = "rv/remove-quote-assert-string-interpolation", url = "https://github.com/RomeoV/ForwardDiff.jl.git"}
-LinearSolve = {rev = "rv/allow-mmatrix-cache", url = "https://github.com/RomeoV/LinearSolve.jl"}
 RunwayLib = {rev = "master", url = ".."}
 SciMLBase = {rev = "as/fix-jet-opt", url = "https://github.com/AayushSabharwal/SciMLBase.jl"}
