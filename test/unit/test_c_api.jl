@@ -118,7 +118,7 @@ using JET
             pointer(world_points_), pointer(projection_points_),
             Cint(1), RunwayLib.CAMERA_CONFIG_OFFSET_C, Base.unsafe_convert(Ptr{RunwayLib.PoseEstimate_C}, result)  # Only 1 point, need at least 4
         )
-        @test error_code == RunwayLib.POSEEST_ERROR_INVALID_INPUT
+        @test error_code == RunwayLib.POSEEST_ERROR_INSUFFICIENT_POINTS
 
         # Test error message function
         msg_ptr = RunwayLib.get_error_message(error_code)
