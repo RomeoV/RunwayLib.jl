@@ -19,17 +19,22 @@ struct PoseOptimizationParams6DOF{
         RC <: AbstractVector{WorldPoint{T}},
         OC <: AbstractVector{ProjectionPoint{T′, S}},
         M <: AbstractMatrix{T′′},
+        M′<: AbstractMatrix{T′′}
     } <: AbstractPoseOptimizationParams
     runway_corners::RC
     observed_corners::OC
     camconfig::CameraConfig{S}
-    Linv::M
+    cov::M
+    Linv::M′
 end
 function PoseOptimizationParams6DOF(runway_corners, observed_corners, camconfig, noisemodel::NoiseModel)
-    cov = covmatrix(noisemodel)
+    cov = covmatrix(noisemodel) |> Matrix
+    return PoseOptimizationParams6DOF(runway_corners, observed_corners, camconfig, cov)
+end
+function PoseOptimizationParams6DOF(runway_corners, observed_corners, camconfig, cov::Matrix)
     U = cholesky(cov).U
     Linv = Matrix(inv(U'))  # Ensure dense matrix for consistent performance
-    return PoseOptimizationParams6DOF(runway_corners, observed_corners, camconfig, Linv)
+    return PoseOptimizationParams6DOF(runway_corners, observed_corners, camconfig, cov, Linv)
 end
 
 """
@@ -43,16 +48,23 @@ struct PoseOptimizationParams3DOF{
         RC <: AbstractVector{WorldPoint{T}},
         OC <: AbstractVector{ProjectionPoint{T′, S}},
         M <: AbstractMatrix{T′′},
+        M′<: AbstractMatrix{T′′}
     } <: AbstractPoseOptimizationParams
     runway_corners::RC
     observed_corners::OC
     camconfig::CameraConfig{S}
-    Linv::M
+    cov::M
+    Linv::M′
     known_attitude::A
 end
 function PoseOptimizationParams3DOF(runway_corners, observed_corners, camconfig, noisemodel::NoiseModel, known_attitude)
-    Linv = Matrix(inv(cholesky(covmatrix(noisemodel)).U'))  # Ensure dense matrix for consistent performance
-    return PoseOptimizationParams3DOF(runway_corners, observed_corners, camconfig, Linv, known_attitude)
+    cov = covmatrix(noisemodel) |> Matrix
+    return PoseOptimizationParams3DOF(runway_corners, observed_corners, camconfig, cov, known_attitude)
+end
+function PoseOptimizationParams3DOF(runway_corners, observed_corners, camconfig, cov::Matrix, known_attitude)
+    U = cholesky(cov).U
+    Linv = Matrix(inv(U'))  # Ensure dense matrix for consistent performance
+    return PoseOptimizationParams3DOF(runway_corners, observed_corners, camconfig, cov, Linv, known_attitude)
 end
 
 """
