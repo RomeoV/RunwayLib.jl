@@ -1,11 +1,13 @@
 Base.@ccallable function test_estimators()::Cint
-    runway_corners = SA[
+    runway_corners = [
         WorldPoint(0.0m, -50.0m, 0.0m),
         WorldPoint(0.0m, 50.0m, 0.0m),
+        WorldPoint(1500.0m, -50.0m, 0.0m),
+        WorldPoint(1500.0m, 50.0m, 0.0m),
         WorldPoint(3000.0m, 50.0m, 0.0m),
         WorldPoint(3000.0m, -50.0m, 0.0m),
     ]
-    true_pos = WorldPoint(-1300.0m, 0.0m, 80.0m)
+    true_pos = WorldPoint(-2300.0m, 0.0m, 80.0m)
     true_rot = RotZYX(roll = 0.03, pitch = 0.04, yaw = 0.05)
     camconfig = CAMERA_CONFIG_OFFSET
     projections = [
