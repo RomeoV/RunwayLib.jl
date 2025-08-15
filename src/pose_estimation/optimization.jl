@@ -98,7 +98,7 @@ function pose_optimization_objective(
     error_vectors = [
         # we change the type here from a strongly typed "ProjectionPoint"
         # to a more weakly typed vector because we are about to concatenate them
-        (proj - obs) |> Array
+        (proj - obs)
             for (proj, obs) in zip(projected_corners, ps.observed_corners)
     ]
     errors = reduce(vcat, error_vectors)
@@ -124,7 +124,7 @@ end
 
 
 const _defaultnoisemodel(pts) = let
-    distributions = [SA[Normal(0.0, 2.0), Normal(0.0, 2.0)] for _ in pts]
+    distributions = [SA[Normal(0.0, 2.0), Normal(0.0, 2.0)] for _ in pts] |> Array
     UncorrGaussianNoiseModel(reduce(vcat, distributions))
 end
 
