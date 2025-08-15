@@ -1,4 +1,5 @@
 [deps]
+DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
 LinearSolve = "7ed4a6bd-45f5-4d41-b270-4a48e9bafcae"
 NonlinearSolveFirstOrder = "5959db7a-ea39-4486-b5fe-2dd0bf03d60d"
 Rotations = "6038ab10-8711-5258-84ad-4b1120ba62dc"
@@ -8,9 +9,12 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
 [sources]
+NonlinearSolveFirstOrder = {rev = "rv/fix-extra-kwargs", subdir = "lib/NonlinearSolveFirstOrder", url = "https://github.com/RomeoV/NonlinearSolve.jl"}
 RunwayLib = {path = ".."}
-NonlinearSolveFirstOrder = {rev = "rv/fix-extra-kwargs", url = "https://github.com/RomeoV/NonlinearSolve.jl", subdir="lib/NonlinearSolveFirstOrder"}
 SciMLBase = {rev = "as/fix-jet-opt", url = "https://github.com/AayushSabharwal/SciMLBase.jl"}
+
+[compat]
+DataStructures = "0.18"
 
 [preferences.LinearSolve]
 LoadMKL_JLL = false
