@@ -366,6 +366,43 @@ RunwayPoseEstimation.jl/
 - [ ] Documentation completion
 - [ ] Package registration
 
+## Python Usage
+
+The compiled library can be used from Python:
+
+```python
+import numpy as np
+from poseest import estimate_pose_3dof, estimate_pose_6dof
+
+# Runway corners in image coordinates (pixels) [top-left, top-right, bottom-right, bottom-left]
+corners = np.array([[1200, 800], [2800, 850], [2900, 2100], [1100, 2050]], dtype=float)
+
+# Diagonal covariance (pixel standard deviations squared)
+pixel_std = np.array([2.0, 1.5, 2.5, 1.8, 2.2, 1.9, 2.1, 1.7])
+cov_diag = np.diag(pixel_std**2)
+
+# 6-DOF estimation (position + orientation)
+result_6dof = estimate_pose_6dof(
+    corners_image=corners,
+    pixel_covariance=cov_diag,
+    runway_spec={'length_m': 3000.0, 'width_m': 45.0, 'threshold_elevation_m': 100.0},
+    initial_guess=np.array([500.0, 0.0, 50.0, 0.0, 0.0, 1.5])  # [x,y,z,roll,pitch,yaw]
+)
+
+# 3-DOF estimation (position only, known orientation)
+result_3dof = estimate_pose_3dof(
+    corners_image=corners,
+    pixel_covariance=cov_diag,
+    runway_spec={'length_m': 3000.0, 'width_m': 45.0, 'threshold_elevation_m': 100.0},
+    known_orientation=np.array([0.05, -0.02, 1.57])  # [roll, pitch, yaw] in radians
+)
+
+print(f"6-DOF: position={result_6dof['position']}, orientation={result_6dof['orientation']}")
+print(f"3-DOF: position={result_3dof['position']}")
+```
+
+For full covariance matrices, replace `cov_diag` with an 8×8 matrix accounting for pixel correlations.
+
 ## Contributing
 
 This library is designed to be modular and extensible. Key extension points include:
