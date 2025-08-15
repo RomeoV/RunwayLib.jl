@@ -81,16 +81,29 @@ class TestCameraConfig:
 class TestLibraryIntegration:
     """Test integration with the native library using realistic test data."""
     
-    @pytest.fixture
-    def test_data(self):
+    def generate_runway_keypoints(self, num_keypoints):
+        """Generate keypoints in left/right pairs along the runway."""
+        runway_length = 3000.0
+        runway_width = 100.0  # -50 to +50
+        
+        # Number of pairs along the runway
+        num_pairs = num_keypoints // 2
+        
+        keypoints = []
+        for i in range(num_pairs):
+            x_pos = (i / (num_pairs - 1)) * runway_length
+            # Add left point (-50 y)
+            keypoints.append(poseest.WorldPoint(x_pos, -50.0, 0.0))
+            # Add right point (+50 y)
+            keypoints.append(poseest.WorldPoint(x_pos, 50.0, 0.0))
+        
+        return keypoints
+    
+    @pytest.fixture(params=[4, 8, 16])
+    def test_data(self, request):
         """Generate test data using the same approach as Julia tests."""
-        # Standard runway corners (same as Julia tests)
-        runway_corners = [
-            poseest.WorldPoint(0.0, -50.0, 0.0),
-            poseest.WorldPoint(0.0, 50.0, 0.0),
-            poseest.WorldPoint(3000.0, 50.0, 0.0),
-            poseest.WorldPoint(3000.0, -50.0, 0.0),
-        ]
+        num_keypoints = request.param
+        runway_corners = self.generate_runway_keypoints(num_keypoints)
         
         # True camera pose (same as Julia tests)
         true_position = poseest.WorldPoint(-1300.0, 0.0, 80.0)
@@ -128,6 +141,9 @@ class TestLibraryIntegration:
         # Set random seed for reproducible noise
         random.seed(42)
         
+        num_keypoints = len(test_data['runway_corners'])
+        print(f"Testing 6DOF pose estimation with {num_keypoints} keypoints")
+        
         pose = poseest.estimate_pose_6dof(
             test_data['runway_corners'],
             test_data['projections'],
@@ -146,18 +162,25 @@ class TestLibraryIntegration:
         true_pos = test_data['true_position']
         true_rot = test_data['true_rotation']
         
-        assert abs(pose.position.x - true_pos.x) < 50.0  # Within 50m
-        assert abs(pose.position.y - true_pos.y) < 50.0  # Within 50m  
-        assert abs(pose.position.z - true_pos.z) < 50.0  # Within 50m
+        # Tolerance may be tighter with more keypoints
+        tolerance_pos = 50.0 if num_keypoints == 4 else 30.0
+        tolerance_rot = 0.1 if num_keypoints == 4 else 0.05
         
-        assert abs(pose.rotation.yaw - true_rot.yaw) < 0.1  # Within 0.1 rad
-        assert abs(pose.rotation.pitch - true_rot.pitch) < 0.1
-        assert abs(pose.rotation.roll - true_rot.roll) < 0.1
+        assert abs(pose.position.x - true_pos.x) < tolerance_pos
+        assert abs(pose.position.y - true_pos.y) < tolerance_pos  
+        assert abs(pose.position.z - true_pos.z) < tolerance_pos
+        
+        assert abs(pose.rotation.yaw - true_rot.yaw) < tolerance_rot
+        assert abs(pose.rotation.pitch - true_rot.pitch) < tolerance_rot
+        assert abs(pose.rotation.roll - true_rot.roll) < tolerance_rot
         
         assert pose.converged == True
     
     def test_3dof_pose_estimation(self, test_data):
         """Test 3DOF pose estimation with known rotation."""
+        num_keypoints = len(test_data['runway_corners'])
+        print(f"Testing 3DOF pose estimation with {num_keypoints} keypoints")
+        
         pose = poseest.estimate_pose_3dof(
             test_data['runway_corners'],
             test_data['projections'],
@@ -171,10 +194,12 @@ class TestLibraryIntegration:
         assert isinstance(pose.rotation, poseest.Rotation)
         
         # Position should be close to true position
+        # More keypoints should give better accuracy
+        tolerance_pos = 20.0 if num_keypoints == 4 else 10.0
         true_pos = test_data['true_position']
-        assert abs(pose.position.x - true_pos.x) < 20.0  # Should be more accurate
-        assert abs(pose.position.y - true_pos.y) < 20.0
-        assert abs(pose.position.z - true_pos.z) < 20.0
+        assert abs(pose.position.x - true_pos.x) < tolerance_pos
+        assert abs(pose.position.y - true_pos.y) < tolerance_pos
+        assert abs(pose.position.z - true_pos.z) < tolerance_pos
         
         # Rotation should match the known rotation (exactly)
         true_rot = test_data['true_rotation']
@@ -184,6 +209,9 @@ class TestLibraryIntegration:
     
     def test_point_projection(self, test_data):
         """Test point projection functionality."""
+        num_keypoints = len(test_data['runway_corners'])
+        print(f"Testing point projection with {num_keypoints} keypoints")
+        
         # Test projecting one of the runway corners
         corner = test_data['runway_corners'][0]
         true_pos = test_data['true_position']
