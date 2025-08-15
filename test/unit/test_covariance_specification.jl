@@ -13,7 +13,7 @@ using RunwayLib
 using RunwayLib: px  # Import the pixel unit from RunwayLib
 using Distributions: Normal, MvNormal
 using LinearAlgebra: Diagonal, isposdef
-using Statistics: std, cov  # Import std and cov functions
+using StatsBase: std, cov  # Import std and cov functions
 using LinearAlgebra: I  # Import identity matrix
 using StaticArrays: SA
 using Unitful: m
