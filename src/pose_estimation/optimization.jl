@@ -182,12 +182,12 @@ end
 function estimatepose6dof(
         runway_corners::AbstractVector{<:WorldPoint},
         observed_corners::AbstractVector{<:ProjectionPoint{T, S}},
-        config::CameraConfig{S} = CAMERA_CONFIG_OFFSET;
-        noise_model = _defaultnoisemodel(observed_corners),
+        config::CameraConfig{S} = CAMERA_CONFIG_OFFSET,
+        noise_model::N = _defaultnoisemodel(observed_corners);
         initial_guess_pos::AbstractVector{<:Length} = SA[-1000.0, 0.0, 100.0]m,
         initial_guess_rot::AbstractVector{<:DimensionlessQuantity} = SA[0.0, 0.0, 0.0]rad,
         optimization_config = DEFAULT_OPTIMIZATION_CONFIG
-    ) where {T, S}
+    ) where {T, S, N}
     u₀ = [
         initial_guess_pos .|> _ustrip(m);
         initial_guess_rot .|> _ustrip(rad)
@@ -219,11 +219,11 @@ function estimatepose3dof(
         runway_corners::AbstractVector{<:WorldPoint},
         observed_corners::AbstractVector{<:ProjectionPoint{T, S}},
         known_attitude::RotZYX,
-        config::CameraConfig{S} = CAMERA_CONFIG_OFFSET;
-        noise_model = _defaultnoisemodel(observed_corners),
+        config::CameraConfig{S} = CAMERA_CONFIG_OFFSET,
+        noise_model::N = _defaultnoisemodel(observed_corners);
         initial_guess_pos::AbstractVector{<:Length} = SA[-1000.0, 0.0, 100.0]m,
         optimization_config = DEFAULT_OPTIMIZATION_CONFIG
-    ) where {T, S}
+    ) where {T, S, N}
 
     u₀ = initial_guess_pos .|> _ustrip(m) |> Array
 
