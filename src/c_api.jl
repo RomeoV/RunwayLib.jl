@@ -285,7 +285,6 @@ Base.@ccallable function estimate_pose_3dof(
         return POSEEST_SUCCESS
         
     catch e
-        println(stderr, "Error in estimate_pose_3dof: $e")
         if isa(e, BoundsError) || isa(e, ArgumentError)
             return POSEEST_ERROR_INVALID_INPUT
         else
