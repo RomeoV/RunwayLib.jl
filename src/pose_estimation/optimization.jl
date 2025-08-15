@@ -128,8 +128,8 @@ const _defaultnoisemodel(pts) = let
     UncorrGaussianNoiseModel(reduce(vcat, distributions))
 end
 
-const POSEOPTFN = NonlinearFunction{false, SciMLBase.FullSpecialize}(pose_optimization_objective)
 const AD = AutoForwardDiff(; chunksize = 1)
+const POSEOPTFN = NonlinearFunction{false,FullSpecialize}(pose_optimization_objective)
 const ALG = LevenbergMarquardt(; autodiff=AD, linsolve=CholeskyFactorization(),
     disable_geodesic=Val(false))
 
