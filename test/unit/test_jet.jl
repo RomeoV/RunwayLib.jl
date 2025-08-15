@@ -21,11 +21,11 @@ using StaticArrays
         
         @testset "project - basic functionality" begin
             # Test with default camera config
-            @test_opt project(cam_pos, cam_rot, world_pt)
+            @test_opt stacktrace_types_limit=3 project(cam_pos, cam_rot, world_pt)
             
             # Test with explicit camera configs
-            @test_opt project(cam_pos, cam_rot, world_pt, CAMERA_CONFIG_CENTERED)
-            @test_opt project(cam_pos, cam_rot, world_pt, CAMERA_CONFIG_OFFSET)
+            @test_opt stacktrace_types_limit=3 project(cam_pos, cam_rot, world_pt, CAMERA_CONFIG_CENTERED)
+            @test_opt stacktrace_types_limit=3 project(cam_pos, cam_rot, world_pt, CAMERA_CONFIG_OFFSET)
         end
     end
 
@@ -61,7 +61,7 @@ using StaticArrays
                 camconfig, cholesky(covmatrix(noise_model)).U
             )
             
-            @test_opt RunwayLib.pose_optimization_objective(opt_params_6dof, ps_6dof)
+            @test_opt stacktrace_types_limit=3 RunwayLib.pose_optimization_objective(opt_params_6dof, ps_6dof)
             
             # Test 3-DOF optimization parameters
             opt_params_3dof = SA[-500.0, 10.0, 100.0]  # position only
@@ -71,16 +71,16 @@ using StaticArrays
                 camconfig, cholesky(covmatrix(noise_model)).U, true_rot
             )
             
-            @test_opt RunwayLib.pose_optimization_objective(opt_params_3dof, ps_3dof)
+            @test_opt stacktrace_types_limit=3 RunwayLib.pose_optimization_objective(opt_params_3dof, ps_3dof)
         end
         
         # Test the pose estimation functions
         @testset "estimatepose functions" begin
-            @test_opt estimatepose6dof(
+            @test_opt stacktrace_types_limit=3 estimatepose6dof(
                 runway_corners, projections, camconfig
             )
             
-            @test_opt estimatepose3dof(
+            @test_opt stacktrace_types_limit=3 estimatepose3dof(
                 runway_corners, projections, true_rot, camconfig
             )
         end
