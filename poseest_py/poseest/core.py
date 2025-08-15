@@ -93,10 +93,11 @@ class CameraConfig(IntEnum):
 
 class CovarianceType(IntEnum):
     """Covariance specification types."""
-    SCALAR = 0          # Single noise value for all keypoints/directions
-    DIAGONAL_FULL = 1   # Diagonal matrix (length = 2*n_keypoints)  
-    BLOCK_DIAGONAL = 2  # 2x2 matrix per keypoint (length = 4*n_keypoints)
-    FULL_MATRIX = 3     # Full covariance matrix (length = 4*n_keypoints^2)
+    DEFAULT = 0         # Use default noise model (pointer can be null)
+    SCALAR = 1          # Single noise value for all keypoints/directions
+    DIAGONAL_FULL = 2   # Diagonal matrix (length = 2*n_keypoints)  
+    BLOCK_DIAGONAL = 3  # 2x2 matrix per keypoint (length = 4*n_keypoints)
+    FULL_MATRIX = 4     # Full covariance matrix (length = 4*n_keypoints^2)
 
 
 # Error codes (matching C API)
@@ -233,6 +234,21 @@ class CovarianceSpec(ABC):
     def validate(self, num_points: int) -> None:
         """Validate covariance specification for given number of points."""
         pass
+
+
+@dataclass  
+class DefaultCovariance(CovarianceSpec):
+    """Use the default noise model - no additional data needed."""
+    
+    def validate(self, num_points: int) -> None:
+        # No validation needed for default case
+        pass
+    
+    def to_c_array(self, num_points: int) -> Tuple[ctypes.Array, CovarianceType]:
+        self.validate(num_points)
+        # Return empty array for default case - C API will ignore the pointer
+        data = (ctypes.c_double * 1)(0.0)  # Dummy data
+        return data, CovarianceType.DEFAULT
 
 
 @dataclass  

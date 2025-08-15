@@ -42,10 +42,11 @@ const LIBRARY_INITIALIZED = Ref(false)
 @cenum(CAMERA_CONFIG_C, CAMERA_CONFIG_CENTERED_C = Cint(0), CAMERA_CONFIG_OFFSET_C = Cint(1))
 
 @cenum COVARIANCE_TYPE_C::Cint begin
-    COV_SCALAR = 0          # Single noise value for all keypoints/directions
-    COV_DIAGONAL_FULL = 1   # Diagonal matrix (length = 2*n_keypoints)  
-    COV_BLOCK_DIAGONAL = 2  # 2x2 matrix per keypoint (length = 4*n_keypoints)
-    COV_FULL_MATRIX = 3     # Full covariance matrix (length = 4*n_keypoints^2)
+    COV_DEFAULT = 0         # Use default noise model (pointer can be null)
+    COV_SCALAR = 1          # Single noise value for all keypoints/directions
+    COV_DIAGONAL_FULL = 2   # Diagonal matrix (length = 2*n_keypoints)  
+    COV_BLOCK_DIAGONAL = 3  # 2x2 matrix per keypoint (length = 4*n_keypoints)
+    COV_FULL_MATRIX = 4     # Full covariance matrix (length = 4*n_keypoints^2)
 end
 
 function get_camera_config(config_type::CAMERA_CONFIG_C)
@@ -63,10 +64,15 @@ function parse_covariance_data(covariance_data::Ptr{Cdouble}, covariance_type::C
     Parse covariance data from C pointer based on covariance type enum.
     Returns a NoiseModel that can be used with the optimization infrastructure.
     """
-    if covariance_data == C_NULL
-        # Return default noise model if no covariance data provided
+    if covariance_type == COV_DEFAULT
+        # Return default noise model (pointer can be null in this case)
         dummy_projections = [ProjectionPoint(0.0px, 0.0px) for _ in 1:num_points]
         return _defaultnoisemodel(dummy_projections)
+    end
+    
+    # For all other types, we need valid covariance data
+    if covariance_data == C_NULL
+        throw(ArgumentError("Covariance data pointer cannot be null for covariance type: $covariance_type"))
     end
     
     if covariance_type == COV_SCALAR
