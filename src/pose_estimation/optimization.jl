@@ -131,7 +131,7 @@ end
 const AD = AutoForwardDiff(; chunksize = 1)
 const POSEOPTFN = NonlinearFunction{false,FullSpecialize}(pose_optimization_objective)
 const ALG = LevenbergMarquardt(; autodiff=AD, linsolve=CholeskyFactorization(),
-    disable_geodesic=Val(false))
+    disable_geodesic=Val(true))
 
 "Camera configuration type for precompilation"
 const CAMCONF4COMP = CAMERA_CONFIG_OFFSET
