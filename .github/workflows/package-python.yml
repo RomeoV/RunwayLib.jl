@@ -7,9 +7,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  JULIA_CPU_TARGET: "generic; native"
-
 jobs:
   package-python:
     runs-on: ubuntu-22.04
@@ -28,7 +25,7 @@ jobs:
       - name: Build executable and library
         working-directory: juliac
         run: |
-          make
+          JULIA_CPU_TARGET="generic" make
 
       - name: Prepare Python package
         run: |
