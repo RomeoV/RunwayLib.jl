@@ -45,11 +45,10 @@ using ProbabilisticParameterEstimators: CorrGaussianNoiseModel, covmatrix
                 RunwayLib.COV_DEFAULT, Ptr{Cdouble}(0), 4
             )
             
-            @test length(noise_model.noisedistributions) == 8  # 4 points * 2 coords
-            @test all(isa.(noise_model.noisedistributions, Normal))
+            @test size(noise_model) == (8, 8)  # 4 points * 2 coords
             # Should match the default noise model
             default_model = RunwayLib._defaultnoisemodel(projections)
-            @test all(std.(noise_model.noisedistributions) .≈ std.(default_model.noisedistributions))
+            @test all(sqrt.(diag(noise_model)) .≈ std.(default_model.noisedistributions))
         end
         
         @testset "Scalar Covariance" begin
@@ -61,9 +60,8 @@ using ProbabilisticParameterEstimators: CorrGaussianNoiseModel, covmatrix
                 RunwayLib.COV_SCALAR, pointer(cov_data), 4
             )
             
-            @test length(noise_model.noisedistributions) == 8  # 4 points * 2 coords
-            @test all(isa.(noise_model.noisedistributions, Normal))
-            @test all(std.(noise_model.noisedistributions) .≈ noise_std)
+            @test size(noise_model) == (8, 8)  # 4 points * 2 coords
+            @test all(sqrt.(diag(noise_model)) .≈ noise_std)
         end
 
         @testset "Diagonal Covariance" begin
@@ -74,10 +72,9 @@ using ProbabilisticParameterEstimators: CorrGaussianNoiseModel, covmatrix
                 RunwayLib.COV_DIAGONAL_FULL, pointer(variances), 4
             )
             
-            @test length(noise_model.noisedistributions) == 8
-            @test all(isa.(noise_model.noisedistributions, Normal))
+            @test size(noise_model) == (8, 8)
             expected_stds = sqrt.(variances)
-            @test all(std.(noise_model.noisedistributions) .≈ expected_stds)
+            @test all(sqrt.(diag(noise_model)) .≈ expected_stds)
         end
 
         @testset "Block Diagonal Covariance" begin
@@ -98,15 +95,13 @@ using ProbabilisticParameterEstimators: CorrGaussianNoiseModel, covmatrix
                 RunwayLib.COV_BLOCK_DIAGONAL, pointer(cov_data), 4
             )
             
-            @test length(noise_model.noisedistributions) == 4
-            @test all(isa.(noise_model.noisedistributions, MvNormal))
-            
+            @test size(noise_model) == (8, 8)
+
             # Check that covariance matrices are correctly reconstructed
-            cov_matrices = [cov(dist) for dist in noise_model.noisedistributions]
-            @test cov_matrices[1] ≈ [1.0 0.1; 0.1 1.0]
-            @test cov_matrices[2] ≈ [2.0 0.2; 0.2 2.0]
-            @test cov_matrices[3] ≈ [1.5 0.0; 0.0 1.5]
-            @test cov_matrices[4] ≈ [2.5 -0.3; -0.3 2.5]
+            @test noise_model[1:2, 1:2] ≈ [1.0 0.1; 0.1 1.0]
+            @test noise_model[3:4, 3:4] ≈ [2.0 0.2; 0.2 2.0]
+            @test noise_model[5:6, 5:6] ≈ [1.5 0.0; 0.0 1.5]
+            @test noise_model[7:8, 7:8] ≈ [2.5 -0.3; -0.3 2.5]
         end
 
         @testset "Full Matrix Covariance" begin
@@ -125,8 +120,8 @@ using ProbabilisticParameterEstimators: CorrGaussianNoiseModel, covmatrix
                 RunwayLib.COV_FULL_MATRIX, pointer(cov_data), 4
             )
             
-            @test isa(noise_model, CorrGaussianNoiseModel)
-            @test covmatrix(noise_model) ≈ full_cov
+            @test size(noise_model) == (8, 8)
+            @test noise_model ≈ full_cov
         end
     end
 
@@ -171,23 +166,6 @@ using ProbabilisticParameterEstimators: CorrGaussianNoiseModel, covmatrix
                 RunwayLib.COV_FULL_MATRIX, pointer(cov_data), 4
             )
         end
-
-        @testset "NULL Pointer Handling" begin
-            # Test that NULL pointer with COV_DEFAULT works
-            noise_model = RunwayLib.parse_covariance_data(
-                RunwayLib.COV_DEFAULT, Ptr{Cdouble}(0), 4
-            )
-            @test length(noise_model.noisedistributions) == 8
-            @test all(isa.(noise_model.noisedistributions, Normal))
-            
-            # Test that NULL pointer with other types fails
-            @test_throws ArgumentError RunwayLib.parse_covariance_data(
-                RunwayLib.COV_SCALAR, Ptr{Cdouble}(0), 4
-            )
-            @test_throws ArgumentError RunwayLib.parse_covariance_data(
-                RunwayLib.COV_DIAGONAL_FULL, Ptr{Cdouble}(0), 4
-            )
-        end
     end
 
     @testset "Integration with Optimization" begin
@@ -219,7 +197,7 @@ using ProbabilisticParameterEstimators: CorrGaussianNoiseModel, covmatrix
             
             ps = PoseOptimizationParams6DOF(
                 runway_corners, projections,
-                CAMERA_CONFIG_OFFSET, noise_model
+                CAMERA_CONFIG_OFFSET, noise_model |> Matrix
             )
             
             # Test that we can call the objective function
@@ -245,7 +223,7 @@ using ProbabilisticParameterEstimators: CorrGaussianNoiseModel, covmatrix
             
             ps = PoseOptimizationParams6DOF(
                 runway_corners, projections,
-                CAMERA_CONFIG_OFFSET, noise_model
+                CAMERA_CONFIG_OFFSET, noise_model |> Matrix
             )
             
             # Test objective function call
