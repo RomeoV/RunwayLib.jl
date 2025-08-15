@@ -58,7 +58,7 @@ using StaticArrays
             
             ps_6dof = PoseOptimizationParams6DOF(
                 runway_corners, projections,
-                camconfig, cholesky(covmatrix(noise_model)).U
+                camconfig, noise_model
             )
             
             @test_opt stacktrace_types_limit=3 RunwayLib.pose_optimization_objective(opt_params_6dof, ps_6dof)
@@ -68,7 +68,7 @@ using StaticArrays
             
             ps_3dof = PoseOptimizationParams3DOF(
                 runway_corners, projections,
-                camconfig, cholesky(covmatrix(noise_model)).U, true_rot
+                camconfig, noise_model, true_rot
             )
             
             @test_opt stacktrace_types_limit=3 RunwayLib.pose_optimization_objective(opt_params_3dof, ps_3dof)
