@@ -144,7 +144,11 @@ const CACHE_6DOF = OncePerProcess() do
         CAMERA_CONFIG_OFFSET, noise_model
     )
     prob = NonlinearLeastSquaresProblem{false}(POSEOPTFN, rand(6), ps)
-    init(prob, ALG)
+    T = Float64
+    # sqrt of the default
+    reltol = real(oneunit(T)) * (eps(real(one(T))))^(2 // 5)
+    abstol = real(oneunit(T)) * (eps(real(one(T))))^(2 // 5)
+    init(prob, ALG; reltol, abstol)
 end
 
 const CACHE_3DOF = OncePerProcess() do
@@ -156,7 +160,6 @@ const CACHE_3DOF = OncePerProcess() do
         true_rot
     )
     prob = NonlinearLeastSquaresProblem{false}(POSEOPTFN, rand(3), ps)
-    cache = init(prob, ALG)
     T = Float64
     # sqrt of the default
     reltol = real(oneunit(T)) * (eps(real(one(T))))^(2 // 5)
