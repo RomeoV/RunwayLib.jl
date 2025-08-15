@@ -24,6 +24,7 @@ $(LIB_DIR)/libposeest.so: loadrunwaylib.jl Project.toml Manifest.toml $(SRC)
 	$(JULIA) --project=. --depwarn=error "$$JULIAC" --experimental --trim=unsafe-warn --compile-ccallable --output-lib $(LIB_DIR)/libposeest loadrunwaylib.jl --relative-rpath
 
 Manifest.toml: Project.toml ../Project.toml
+	-rm -f Manifest.toml
 	$(JULIA) --project=. -e 'using Pkg; Pkg.instantiate()'
 	@touch $@ # Pkg.instantiate doesn't update the mtime if there are no changes
 
