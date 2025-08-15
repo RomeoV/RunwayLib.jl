@@ -21,7 +21,7 @@ using JET
     camconfig = CAMERA_CONFIG_OFFSET
 
     projections = [
-        project(true_pos, true_rot, corner, camconfig) + ProjectionPoint(5*randn(2)) * px
+        project(true_pos, true_rot, corner, camconfig) + ProjectionPoint(2*randn(2)) * px
         for corner in runway_corners
     ]
 
