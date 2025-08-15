@@ -368,6 +368,30 @@ RunwayPoseEstimation.jl/
 
 ## Python Usage
 
+### Installation
+For now, grab the latest package bundle from the [*Package Python* workflow](https://github.com/RomeoV/RunwayLib.jl/actions/workflows/package-python.yml) by clicking on the most recent run, downloading the artifact and unzipping it.
+
+``` sh
+unzip poseest-python-package.zip
+```
+
+Then you can install the library with
+
+``` python
+pip install -e poseest
+```
+
+e.g. using `uv`
+
+``` sh
+uv venv
+uv pip install -e poseest
+uv run python
+```
+
+
+### Usage
+
 The compiled library can be used from Python:
 
 ```python
