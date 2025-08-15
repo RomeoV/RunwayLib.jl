@@ -23,6 +23,15 @@ from .core import (
     # Configuration
     CameraConfig,
     
+    # Covariance specifications
+    CovarianceSpec,
+    DefaultCovariance,
+    ScalarCovariance,
+    DiagonalCovariance,
+    BlockDiagonalCovariance,
+    FullCovariance,
+    CovarianceType,
+    
     # Exceptions
     PoseEstimationError,
     InvalidInputError,
@@ -49,6 +58,15 @@ __all__ = [
     
     # Configuration
     "CameraConfig",
+    
+    # Covariance specifications
+    "CovarianceSpec",
+    "DefaultCovariance",
+    "ScalarCovariance",
+    "DiagonalCovariance",
+    "BlockDiagonalCovariance",
+    "FullCovariance",
+    "CovarianceType",
     
     # Exceptions
     "PoseEstimationError",
