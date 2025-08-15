@@ -59,15 +59,14 @@ function get_camera_config(config_type::CAMERA_CONFIG_C)
     end
 end
 
-function parse_covariance_data(covariance_data::Ptr{Cdouble}, covariance_type::COVARIANCE_TYPE_C, num_points::Integer)
+function parse_covariance_data(covariance_type::COVARIANCE_TYPE_C, covariance_data::Ptr{Cdouble}, num_points::Integer)
     """
     Parse covariance data from C pointer based on covariance type enum.
     Returns a NoiseModel that can be used with the optimization infrastructure.
     """
     if covariance_type == COV_DEFAULT
         # Return default noise model (pointer can be null in this case)
-        dummy_projections = [ProjectionPoint(0.0px, 0.0px) for _ in 1:num_points]
-        return covmatrix(_defaultnoisemodel(dummy_projections))
+        return covmatrix(_defaultnoisemodel(1:num_points))
     end
     
     # For all other types, we need valid covariance data
@@ -203,13 +202,13 @@ Base.@ccallable function estimate_pose_6dof(
         projections = unsafe_wrap(Array, projections_, num_points) .* 1px
 
         # Parse covariance specification
-        noise_model = parse_covariance_data(covariance_data, covariance_type, num_points)
+        noise_model = parse_covariance_data(covariance_type, covariance_data, num_points) |> Matrix
 
         # Get camera configuration
         camconfig = get_camera_config(camera_config)
 
         # Perform pose estimation with custom noise model
-        sol = estimatepose6dof(runway_corners, projections, camconfig; noise_model=noise_model)
+        sol = estimatepose6dof(runway_corners, projections, camconfig, noise_model)
 
         # Convert result back to C struct
         result_c = PoseEstimate_C(
@@ -263,13 +262,13 @@ Base.@ccallable function estimate_pose_3dof(
         jl_rotation = RotZYX(known_rot_c[1], known_rot_c[2], known_rot_c[3])
 
         # Parse covariance specification
-        noise_model = parse_covariance_data(covariance_data, covariance_type, num_points)
+        noise_model = parse_covariance_data(covariance_type, covariance_data, num_points) |> Matrix
 
         # Get camera configuration
         camconfig = get_camera_config(camera_config)
 
         # Perform pose estimation with custom noise model
-        sol = estimatepose3dof(runway_corners, projections, jl_rotation, camconfig; noise_model=noise_model)
+        sol = estimatepose3dof(runway_corners, projections, jl_rotation, camconfig, noise_model)
 
         # Convert result back to C struct
         result_c = PoseEstimate_C(
