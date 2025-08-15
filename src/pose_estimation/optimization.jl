@@ -136,9 +136,7 @@ const ALG = LevenbergMarquardt(; autodiff=AD, linsolve=CholeskyFactorization(),
 "Camera configuration type for precompilation"
 const CAMCONF4COMP = CAMERA_CONFIG_OFFSET
 
-# Adaptive caches - reuse when dimensions match, recreate when they change
-# Create concrete cache types based on the original setup approach
-const _SAMPLE_CACHE_6DOF = let
+const CACHE_6DOF = OncePerProcess() do
     (; runway_corners, projections, true_pos, true_rot) = setup_for_precompile()
     noise_model = _defaultnoisemodel(projections)
     ps = PoseOptimizationParams6DOF(
@@ -149,7 +147,7 @@ const _SAMPLE_CACHE_6DOF = let
     init(prob, ALG)
 end
 
-const _SAMPLE_CACHE_3DOF = let
+const CACHE_3DOF = OncePerProcess() do
     (; runway_corners, projections, true_pos, true_rot) = setup_for_precompile()
     noise_model = _defaultnoisemodel(projections)
     ps = PoseOptimizationParams3DOF(
@@ -158,31 +156,12 @@ const _SAMPLE_CACHE_3DOF = let
         true_rot
     )
     prob = NonlinearLeastSquaresProblem{false}(POSEOPTFN, rand(3), ps)
-    init(prob, ALG)
-end
-
-const _CACHE6DOF_STORAGE = Ref{typeof(_SAMPLE_CACHE_6DOF)}()
-const _CACHE3DOF_STORAGE = Ref{typeof(_SAMPLE_CACHE_3DOF)}()
-
-function _get_or_create_cache(cache_storage, u0, ps)
-    expected_u_size = length(u0)
-    expected_f_size = 2 * length(ps.observed_corners)  # 2 errors per corner
-    
-    # Check if we have a cached solver with matching dimensions
-    if isassigned(cache_storage)
-        cache = cache_storage[]
-        if length(cache.u) == expected_u_size && length(cache.fu) == expected_f_size
-            # Reuse existing cache with reinit
-            reinit!(cache, u0; p = ps)
-            return cache
-        end
-    end
-    
-    # Create new cache for these dimensions
-    prob = NonlinearLeastSquaresProblem{false}(POSEOPTFN, u0, ps)
     cache = init(prob, ALG)
-    cache_storage[] = cache
-    return cache
+    T = Float64
+    # sqrt of the default
+    reltol = real(oneunit(T)) * (eps(real(one(T))))^(2 // 5)
+    abstol = real(oneunit(T)) * (eps(real(one(T))))^(2 // 5)
+    init(prob, ALG; reltol, abstol)
 end
 
 function estimatepose6dof(
@@ -210,7 +189,8 @@ function estimatepose6dof(
     )
 
     # Get or create cache for this problem size
-    cache = _get_or_create_cache(_CACHE6DOF_STORAGE, u₀, ps)
+    cache = CACHE_6DOF()
+    reinit!(cache, u₀; p=ps)
     solve!(cache)
     sol = (; u = cache.u, retcode = cache.retcode)
 
@@ -243,7 +223,8 @@ function estimatepose3dof(
     )
 
     # Get or create cache for this problem size
-    cache = _get_or_create_cache(_CACHE3DOF_STORAGE, u₀, ps)
+    cache = CACHE_3DOF()
+    reinit!(cache, u₀; p=ps)
     solve!(cache)
     sol = (; u = cache.u, retcode = cache.retcode)
 
