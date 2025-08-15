@@ -10,10 +10,14 @@ This module tests:
 
 using Test
 using RunwayLib
+using RunwayLib: px  # Import the pixel unit from RunwayLib
 using Distributions: Normal, MvNormal
 using LinearAlgebra: Diagonal, isposdef
+using Statistics: std, cov  # Import std and cov functions
+using LinearAlgebra: I  # Import identity matrix
 using StaticArrays: SA
-using Unitful: m, px
+using Unitful: m
+using ProbabilisticParameterEstimators: CorrGaussianNoiseModel, covmatrix
 
 @testset "Covariance Specification Tests" begin
 
@@ -108,9 +112,8 @@ using Unitful: m, px
                 pointer(cov_data), RunwayLib.COV_FULL_MATRIX, 4
             )
             
-            @test length(noise_model.noisedistributions) == 1
-            @test isa(noise_model.noisedistributions[1], MvNormal)
-            @test cov(noise_model.noisedistributions[1]) ≈ full_cov
+            @test isa(noise_model, CorrGaussianNoiseModel)
+            @test covmatrix(noise_model) ≈ full_cov
         end
     end
 
@@ -237,10 +240,10 @@ using Unitful: m, px
         
         @testset "Dense Matrix Performance" begin
             # Test that dense matrices don't cause performance issues
-            large_noise_model = UncorrGaussianNoiseModel([Normal(0.0, 1.0) for _ in 1:20])
+            large_noise_model = UncorrGaussianNoiseModel([Normal(0.0, 1.0) for _ in 1:8])  # 4 points * 2 coords
             
             ps = PoseOptimizationParams6DOF(
-                runway_corners[1:5], projections[1:5],
+                runway_corners, projections,  # Use all 4 corners
                 CAMERA_CONFIG_OFFSET, large_noise_model
             )
             
