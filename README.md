@@ -371,37 +371,54 @@ RunwayPoseEstimation.jl/
 The compiled library can be used from Python:
 
 ```python
-import numpy as np
-from poseest import estimate_pose_3dof, estimate_pose_6dof
+from poseest import (
+    estimate_pose_3dof, estimate_pose_6dof, WorldPoint, ProjectionPoint, Rotation,
+    CameraConfig, DiagonalCovariance
+)
 
-# Runway corners in image coordinates (pixels) [top-left, top-right, bottom-right, bottom-left]
-corners = np.array([[1200, 800], [2800, 850], [2900, 2100], [1100, 2050]], dtype=float)
+# Define runway corners in world coordinates (meters)
+runway_corners = [
+    WorldPoint(0.0, -50.0, 0.0),      # near left
+    WorldPoint(0.0, 50.0, 0.0),       # near right
+    WorldPoint(1000.0, -50.0, 0.0),   # far left
+    WorldPoint(1000.0, 50.0, 0.0)     # far right
+]
 
-# Diagonal covariance (pixel standard deviations squared)
-pixel_std = np.array([2.0, 1.5, 2.5, 1.8, 2.2, 1.9, 2.1, 1.7])
-cov_diag = np.diag(pixel_std**2)
+# Observed projections in image coordinates (pixels)
+projections = [
+    ProjectionPoint(320.0, 240.0),
+    ProjectionPoint(380.0, 240.0),
+    ProjectionPoint(380.0, 280.0),
+    ProjectionPoint(320.0, 280.0)
+]
+
+# Diagonal covariance (pixel variances, not std deviations)
+pixel_variances = [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5]
+covariance = DiagonalCovariance(variances=pixel_variances)
 
 # 6-DOF estimation (position + orientation)
 result_6dof = estimate_pose_6dof(
-    corners_image=corners,
-    pixel_covariance=cov_diag,
-    runway_spec={'length_m': 3000.0, 'width_m': 45.0, 'threshold_elevation_m': 100.0},
-    initial_guess=np.array([500.0, 0.0, 50.0, 0.0, 0.0, 1.5])  # [x,y,z,roll,pitch,yaw]
+    runway_corners=runway_corners,
+    projections=projections,
+    camera_config=CameraConfig.OFFSET,
+    covariance=covariance
 )
 
 # 3-DOF estimation (position only, known orientation)
+known_rotation = Rotation(yaw=-0.01, pitch=0.1, roll=0.02)
 result_3dof = estimate_pose_3dof(
-    corners_image=corners,
-    pixel_covariance=cov_diag,
-    runway_spec={'length_m': 3000.0, 'width_m': 45.0, 'threshold_elevation_m': 100.0},
-    known_orientation=np.array([0.05, -0.02, 1.57])  # [roll, pitch, yaw] in radians
+    runway_corners=runway_corners,
+    projections=projections,
+    known_rotation=known_rotation,
+    camera_config=CameraConfig.OFFSET,
+    covariance=covariance
 )
 
-print(f"6-DOF: position={result_6dof['position']}, orientation={result_6dof['orientation']}")
-print(f"3-DOF: position={result_3dof['position']}")
+print(f"6-DOF: position={result_6dof.position}, rotation={result_6dof.rotation}")
+print(f"3-DOF: position={result_3dof.position}")
 ```
 
-For full covariance matrices, replace `cov_diag` with an 8×8 matrix accounting for pixel correlations.
+For full covariance matrices, use `FullCovariance(matrix=cov_8x8)` instead of `DiagonalCovariance`.
 
 ## Contributing
 
