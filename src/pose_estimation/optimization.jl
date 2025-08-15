@@ -187,7 +187,7 @@ function estimatepose6dof(
             for proj in observed_corners
     ]
     ps = PoseOptimizationParams6DOF(
-        runway_corners, observed_corners,
+        runway_corners |> Vector, observed_corners |> Vector,
         CAMCONF4COMP, noise_model
     )
 
@@ -221,7 +221,7 @@ function estimatepose3dof(
             for proj in observed_corners
     ]
     ps = PoseOptimizationParams3DOF(
-        runway_corners, observed_corners,
+        runway_corners |> Vector, observed_corners |> Vector,
         CAMCONF4COMP, noise_model, known_attitude
     )
 
