@@ -96,7 +96,7 @@ Base.@ccallable function estimate_pose_6dof(
 )::Cint
     # try
     # Validate inputs
-    if runway_corners_ == C_NULL || projections_ == C_NULL || result == C_NULL || num_points != 4
+    if runway_corners_ == C_NULL || projections_ == C_NULL || result == C_NULL
         return POSEEST_ERROR_INVALID_INPUT
     end
 
@@ -150,7 +150,7 @@ Base.@ccallable function estimate_pose_3dof(
     result::Ptr{PoseEstimate_C}
 )::Cint
     # Validate inputs
-    if runway_corners_ == C_NULL || projections_ == C_NULL || known_rotation == C_NULL || result == C_NULL || num_points != 4
+    if runway_corners_ == C_NULL || projections_ == C_NULL || known_rotation == C_NULL || result == C_NULL
         return POSEEST_ERROR_INVALID_INPUT
     end
 
