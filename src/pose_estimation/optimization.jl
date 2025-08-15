@@ -136,7 +136,7 @@ const ALG = LevenbergMarquardt(; autodiff=AD, linsolve=CholeskyFactorization(),
 "Camera configuration type for precompilation"
 const CAMCONF4COMP = CAMERA_CONFIG_OFFSET
 
-const CACHE_6DOF = OncePerProcess() do
+const CACHE_6DOF = let
     (; runway_corners, projections, true_pos, true_rot) = setup_for_precompile()
     noise_model = _defaultnoisemodel(projections)
     ps = PoseOptimizationParams6DOF(
@@ -151,7 +151,7 @@ const CACHE_6DOF = OncePerProcess() do
     init(prob, ALG; reltol, abstol)
 end
 
-const CACHE_3DOF = OncePerProcess() do
+const CACHE_3DOF = let
     (; runway_corners, projections, true_pos, true_rot) = setup_for_precompile()
     noise_model = _defaultnoisemodel(projections)
     ps = PoseOptimizationParams3DOF(
@@ -192,7 +192,7 @@ function estimatepose6dof(
     )
 
     # Get or create cache for this problem size
-    cache = CACHE_6DOF()
+    cache = CACHE_6DOF
     reinit!(cache, u₀; p=ps)
     solve!(cache)
     sol = (; u = cache.u, retcode = cache.retcode)
@@ -226,7 +226,7 @@ function estimatepose3dof(
     )
 
     # Get or create cache for this problem size
-    cache = CACHE_3DOF()
+    cache = CACHE_3DOF
     reinit!(cache, u₀; p=ps)
     solve!(cache)
     sol = (; u = cache.u, retcode = cache.retcode)
