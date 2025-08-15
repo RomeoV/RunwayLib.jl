@@ -111,10 +111,14 @@ function parse_covariance_data(covariance_type::COVARIANCE_TYPE_C, covariance_da
         #     MvNormal(zeros(2), cov_2x2)
         # end
         # return covmatrix(UncorrGaussianNoiseModel(distributions))
-        covmat = zeros(data_length, data_length)
-        for i in 1:data_length
-            idx = (0:3) .+ (i-1)*4
-            covmat[idx, idx] .= reshape(cov_data[idx], 2, 2)
+        covmat = zeros(2*num_points, 2*num_points)
+        for i in 1:num_points
+            idx = (1:4) .+ (i-1)*4
+            idx_ = (1:2) .+ (i-1)*2
+            covmat[idx_, idx_] .= reshape(cov_data[idx], 2, 2)
+            if !isposdef(@view covmat[idx_, idx_])
+                throw(ArgumentError("Covariance matrices for all keypoints must be positive definite"))
+            end
         end
         return covmat
 
