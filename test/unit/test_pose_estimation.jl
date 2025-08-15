@@ -64,7 +64,7 @@ using StaticArrays
 
         for (i, case) in enumerate(test_cases)
             @testset "Case $i" begin
-                true_projections = [project(case.pos, case.rot, corner, CAMERA_CONFIG_OFFSET) for corner in runway_corners]
+                true_projections = [project(case.pos, case.rot, corner) for corner in runway_corners]
                 
                 # Large initial errors
                 noisy_pos = [case.pos.x + 200.0m, case.pos.y - 50.0m, case.pos.z + 80.0m]
@@ -72,7 +72,7 @@ using StaticArrays
                 
                 @testset "6DOF" begin
                     result = estimatepose6dof(
-                        runway_corners, true_projections, CAMERA_CONFIG_OFFSET;
+                        runway_corners, true_projections;
                         initial_guess_pos = noisy_pos, initial_guess_rot = noisy_rot
                     )
                     test_pose_accuracy(result, case.pos, case.rot)
@@ -80,7 +80,7 @@ using StaticArrays
 
                 @testset "3DOF" begin
                     result = estimatepose3dof(
-                        runway_corners, true_projections, case.rot, CAMERA_CONFIG_OFFSET;
+                        runway_corners, true_projections, case.rot;
                         initial_guess_pos = noisy_pos
                     )
                     @test norm(result.pos - case.pos) < 1e-6m
