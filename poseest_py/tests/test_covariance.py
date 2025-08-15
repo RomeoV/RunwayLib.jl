@@ -58,7 +58,7 @@ class TestCovarianceSpecification(unittest.TestCase):
         data, cov_type = cov.to_c_array(num_points=4)
         self.assertEqual(len(data), 1)
         self.assertEqual(data[0], 2.5)
-        self.assertEqual(cov_type.value, 0)  # COV_SCALAR
+        self.assertEqual(cov_type.value, 1)  # COV_SCALAR
         
         # Invalid scalar covariance
         with self.assertRaises(ValueError):
@@ -75,7 +75,7 @@ class TestCovarianceSpecification(unittest.TestCase):
         data, cov_type = cov.to_c_array(num_points=4)
         self.assertEqual(len(data), 8)
         self.assertEqual(list(data), variances)
-        self.assertEqual(cov_type.value, 1)  # COV_DIAGONAL_FULL
+        self.assertEqual(cov_type.value, 2)  # COV_DIAGONAL_FULL
         
         # Wrong number of variances
         with self.assertRaises(ValueError):
@@ -106,7 +106,7 @@ class TestCovarianceSpecification(unittest.TestCase):
         expected = [1.0, 0.1, 0.1, 1.0, 2.0, 0.2, 0.2, 2.0,
                    1.5, 0.0, 0.0, 1.5, 2.5, -0.3, -0.3, 2.5]
         self.assertEqual(list(data), expected)
-        self.assertEqual(cov_type.value, 2)  # COV_BLOCK_DIAGONAL
+        self.assertEqual(cov_type.value, 3)  # COV_BLOCK_DIAGONAL
         
         # Wrong number of matrices
         with self.assertRaises(ValueError):
@@ -148,7 +148,7 @@ class TestCovarianceSpecification(unittest.TestCase):
         
         data, cov_type = cov.to_c_array(num_points=4)
         self.assertEqual(len(data), 64)  # 8x8 matrix
-        self.assertEqual(cov_type.value, 3)  # COV_FULL_MATRIX
+        self.assertEqual(cov_type.value, 4)  # COV_FULL_MATRIX
         
         # Check flattening (row-major order)
         expected_flat = []
@@ -398,8 +398,8 @@ class TestCovarianceConsistency(unittest.TestCase):
         diagonal_data, diagonal_type = diagonal_cov.to_c_array(num_points=4)
         
         # Different types but should represent same noise model
-        self.assertEqual(scalar_type.value, 0)  # COV_SCALAR
-        self.assertEqual(diagonal_type.value, 1)  # COV_DIAGONAL_FULL
+        self.assertEqual(scalar_type.value, 1)  # COV_SCALAR
+        self.assertEqual(diagonal_type.value, 2)  # COV_DIAGONAL_FULL
         
         # Scalar should have single value equal to std
         self.assertEqual(scalar_data[0], noise_std)
@@ -436,8 +436,8 @@ class TestCovarianceConsistency(unittest.TestCase):
         block_data, block_type = block_cov.to_c_array(num_points=4)
         full_data, full_type = full_cov.to_c_array(num_points=4)
         
-        self.assertEqual(block_type.value, 2)  # COV_BLOCK_DIAGONAL
-        self.assertEqual(full_type.value, 3)   # COV_FULL_MATRIX
+        self.assertEqual(block_type.value, 3)  # COV_BLOCK_DIAGONAL
+        self.assertEqual(full_type.value, 4)   # COV_FULL_MATRIX
         
         # The underlying matrices should be mathematically equivalent
         # (though represented differently in the C arrays)
