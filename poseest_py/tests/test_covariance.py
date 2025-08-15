@@ -13,7 +13,7 @@ import numpy as np
 from poseest import (
     WorldPoint, ProjectionPoint, Rotation, CameraConfig,
     DefaultCovariance, ScalarCovariance, DiagonalCovariance, BlockDiagonalCovariance, FullCovariance,
-    estimate_pose_6dof, estimate_pose_3dof,
+    estimate_pose_6dof, estimate_pose_3dof, project_point,
     InvalidInputError, InsufficientPointsError
 )
 
@@ -188,65 +188,73 @@ class TestCovarianceIntegration(unittest.TestCase):
     """Test integration of covariance specifications with pose estimation."""
     
     def setUp(self):
-        """Set up test data."""
+        """Set up test data with realistic aircraft pose and runway geometry."""
+        # Standard runway corners (4 points forming a rectangle) - matches Julia tests
         self.runway_corners = [
-            WorldPoint(1000.0, -50.0, 0.0),
-            WorldPoint(1000.0, 50.0, 0.0),
-            WorldPoint(3000.0, 50.0, 0.0),
-            WorldPoint(3000.0, -50.0, 0.0),
+            WorldPoint(0.0, 25.0, 0.0),      # near left  
+            WorldPoint(0.0, -25.0, 0.0),     # near right
+            WorldPoint(1000.0, 25.0, 0.0),   # far left
+            WorldPoint(1000.0, -25.0, 0.0),  # far right
         ]
         
-        # Create synthetic projections based on a known pose
-        self.projections = [
-            ProjectionPoint(320.0, 240.0),
-            ProjectionPoint(380.0, 240.0),
-            ProjectionPoint(380.0, 280.0),
-            ProjectionPoint(320.0, 280.0),
-        ]
+        # Realistic aircraft pose - behind runway, moderate altitude
+        self.true_position = WorldPoint(-500.0, 10.0, 100.0)
+        self.known_rotation = Rotation(yaw=-0.01, pitch=0.1, roll=0.02)
         
-        self.known_rotation = Rotation(yaw=0.05, pitch=0.03, roll=0.01)
+        # Generate realistic projections using the project_point function
+        self.projections = []
+        for corner in self.runway_corners:
+            proj = project_point(
+                camera_position=self.true_position,
+                camera_rotation=self.known_rotation, 
+                world_point=corner,
+                camera_config=CameraConfig.OFFSET
+            )
+            self.projections.append(proj)
     
     def test_6dof_with_default_covariance(self):
         """Test 6DOF estimation with explicit default covariance."""
         cov = DefaultCovariance()
         
-        try:
-            result = estimate_pose_6dof(
-                runway_corners=self.runway_corners,
-                projections=self.projections,
-                camera_config=CameraConfig.OFFSET,
-                covariance=cov
-            )
-            
-            self.assertIsNotNone(result.position)
-            self.assertIsNotNone(result.rotation)
-            
-        except Exception as e:
-            # Accept convergence-related errors for synthetic data
-            self.assertIn("convergence", str(e).lower(), f"Unexpected error: {e}")
+        result = estimate_pose_6dof(
+            runway_corners=self.runway_corners,
+            projections=self.projections,
+            camera_config=CameraConfig.OFFSET,
+            covariance=cov
+        )
+        
+        # Check that result is close to true pose (within reasonable tolerance)
+        pos_error = ((result.position.x - self.true_position.x)**2 + 
+                     (result.position.y - self.true_position.y)**2 + 
+                     (result.position.z - self.true_position.z)**2)**0.5
+        self.assertLess(pos_error, 1.0, "Position error should be less than 1 meter")
+        
+        # Check rotation is reasonably close (within 0.01 radians ~ 0.6 degrees)
+        rot_error = abs(result.rotation.yaw - self.known_rotation.yaw) + \
+                   abs(result.rotation.pitch - self.known_rotation.pitch) + \
+                   abs(result.rotation.roll - self.known_rotation.roll)
+        self.assertLess(rot_error, 0.01, "Rotation error should be less than 0.01 radians")
     
     def test_6dof_with_scalar_covariance(self):
         """Test 6DOF estimation with scalar covariance."""
         cov = ScalarCovariance(noise_std=2.0)
         
-        try:
-            result = estimate_pose_6dof(
-                runway_corners=self.runway_corners,
-                projections=self.projections,
-                camera_config=CameraConfig.OFFSET,
-                covariance=cov
-            )
-            
-            # Basic sanity checks
-            self.assertIsNotNone(result.position)
-            self.assertIsNotNone(result.rotation)
-            self.assertIsInstance(result.residual, float)
-            self.assertIsInstance(result.converged, bool)
-            
-        except Exception as e:
-            # If the estimation fails due to synthetic data, that's okay for this test
-            # We're mainly testing that the API works without crashing
-            self.assertIn("convergence", str(e).lower(), f"Unexpected error: {e}")
+        result = estimate_pose_6dof(
+            runway_corners=self.runway_corners,
+            projections=self.projections,
+            camera_config=CameraConfig.OFFSET,
+            covariance=cov
+        )
+        
+        # Check that result is close to true pose
+        pos_error = ((result.position.x - self.true_position.x)**2 + 
+                     (result.position.y - self.true_position.y)**2 + 
+                     (result.position.z - self.true_position.z)**2)**0.5
+        self.assertLess(pos_error, 1.0, "Position error should be less than 1 meter")
+        
+        # Check basic result properties
+        self.assertIsInstance(result.residual, float)
+        self.assertIsInstance(result.converged, bool)
     
     def test_6dof_with_diagonal_covariance(self):
         """Test 6DOF estimation with diagonal covariance."""
@@ -254,20 +262,18 @@ class TestCovarianceIntegration(unittest.TestCase):
         variances = [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5]
         cov = DiagonalCovariance(variances=variances)
         
-        try:
-            result = estimate_pose_6dof(
-                runway_corners=self.runway_corners,
-                projections=self.projections,
-                camera_config=CameraConfig.OFFSET,
-                covariance=cov
-            )
-            
-            self.assertIsNotNone(result.position)
-            self.assertIsNotNone(result.rotation)
-            
-        except Exception as e:
-            # Accept convergence-related errors for synthetic data
-            self.assertIn("convergence", str(e).lower(), f"Unexpected error: {e}")
+        result = estimate_pose_6dof(
+            runway_corners=self.runway_corners,
+            projections=self.projections,
+            camera_config=CameraConfig.OFFSET,
+            covariance=cov
+        )
+        
+        # Check that result is close to true pose
+        pos_error = ((result.position.x - self.true_position.x)**2 + 
+                     (result.position.y - self.true_position.y)**2 + 
+                     (result.position.z - self.true_position.z)**2)**0.5
+        self.assertLess(pos_error, 1.0, "Position error should be less than 1 meter")
     
     def test_3dof_with_block_diagonal_covariance(self):
         """Test 3DOF estimation with block diagonal covariance."""
@@ -279,52 +285,53 @@ class TestCovarianceIntegration(unittest.TestCase):
         ]
         cov = BlockDiagonalCovariance(block_matrices=block_matrices)
         
-        try:
-            result = estimate_pose_3dof(
-                runway_corners=self.runway_corners,
-                projections=self.projections,
-                known_rotation=self.known_rotation,
-                camera_config=CameraConfig.OFFSET,
-                covariance=cov
-            )
-            
-            self.assertIsNotNone(result.position)
-            self.assertEqual(result.rotation.yaw, self.known_rotation.yaw)
-            self.assertEqual(result.rotation.pitch, self.known_rotation.pitch)
-            self.assertEqual(result.rotation.roll, self.known_rotation.roll)
-            
-        except Exception as e:
-            # Accept convergence-related errors for synthetic data
-            self.assertIn("convergence", str(e).lower(), f"Unexpected error: {e}")
+        result = estimate_pose_3dof(
+            runway_corners=self.runway_corners,
+            projections=self.projections,
+            known_rotation=self.known_rotation,
+            camera_config=CameraConfig.OFFSET,
+            covariance=cov
+        )
+        
+        # Check that position is close to true position
+        pos_error = ((result.position.x - self.true_position.x)**2 + 
+                     (result.position.y - self.true_position.y)**2 + 
+                     (result.position.z - self.true_position.z)**2)**0.5
+        self.assertLess(pos_error, 1.0, "Position error should be less than 1 meter")
+        
+        # For 3DOF, rotation should be exactly the known rotation
+        self.assertEqual(result.rotation.yaw, self.known_rotation.yaw)
+        self.assertEqual(result.rotation.pitch, self.known_rotation.pitch)
+        self.assertEqual(result.rotation.roll, self.known_rotation.roll)
     
     def test_backward_compatibility(self):
         """Test that functions work without covariance (backward compatibility)."""
-        try:
-            # Test 6DOF without covariance
-            result_6dof = estimate_pose_6dof(
-                runway_corners=self.runway_corners,
-                projections=self.projections,
-                camera_config=CameraConfig.OFFSET
-                # No covariance parameter - should use defaults
-            )
-            
-            self.assertIsNotNone(result_6dof.position)
-            self.assertIsNotNone(result_6dof.rotation)
-            
-            # Test 3DOF without covariance
-            result_3dof = estimate_pose_3dof(
-                runway_corners=self.runway_corners,
-                projections=self.projections,
-                known_rotation=self.known_rotation,
-                camera_config=CameraConfig.OFFSET
-                # No covariance parameter - should use defaults
-            )
-            
-            self.assertIsNotNone(result_3dof.position)
-            
-        except Exception as e:
-            # Accept convergence-related errors for synthetic data
-            self.assertIn("convergence", str(e).lower(), f"Unexpected error: {e}")
+        # Test 6DOF without covariance - should use defaults
+        result_6dof = estimate_pose_6dof(
+            runway_corners=self.runway_corners,
+            projections=self.projections,
+            camera_config=CameraConfig.OFFSET
+        )
+        
+        # Check that 6DOF result is close to true pose
+        pos_error = ((result_6dof.position.x - self.true_position.x)**2 + 
+                     (result_6dof.position.y - self.true_position.y)**2 + 
+                     (result_6dof.position.z - self.true_position.z)**2)**0.5
+        self.assertLess(pos_error, 1.0, "6DOF position error should be less than 1 meter")
+        
+        # Test 3DOF without covariance - should use defaults
+        result_3dof = estimate_pose_3dof(
+            runway_corners=self.runway_corners,
+            projections=self.projections,
+            known_rotation=self.known_rotation,
+            camera_config=CameraConfig.OFFSET
+        )
+        
+        # Check that 3DOF position is close to true position
+        pos_error_3dof = ((result_3dof.position.x - self.true_position.x)**2 + 
+                          (result_3dof.position.y - self.true_position.y)**2 + 
+                          (result_3dof.position.z - self.true_position.z)**2)**0.5
+        self.assertLess(pos_error_3dof, 1.0, "3DOF position error should be less than 1 meter")
     
     def test_covariance_validation_integration(self):
         """Test that covariance validation is enforced during estimation."""
