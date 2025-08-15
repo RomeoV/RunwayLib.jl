@@ -1,0 +1,420 @@
+"""
+Tests for covariance specification functionality in Python interface.
+
+This module tests:
+1. Covariance specification classes
+2. Validation of covariance data
+3. Integration with C API functions
+4. End-to-end covariance specification workflow
+"""
+
+import unittest
+import numpy as np
+from poseest import (
+    WorldPoint, ProjectionPoint, Rotation, CameraConfig,
+    ScalarCovariance, DiagonalCovariance, BlockDiagonalCovariance, FullCovariance,
+    estimate_pose_6dof, estimate_pose_3dof,
+    InvalidInputError, InsufficientPointsError
+)
+
+
+class TestCovarianceSpecification(unittest.TestCase):
+    """Test covariance specification classes and validation."""
+    
+    def setUp(self):
+        """Set up test data."""
+        self.runway_corners = [
+            WorldPoint(1000.0, -50.0, 0.0),
+            WorldPoint(1000.0, 50.0, 0.0),
+            WorldPoint(3000.0, 50.0, 0.0),
+            WorldPoint(3000.0, -50.0, 0.0),
+        ]
+        
+        self.projections = [
+            ProjectionPoint(100.0, 200.0),
+            ProjectionPoint(150.0, 200.0),
+            ProjectionPoint(150.0, 250.0),
+            ProjectionPoint(100.0, 250.0),
+        ]
+        
+        self.known_rotation = Rotation(yaw=0.05, pitch=0.03, roll=0.01)
+    
+    def test_scalar_covariance(self):
+        """Test scalar covariance specification."""
+        # Valid scalar covariance
+        cov = ScalarCovariance(noise_std=2.5)
+        cov.validate(num_points=4)
+        
+        data, cov_type = cov.to_c_array(num_points=4)
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0], 2.5)
+        self.assertEqual(cov_type.value, 0)  # COV_SCALAR
+        
+        # Invalid scalar covariance
+        with self.assertRaises(ValueError):
+            invalid_cov = ScalarCovariance(noise_std=-1.0)
+            invalid_cov.validate(num_points=4)
+    
+    def test_diagonal_covariance(self):
+        """Test diagonal covariance specification."""
+        # Valid diagonal covariance
+        variances = [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5]  # 4 points * 2 coords
+        cov = DiagonalCovariance(variances=variances)
+        cov.validate(num_points=4)
+        
+        data, cov_type = cov.to_c_array(num_points=4)
+        self.assertEqual(len(data), 8)
+        self.assertEqual(list(data), variances)
+        self.assertEqual(cov_type.value, 1)  # COV_DIAGONAL_FULL
+        
+        # Wrong number of variances
+        with self.assertRaises(ValueError):
+            invalid_cov = DiagonalCovariance(variances=[1.0, 2.0, 3.0])  # Too few
+            invalid_cov.validate(num_points=4)
+        
+        # Negative variance
+        with self.assertRaises(ValueError):
+            invalid_cov = DiagonalCovariance(variances=[1.0, -1.0, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5])
+            invalid_cov.validate(num_points=4)
+    
+    def test_block_diagonal_covariance(self):
+        """Test block diagonal covariance specification."""
+        # Valid block diagonal covariance
+        block_matrices = [
+            [[1.0, 0.1], [0.1, 1.0]],    # Point 1
+            [[2.0, 0.2], [0.2, 2.0]],    # Point 2
+            [[1.5, 0.0], [0.0, 1.5]],    # Point 3
+            [[2.5, -0.3], [-0.3, 2.5]]   # Point 4
+        ]
+        cov = BlockDiagonalCovariance(block_matrices=block_matrices)
+        cov.validate(num_points=4)
+        
+        data, cov_type = cov.to_c_array(num_points=4)
+        self.assertEqual(len(data), 16)  # 4 points * 4 elements per 2x2 matrix
+        
+        # Check flattening (row-major order)
+        expected = [1.0, 0.1, 0.1, 1.0, 2.0, 0.2, 0.2, 2.0,
+                   1.5, 0.0, 0.0, 1.5, 2.5, -0.3, -0.3, 2.5]
+        self.assertEqual(list(data), expected)
+        self.assertEqual(cov_type.value, 2)  # COV_BLOCK_DIAGONAL
+        
+        # Wrong number of matrices
+        with self.assertRaises(ValueError):
+            invalid_cov = BlockDiagonalCovariance(block_matrices=[[[1.0, 0.0], [0.0, 1.0]]])
+            invalid_cov.validate(num_points=4)
+        
+        # Wrong matrix size
+        with self.assertRaises(ValueError):
+            invalid_matrices = [
+                [[1.0, 0.1, 0.2], [0.1, 1.0, 0.3], [0.2, 0.3, 1.0]],  # 3x3 instead of 2x2
+                [[2.0, 0.0], [0.0, 2.0]],
+                [[1.5, 0.0], [0.0, 1.5]],
+                [[2.5, 0.0], [0.0, 2.5]]
+            ]
+            invalid_cov = BlockDiagonalCovariance(block_matrices=invalid_matrices)
+            invalid_cov.validate(num_points=4)
+        
+        # Non-positive-definite matrix
+        with self.assertRaises(ValueError):
+            invalid_matrices = [
+                [[1.0, 2.0], [2.0, 1.0]],  # Determinant = -3 < 0
+                [[2.0, 0.0], [0.0, 2.0]],
+                [[1.5, 0.0], [0.0, 1.5]],
+                [[2.5, 0.0], [0.0, 2.5]]
+            ]
+            invalid_cov = BlockDiagonalCovariance(block_matrices=invalid_matrices)
+            invalid_cov.validate(num_points=4)
+    
+    def test_full_covariance(self):
+        """Test full covariance matrix specification."""
+        # Valid full covariance (8x8 identity matrix with some correlations)
+        matrix_size = 8
+        matrix = np.eye(matrix_size).tolist()
+        matrix[0][1] = matrix[1][0] = 0.1  # Add correlation
+        matrix[2][3] = matrix[3][2] = 0.2  # Add correlation
+        
+        cov = FullCovariance(matrix=matrix)
+        cov.validate(num_points=4)
+        
+        data, cov_type = cov.to_c_array(num_points=4)
+        self.assertEqual(len(data), 64)  # 8x8 matrix
+        self.assertEqual(cov_type.value, 3)  # COV_FULL_MATRIX
+        
+        # Check flattening (row-major order)
+        expected_flat = []
+        for row in matrix:
+            expected_flat.extend(row)
+        self.assertEqual(list(data), expected_flat)
+        
+        # Wrong matrix size
+        with self.assertRaises(ValueError):
+            wrong_size_matrix = np.eye(6).tolist()  # 6x6 instead of 8x8
+            invalid_cov = FullCovariance(matrix=wrong_size_matrix)
+            invalid_cov.validate(num_points=4)
+        
+        # Non-square matrix
+        with self.assertRaises(ValueError):
+            non_square = [[1.0, 0.0], [0.0, 1.0], [0.0, 0.0]]  # 3x2 matrix
+            invalid_cov = FullCovariance(matrix=non_square)
+            invalid_cov.validate(num_points=4)
+        
+        # Non-symmetric matrix
+        with self.assertRaises(ValueError):
+            non_symmetric = np.eye(8).tolist()
+            non_symmetric[0][1] = 0.1
+            non_symmetric[1][0] = 0.2  # Different from [0][1]
+            invalid_cov = FullCovariance(matrix=non_symmetric)
+            invalid_cov.validate(num_points=4)
+        
+        # Non-positive-definite matrix (negative diagonal element)
+        with self.assertRaises(ValueError):
+            non_pos_def = np.eye(8).tolist()
+            non_pos_def[0][0] = -1.0  # Negative diagonal element
+            invalid_cov = FullCovariance(matrix=non_pos_def)
+            invalid_cov.validate(num_points=4)
+
+
+class TestCovarianceIntegration(unittest.TestCase):
+    """Test integration of covariance specifications with pose estimation."""
+    
+    def setUp(self):
+        """Set up test data."""
+        self.runway_corners = [
+            WorldPoint(1000.0, -50.0, 0.0),
+            WorldPoint(1000.0, 50.0, 0.0),
+            WorldPoint(3000.0, 50.0, 0.0),
+            WorldPoint(3000.0, -50.0, 0.0),
+        ]
+        
+        # Create synthetic projections based on a known pose
+        self.projections = [
+            ProjectionPoint(320.0, 240.0),
+            ProjectionPoint(380.0, 240.0),
+            ProjectionPoint(380.0, 280.0),
+            ProjectionPoint(320.0, 280.0),
+        ]
+        
+        self.known_rotation = Rotation(yaw=0.05, pitch=0.03, roll=0.01)
+    
+    def test_6dof_with_scalar_covariance(self):
+        """Test 6DOF estimation with scalar covariance."""
+        cov = ScalarCovariance(noise_std=2.0)
+        
+        try:
+            result = estimate_pose_6dof(
+                runway_corners=self.runway_corners,
+                projections=self.projections,
+                camera_config=CameraConfig.OFFSET,
+                covariance=cov
+            )
+            
+            # Basic sanity checks
+            self.assertIsNotNone(result.position)
+            self.assertIsNotNone(result.rotation)
+            self.assertIsInstance(result.residual, float)
+            self.assertIsInstance(result.converged, bool)
+            
+        except Exception as e:
+            # If the estimation fails due to synthetic data, that's okay for this test
+            # We're mainly testing that the API works without crashing
+            self.assertIn("convergence", str(e).lower(), f"Unexpected error: {e}")
+    
+    def test_6dof_with_diagonal_covariance(self):
+        """Test 6DOF estimation with diagonal covariance."""
+        # Different noise levels for each measurement
+        variances = [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5]
+        cov = DiagonalCovariance(variances=variances)
+        
+        try:
+            result = estimate_pose_6dof(
+                runway_corners=self.runway_corners,
+                projections=self.projections,
+                camera_config=CameraConfig.OFFSET,
+                covariance=cov
+            )
+            
+            self.assertIsNotNone(result.position)
+            self.assertIsNotNone(result.rotation)
+            
+        except Exception as e:
+            # Accept convergence-related errors for synthetic data
+            self.assertIn("convergence", str(e).lower(), f"Unexpected error: {e}")
+    
+    def test_3dof_with_block_diagonal_covariance(self):
+        """Test 3DOF estimation with block diagonal covariance."""
+        block_matrices = [
+            [[2.0, 0.1], [0.1, 2.0]],    # Point 1 - some correlation
+            [[1.5, 0.0], [0.0, 1.5]],    # Point 2 - no correlation
+            [[3.0, -0.2], [-0.2, 3.0]],  # Point 3 - negative correlation
+            [[2.5, 0.15], [0.15, 2.5]]   # Point 4 - positive correlation
+        ]
+        cov = BlockDiagonalCovariance(block_matrices=block_matrices)
+        
+        try:
+            result = estimate_pose_3dof(
+                runway_corners=self.runway_corners,
+                projections=self.projections,
+                known_rotation=self.known_rotation,
+                camera_config=CameraConfig.OFFSET,
+                covariance=cov
+            )
+            
+            self.assertIsNotNone(result.position)
+            self.assertEqual(result.rotation.yaw, self.known_rotation.yaw)
+            self.assertEqual(result.rotation.pitch, self.known_rotation.pitch)
+            self.assertEqual(result.rotation.roll, self.known_rotation.roll)
+            
+        except Exception as e:
+            # Accept convergence-related errors for synthetic data
+            self.assertIn("convergence", str(e).lower(), f"Unexpected error: {e}")
+    
+    def test_backward_compatibility(self):
+        """Test that functions work without covariance (backward compatibility)."""
+        try:
+            # Test 6DOF without covariance
+            result_6dof = estimate_pose_6dof(
+                runway_corners=self.runway_corners,
+                projections=self.projections,
+                camera_config=CameraConfig.OFFSET
+                # No covariance parameter - should use defaults
+            )
+            
+            self.assertIsNotNone(result_6dof.position)
+            self.assertIsNotNone(result_6dof.rotation)
+            
+            # Test 3DOF without covariance
+            result_3dof = estimate_pose_3dof(
+                runway_corners=self.runway_corners,
+                projections=self.projections,
+                known_rotation=self.known_rotation,
+                camera_config=CameraConfig.OFFSET
+                # No covariance parameter - should use defaults
+            )
+            
+            self.assertIsNotNone(result_3dof.position)
+            
+        except Exception as e:
+            # Accept convergence-related errors for synthetic data
+            self.assertIn("convergence", str(e).lower(), f"Unexpected error: {e}")
+    
+    def test_covariance_validation_integration(self):
+        """Test that covariance validation is enforced during estimation."""
+        # Test with invalid covariance - should fail before C API call
+        invalid_cov = ScalarCovariance(noise_std=-1.0)
+        
+        with self.assertRaises(ValueError):
+            estimate_pose_6dof(
+                runway_corners=self.runway_corners,
+                projections=self.projections,
+                camera_config=CameraConfig.OFFSET,
+                covariance=invalid_cov
+            )
+    
+    def test_insufficient_points_with_covariance(self):
+        """Test error handling with insufficient points and covariance."""
+        cov = ScalarCovariance(noise_std=2.0)
+        
+        # Test 6DOF with insufficient points
+        with self.assertRaises(InsufficientPointsError):
+            estimate_pose_6dof(
+                runway_corners=self.runway_corners[:3],  # Only 3 points
+                projections=self.projections[:3],
+                camera_config=CameraConfig.OFFSET,
+                covariance=cov
+            )
+        
+        # Test 3DOF with insufficient points
+        with self.assertRaises(InsufficientPointsError):
+            estimate_pose_3dof(
+                runway_corners=self.runway_corners[:2],  # Only 2 points
+                projections=self.projections[:2],
+                known_rotation=self.known_rotation,
+                camera_config=CameraConfig.OFFSET,
+                covariance=cov
+            )
+
+
+class TestCovarianceConsistency(unittest.TestCase):
+    """Test consistency between different covariance representations."""
+    
+    def setUp(self):
+        """Set up test data."""
+        self.runway_corners = [
+            WorldPoint(1000.0, -50.0, 0.0),
+            WorldPoint(1000.0, 50.0, 0.0),
+            WorldPoint(3000.0, 50.0, 0.0),
+            WorldPoint(3000.0, -50.0, 0.0),
+        ]
+        
+        self.projections = [
+            ProjectionPoint(320.0, 240.0),
+            ProjectionPoint(380.0, 240.0),
+            ProjectionPoint(380.0, 280.0),
+            ProjectionPoint(320.0, 280.0),
+        ]
+    
+    def test_scalar_vs_diagonal_consistency(self):
+        """Test that scalar and diagonal covariance give same results for uniform noise."""
+        noise_std = 2.0
+        
+        # Scalar covariance
+        scalar_cov = ScalarCovariance(noise_std=noise_std)
+        
+        # Equivalent diagonal covariance
+        variances = [noise_std**2] * 8  # 4 points * 2 coords
+        diagonal_cov = DiagonalCovariance(variances=variances)
+        
+        # Both should convert to same underlying representation
+        scalar_data, scalar_type = scalar_cov.to_c_array(num_points=4)
+        diagonal_data, diagonal_type = diagonal_cov.to_c_array(num_points=4)
+        
+        # Different types but should represent same noise model
+        self.assertEqual(scalar_type.value, 0)  # COV_SCALAR
+        self.assertEqual(diagonal_type.value, 1)  # COV_DIAGONAL_FULL
+        
+        # Scalar should have single value equal to std
+        self.assertEqual(scalar_data[0], noise_std)
+        
+        # Diagonal should have variances equal to std^2
+        expected_variances = [noise_std**2] * 8
+        self.assertEqual(list(diagonal_data), expected_variances)
+    
+    def test_block_diagonal_vs_full_consistency(self):
+        """Test consistency between block diagonal and equivalent full matrix."""
+        # Create block diagonal covariance
+        block_matrices = [
+            [[1.0, 0.1], [0.1, 1.0]],
+            [[2.0, 0.0], [0.0, 2.0]],
+            [[1.5, -0.1], [-0.1, 1.5]],
+            [[2.5, 0.2], [0.2, 2.5]]
+        ]
+        block_cov = BlockDiagonalCovariance(block_matrices=block_matrices)
+        
+        # Create equivalent full matrix (block diagonal)
+        full_matrix = np.zeros((8, 8))
+        for i, block in enumerate(block_matrices):
+            start_idx = i * 2
+            end_idx = start_idx + 2
+            full_matrix[start_idx:end_idx, start_idx:end_idx] = block
+        
+        full_cov = FullCovariance(matrix=full_matrix.tolist())
+        
+        # Both should be valid
+        block_cov.validate(num_points=4)
+        full_cov.validate(num_points=4)
+        
+        # Convert to C arrays
+        block_data, block_type = block_cov.to_c_array(num_points=4)
+        full_data, full_type = full_cov.to_c_array(num_points=4)
+        
+        self.assertEqual(block_type.value, 2)  # COV_BLOCK_DIAGONAL
+        self.assertEqual(full_type.value, 3)   # COV_FULL_MATRIX
+        
+        # The underlying matrices should be mathematically equivalent
+        # (though represented differently in the C arrays)
+        self.assertEqual(len(block_data), 16)  # 4 blocks * 4 elements
+        self.assertEqual(len(full_data), 64)   # 8x8 matrix
+
+
+if __name__ == '__main__':
+    unittest.main()

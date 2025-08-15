@@ -28,7 +28,7 @@ end
 function PoseOptimizationParams6DOF(runway_corners, observed_corners, camconfig, noisemodel::NoiseModel)
     cov = covmatrix(noisemodel)
     U = cholesky(cov).U
-    Linv = inv(U')
+    Linv = Matrix(inv(U'))  # Ensure dense matrix for consistent performance
     return PoseOptimizationParams6DOF(runway_corners, observed_corners, camconfig, Linv)
 end
 
@@ -51,7 +51,7 @@ struct PoseOptimizationParams3DOF{
     known_attitude::A
 end
 function PoseOptimizationParams3DOF(runway_corners, observed_corners, camconfig, noisemodel::NoiseModel, known_attitude)
-    Linv = inv(cholesky(covmatrix(noisemodel)).U')
+    Linv = Matrix(inv(cholesky(covmatrix(noisemodel)).U'))  # Ensure dense matrix for consistent performance
     return PoseOptimizationParams3DOF(runway_corners, observed_corners, camconfig, Linv, known_attitude)
 end
 
