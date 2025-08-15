@@ -375,22 +375,26 @@ def _setup_function_signatures(lib):
     lib.initialize_poseest_library.argtypes = [ctypes.c_char_p]
     lib.initialize_poseest_library.restype = ctypes.c_int
     
-    # estimate_pose_6dof
+    # estimate_pose_6dof (unified function with covariance support)
     lib.estimate_pose_6dof.argtypes = [
         ctypes.POINTER(WorldPointF64),      # runway_corners
         ctypes.POINTER(ProjectionPointF64), # projections  
         ctypes.c_int,                      # num_points
+        ctypes.POINTER(ctypes.c_double),   # covariance_data
+        ctypes.c_int,                      # covariance_type
         ctypes.c_int,                      # camera_config
         ctypes.POINTER(PoseEstimate_C)     # result
     ]
     lib.estimate_pose_6dof.restype = ctypes.c_int
     
-    # estimate_pose_3dof  
+    # estimate_pose_3dof (unified function with covariance support)
     lib.estimate_pose_3dof.argtypes = [
         ctypes.POINTER(WorldPointF64),      # runway_corners
         ctypes.POINTER(ProjectionPointF64), # projections
         ctypes.c_int,                      # num_points  
         ctypes.POINTER(RotYPRF64),        # known_rotation
+        ctypes.POINTER(ctypes.c_double),   # covariance_data
+        ctypes.c_int,                      # covariance_type
         ctypes.c_int,                      # camera_config
         ctypes.POINTER(PoseEstimate_C)     # result
     ]
@@ -406,30 +410,6 @@ def _setup_function_signatures(lib):
     ]
     lib.project_point.restype = ctypes.c_int
     
-    # estimate_pose_6dof_with_covariance
-    lib.estimate_pose_6dof_with_covariance.argtypes = [
-        ctypes.POINTER(WorldPointF64),      # runway_corners
-        ctypes.POINTER(ProjectionPointF64), # projections  
-        ctypes.c_int,                      # num_points
-        ctypes.POINTER(ctypes.c_double),   # covariance_data
-        ctypes.c_int,                      # covariance_type
-        ctypes.c_int,                      # camera_config
-        ctypes.POINTER(PoseEstimate_C)     # result
-    ]
-    lib.estimate_pose_6dof_with_covariance.restype = ctypes.c_int
-    
-    # estimate_pose_3dof_with_covariance  
-    lib.estimate_pose_3dof_with_covariance.argtypes = [
-        ctypes.POINTER(WorldPointF64),      # runway_corners
-        ctypes.POINTER(ProjectionPointF64), # projections
-        ctypes.c_int,                      # num_points  
-        ctypes.POINTER(RotYPRF64),        # known_rotation
-        ctypes.POINTER(ctypes.c_double),   # covariance_data
-        ctypes.c_int,                      # covariance_type
-        ctypes.c_int,                      # camera_config
-        ctypes.POINTER(PoseEstimate_C)     # result
-    ]
-    lib.estimate_pose_3dof_with_covariance.restype = ctypes.c_int
 
 
 def _handle_error_code(error_code: int) -> None:
@@ -508,26 +488,22 @@ def estimate_pose_6dof(
     
     # Handle covariance specification
     if covariance is not None:
-        # Use enhanced function with covariance
         cov_data, cov_type = covariance.to_c_array(num_points)
-        error_code = lib.estimate_pose_6dof_with_covariance(
-            corners_array,
-            projs_array, 
-            num_points,
-            cov_data,
-            int(cov_type),
-            int(camera_config),
-            ctypes.byref(result)
-        )
     else:
-        # Use original function with default noise model
-        error_code = lib.estimate_pose_6dof(
-            corners_array,
-            projs_array, 
-            num_points,
-            int(camera_config),
-            ctypes.byref(result)
-        )
+        # Use default covariance
+        default_cov = DefaultCovariance()
+        cov_data, cov_type = default_cov.to_c_array(num_points)
+    
+    # Call unified function (always with covariance parameters)
+    error_code = lib.estimate_pose_6dof(
+        corners_array,
+        projs_array, 
+        num_points,
+        cov_data,
+        int(cov_type),
+        int(camera_config),
+        ctypes.byref(result)
+    )
     
     # Handle errors
     _handle_error_code(error_code)
@@ -582,28 +558,23 @@ def estimate_pose_3dof(
     
     # Handle covariance specification
     if covariance is not None:
-        # Use enhanced function with covariance
         cov_data, cov_type = covariance.to_c_array(num_points)
-        error_code = lib.estimate_pose_3dof_with_covariance(
-            corners_array,
-            projs_array,
-            num_points,
-            ctypes.byref(rotation_c),
-            cov_data,
-            int(cov_type),
-            int(camera_config), 
-            ctypes.byref(result)
-        )
     else:
-        # Use original function with default noise model
-        error_code = lib.estimate_pose_3dof(
-            corners_array,
-            projs_array,
-            num_points,
-            ctypes.byref(rotation_c),
-            int(camera_config), 
-            ctypes.byref(result)
-        )
+        # Use default covariance
+        default_cov = DefaultCovariance()
+        cov_data, cov_type = default_cov.to_c_array(num_points)
+    
+    # Call unified function (always with covariance parameters)
+    error_code = lib.estimate_pose_3dof(
+        corners_array,
+        projs_array,
+        num_points,
+        ctypes.byref(rotation_c),
+        cov_data,
+        int(cov_type),
+        int(camera_config), 
+        ctypes.byref(result)
+    )
     
     # Handle errors
     _handle_error_code(error_code)
