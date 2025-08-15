@@ -41,6 +41,8 @@ export RunwaySpec, PoseEstimate
 # Re-export noise models from ProbabilisticParameterEstimators
 export UncorrGaussianNoiseModel, CorrGaussianNoiseModel, NoiseModel, covmatrix
 
+export parse_covariance_data
+
 # Export camera model functions
 export get_focal_length_pixels, get_field_of_view, pixel_to_ray_direction
 
