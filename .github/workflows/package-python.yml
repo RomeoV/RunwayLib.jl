@@ -20,9 +20,6 @@ jobs:
           version: '~1.12.0-rc1'
           arch: x64
 
-      - name: Cache Julia artifacts
-        uses: julia-actions/cache@v2
-
       - name: Build executable and library
         working-directory: juliac
         run: |
