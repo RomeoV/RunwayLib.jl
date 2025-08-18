@@ -5,7 +5,14 @@ Rotations = "6038ab10-8711-5258-84ad-4b1120ba62dc"
 RunwayLib = "c31d23ff-e9b5-4186-8ef8-ce4d62614c67"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
+NonlinearSolveFirstOrder = "5959db7a-ea39-4486-b5fe-2dd0bf03d60d"
+SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
 
 [sources]
-LinearSolve = {rev = "no-mkl_jll", url = "https://github.com/RomeoV/LinearSolve.jl"}
 RunwayLib = {path = ".."}
+ForwardDiff = {rev = "rv/remove-quote-assert-string-interpolation", url = "https://github.com/RomeoV/ForwardDiff.jl.git"}
+NonlinearSolveFirstOrder = {rev = "rv/fix-extra-kwargs", url = "https://github.com/RomeoV/NonlinearSolve.jl", subdir="lib/NonlinearSolveFirstOrder"}
+SciMLBase = {rev = "as/fix-jet-opt", url = "https://github.com/AayushSabharwal/SciMLBase.jl"}
+
+
