@@ -37,7 +37,7 @@ $(INCLUDE_DIR)/libposeest.h: libposeest.h
 # Create share directory
 $(SHARE_DIR): share
 	@mkdir -p $(COMPILED_DIR)
-	cp -r share $(SHARE_DIR)
+	cp -r share_musl $(SHARE_DIR)
 
 $(LIB_DIR): $(LIB_DIR)/.cleaned $(LIB_DIR)/libposeest.so
 
