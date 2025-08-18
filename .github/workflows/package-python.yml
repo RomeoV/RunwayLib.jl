@@ -10,24 +10,27 @@ concurrency:
 jobs:
   package-python:
     runs-on: ubuntu-latest
-    container: ubuntu:20.04
+    container: alpine:latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Install build tools
         run: |
-          apt-get update
-          apt-get install -y build-essential
+          apk add musl-dev gcc curl make
+          apk add nodejs
+          apk add python3 uv
 
-      - name: Setup Julia
-        uses: julia-actions/setup-julia@v2
-        with:
-          version: '~1.12.0-rc1'
-          arch: x64
+      - name: Install julia (custom)
+        working-directory: /root
+        run: |
+          curl https://julialang-s3.julialang.org/bin/musl/x64/1.12/julia-1.12.0-rc1-musl-x86_64.tar.gz --output julia-1.12.tar.gz
+          tar -xvzf julia-1.12.tar.gz
+
 
       - name: Build executable and library
         working-directory: juliac
         run: |
+          export PATH=/root/julia-1.12.0-rc1/bin/:$PATH
           JULIA_CPU_TARGET="generic" make
 
       - name: Prepare Python package
@@ -38,6 +41,13 @@ jobs:
           rm -rf poseest/poseest/native/RunwayLibCompiled
           # Copy the built library
           cp -r juliac/RunwayLibCompiled poseest/poseest/native/
+
+      - name: Test package
+        working-directory: poseest_py
+        run: |
+          uv venv
+          uv pip install -e .
+          uv run python example.py
 
       - name: Upload Python package artifact
         uses: actions/upload-artifact@v4
