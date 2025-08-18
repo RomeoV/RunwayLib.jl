@@ -23,7 +23,7 @@ jobs:
       - name: Install julia (custom)
         working-directory: /root
         run: |
-          curl https://julialang-s3.julialang.org/bin/musl/x64/1.12/julia-1.12.0-rc1-musl-x86_64.tar.gz --output julia-1.12.tar.gz
+          curl --fail --location --retry 3 --retry-delay 5 https://julialang-s3.julialang.org/bin/musl/x64/1.12/julia-1.12.0-rc1-musl-x86_64.tar.gz --output julia-1.12.tar.gz
           tar -xvzf julia-1.12.tar.gz
 
 
