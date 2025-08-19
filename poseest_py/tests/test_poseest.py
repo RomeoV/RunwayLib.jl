@@ -144,10 +144,16 @@ class TestLibraryIntegration:
         num_keypoints = len(test_data['runway_corners'])
         print(f"Testing 6DOF pose estimation with {num_keypoints} keypoints")
         
+        # Test with custom initial guess to ensure the parameter works
+        initial_pos = poseest.WorldPoint(-2000.0, 10.0, 150.0)
+        initial_rot = poseest.Rotation(0.1, 0.08, 0.02)
+        
         pose = poseest.estimate_pose_6dof(
             test_data['runway_corners'],
             test_data['projections'],
-            test_data['camera_config']
+            test_data['camera_config'],
+            initial_guess_pos=initial_pos,
+            initial_guess_rot=initial_rot
         )
         
         # Basic type checks
@@ -181,11 +187,15 @@ class TestLibraryIntegration:
         num_keypoints = len(test_data['runway_corners'])
         print(f"Testing 3DOF pose estimation with {num_keypoints} keypoints")
         
+        # Test with custom initial guess to ensure the parameter works
+        initial_pos = poseest.WorldPoint(-2000.0, 10.0, 150.0)
+        
         pose = poseest.estimate_pose_3dof(
             test_data['runway_corners'],
             test_data['projections'],
             test_data['true_rotation'],  # Known rotation
-            test_data['camera_config']
+            test_data['camera_config'],
+            initial_guess_pos=initial_pos
         )
         
         # Basic type checks
