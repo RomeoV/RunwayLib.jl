@@ -375,7 +375,7 @@ def _setup_function_signatures(lib):
     lib.initialize_poseest_library.argtypes = [ctypes.c_char_p]
     lib.initialize_poseest_library.restype = ctypes.c_int
     
-    # estimate_pose_6dof (unified function with covariance support)
+    # estimate_pose_6dof (unified function with covariance support and initial guess)
     lib.estimate_pose_6dof.argtypes = [
         ctypes.POINTER(WorldPointF64),      # runway_corners
         ctypes.POINTER(ProjectionPointF64), # projections  
@@ -383,11 +383,13 @@ def _setup_function_signatures(lib):
         ctypes.POINTER(ctypes.c_double),   # covariance_data
         ctypes.c_int,                      # covariance_type
         ctypes.c_int,                      # camera_config
+        ctypes.POINTER(WorldPointF64),     # initial_guess_pos
+        ctypes.POINTER(RotYPRF64),        # initial_guess_rot
         ctypes.POINTER(PoseEstimate_C)     # result
     ]
     lib.estimate_pose_6dof.restype = ctypes.c_int
     
-    # estimate_pose_3dof (unified function with covariance support)
+    # estimate_pose_3dof (unified function with covariance support and initial guess)
     lib.estimate_pose_3dof.argtypes = [
         ctypes.POINTER(WorldPointF64),      # runway_corners
         ctypes.POINTER(ProjectionPointF64), # projections
@@ -396,6 +398,7 @@ def _setup_function_signatures(lib):
         ctypes.POINTER(ctypes.c_double),   # covariance_data
         ctypes.c_int,                      # covariance_type
         ctypes.c_int,                      # camera_config
+        ctypes.POINTER(WorldPointF64),     # initial_guess_pos
         ctypes.POINTER(PoseEstimate_C)     # result
     ]
     lib.estimate_pose_3dof.restype = ctypes.c_int
@@ -449,7 +452,9 @@ def estimate_pose_6dof(
     runway_corners: List[WorldPoint],
     projections: List[ProjectionPoint], 
     camera_config: CameraConfig = CameraConfig.OFFSET,
-    covariance: Optional[CovarianceSpec] = None
+    covariance: Optional[CovarianceSpec] = None,
+    initial_guess_pos: Optional[WorldPoint] = None,
+    initial_guess_rot: Optional[Rotation] = None
 ) -> PoseEstimate:
     """
     Estimate 6DOF pose (position + orientation) from runway corner projections.
@@ -459,6 +464,8 @@ def estimate_pose_6dof(
         projections: List of corresponding image projections  
         camera_config: Camera coordinate system configuration
         covariance: Optional covariance specification for noise modeling
+        initial_guess_pos: Optional initial guess for aircraft position (default: (-1000, 0, 100))
+        initial_guess_rot: Optional initial guess for aircraft rotation (default: (0, 0, 0))
         
     Returns:
         Estimated pose with position, rotation, and convergence info
@@ -494,7 +501,20 @@ def estimate_pose_6dof(
         default_cov = DefaultCovariance()
         cov_data, cov_type = default_cov.to_c_array(num_points)
     
-    # Call unified function (always with covariance parameters)
+    # Handle initial guess parameters
+    if initial_guess_pos is not None:
+        initial_pos_c = initial_guess_pos.to_c_struct()
+        initial_pos_ptr = ctypes.byref(initial_pos_c)
+    else:
+        initial_pos_ptr = None
+    
+    if initial_guess_rot is not None:
+        initial_rot_c = initial_guess_rot.to_c_struct()
+        initial_rot_ptr = ctypes.byref(initial_rot_c)
+    else:
+        initial_rot_ptr = None
+    
+    # Call unified function (always with covariance parameters and initial guesses)
     error_code = lib.estimate_pose_6dof(
         corners_array,
         projs_array, 
@@ -502,6 +522,8 @@ def estimate_pose_6dof(
         cov_data,
         int(cov_type),
         int(camera_config),
+        initial_pos_ptr,
+        initial_rot_ptr,
         ctypes.byref(result)
     )
     
@@ -517,7 +539,8 @@ def estimate_pose_3dof(
     projections: List[ProjectionPoint],
     known_rotation: Rotation,
     camera_config: CameraConfig = CameraConfig.OFFSET,
-    covariance: Optional[CovarianceSpec] = None
+    covariance: Optional[CovarianceSpec] = None,
+    initial_guess_pos: Optional[WorldPoint] = None
 ) -> PoseEstimate:
     """
     Estimate 3DOF pose (position only) when orientation is known.
@@ -528,6 +551,7 @@ def estimate_pose_3dof(
         known_rotation: Known aircraft attitude
         camera_config: Camera coordinate system configuration
         covariance: Optional covariance specification for noise modeling
+        initial_guess_pos: Optional initial guess for aircraft position (default: (-1000, 0, 100))
         
     Returns:
         Estimated pose with position and known rotation
@@ -564,7 +588,14 @@ def estimate_pose_3dof(
         default_cov = DefaultCovariance()
         cov_data, cov_type = default_cov.to_c_array(num_points)
     
-    # Call unified function (always with covariance parameters)
+    # Handle initial guess for position
+    if initial_guess_pos is not None:
+        initial_pos_c = initial_guess_pos.to_c_struct()
+        initial_pos_ptr = ctypes.byref(initial_pos_c)
+    else:
+        initial_pos_ptr = None
+    
+    # Call unified function (always with covariance parameters and initial guess)
     error_code = lib.estimate_pose_3dof(
         corners_array,
         projs_array,
@@ -572,7 +603,8 @@ def estimate_pose_3dof(
         ctypes.byref(rotation_c),
         cov_data,
         int(cov_type),
-        int(camera_config), 
+        int(camera_config),
+        initial_pos_ptr,
         ctypes.byref(result)
     )
     

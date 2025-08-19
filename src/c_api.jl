@@ -181,7 +181,7 @@ Base.@ccallable function initialize_poseest_library(depot_path::Ptr{UInt8})::Cin
     end
 end
 
-# 6DOF pose estimation with covariance specification
+# 6DOF pose estimation with covariance specification and initial guess
 Base.@ccallable function estimate_pose_6dof(
     runway_corners_::Ptr{WorldPointF64},
     projections_::Ptr{ProjectionPointF64},
@@ -189,6 +189,8 @@ Base.@ccallable function estimate_pose_6dof(
     covariance_data::Ptr{Cdouble},
     covariance_type::COVARIANCE_TYPE_C,
     camera_config::CAMERA_CONFIG_C,
+    initial_guess_pos::Ptr{WorldPointF64},
+    initial_guess_rot::Ptr{RotYPRF64},
     result::Ptr{PoseEstimate_C}
 )::Cint
     try
@@ -211,8 +213,24 @@ Base.@ccallable function estimate_pose_6dof(
         # Get camera configuration
         camconfig = get_camera_config(camera_config)
 
-        # Perform pose estimation with custom noise model
-        sol = estimatepose6dof(runway_corners, projections, camconfig, noise_model)
+        # Handle initial guess parameters
+        if initial_guess_pos != C_NULL
+            initial_pos_c = unsafe_load(initial_guess_pos)
+            initial_pos = SA[initial_pos_c.x, initial_pos_c.y, initial_pos_c.z] * 1m
+        else
+            initial_pos = SA[-1000.0, 0.0, 100.0]m  # Default value
+        end
+
+        if initial_guess_rot != C_NULL
+            initial_rot_c = unsafe_load(initial_guess_rot)
+            initial_rot = SA[initial_rot_c.data[1], initial_rot_c.data[2], initial_rot_c.data[3]] * 1rad
+        else
+            initial_rot = SA[0.0, 0.0, 0.0]rad  # Default value
+        end
+
+        # Perform pose estimation with custom noise model and initial guesses
+        sol = estimatepose6dof(runway_corners, projections, camconfig, noise_model; 
+                              initial_guess_pos=initial_pos, initial_guess_rot=initial_rot)
 
         # Convert result back to C struct
         result_c = PoseEstimate_C(
@@ -236,7 +254,7 @@ Base.@ccallable function estimate_pose_6dof(
     end
 end
 
-# 3DOF pose estimation with covariance specification
+# 3DOF pose estimation with covariance specification and initial guess
 Base.@ccallable function estimate_pose_3dof(
     runway_corners_::Ptr{WorldPointF64},
     projections_::Ptr{ProjectionPointF64},
@@ -245,6 +263,7 @@ Base.@ccallable function estimate_pose_3dof(
     covariance_data::Ptr{Cdouble},
     covariance_type::COVARIANCE_TYPE_C,
     camera_config::CAMERA_CONFIG_C,
+    initial_guess_pos::Ptr{WorldPointF64},
     result::Ptr{PoseEstimate_C}
 )::Cint
     try
@@ -271,8 +290,17 @@ Base.@ccallable function estimate_pose_3dof(
         # Get camera configuration
         camconfig = get_camera_config(camera_config)
 
-        # Perform pose estimation with custom noise model
-        sol = estimatepose3dof(runway_corners, projections, jl_rotation, camconfig, noise_model)
+        # Handle initial guess for position
+        if initial_guess_pos != C_NULL
+            initial_pos_c = unsafe_load(initial_guess_pos)
+            initial_pos = SA[initial_pos_c.x, initial_pos_c.y, initial_pos_c.z] * 1m
+        else
+            initial_pos = SA[-1000.0, 0.0, 100.0]m  # Default value
+        end
+
+        # Perform pose estimation with custom noise model and initial guess
+        sol = estimatepose3dof(runway_corners, projections, jl_rotation, camconfig, noise_model; 
+                              initial_guess_pos=initial_pos)
 
         # Convert result back to C struct
         result_c = PoseEstimate_C(
