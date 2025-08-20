@@ -12,6 +12,9 @@ jobs:
     runs-on: ubuntu-latest
     container: almalinux:8
     steps:
+      - name: Install Build Tools
+        run: dnf groupinstall "Development Tools" -y
+
       - uses: actions/checkout@v4
 
       - name: Setup Julia
