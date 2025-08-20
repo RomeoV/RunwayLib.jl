@@ -18,12 +18,13 @@ struct PoseOptimizationParams6DOF{
         T, T′, T′′, S,
         RC <: AbstractVector{WorldPoint{T}},
         OC <: AbstractVector{ProjectionPoint{T′, S}},
+        CC <: AbstractCameraConfig{S},
         M <: AbstractMatrix{T′′},
         M′<: AbstractMatrix{T′′}
     } <: AbstractPoseOptimizationParams
     runway_corners::RC
     observed_corners::OC
-    camconfig::AbstractCameraConfig{S}
+    camconfig::CC
     cov::M
     Linv::M′
 end
@@ -47,12 +48,13 @@ struct PoseOptimizationParams3DOF{
         A <: Rotation{3},
         RC <: AbstractVector{WorldPoint{T}},
         OC <: AbstractVector{ProjectionPoint{T′, S}},
+        CC <: AbstractCameraConfig{S},
         M <: AbstractMatrix{T′′},
         M′<: AbstractMatrix{T′′}
     } <: AbstractPoseOptimizationParams
     runway_corners::RC
     observed_corners::OC
-    camconfig::AbstractCameraConfig{S}
+    camconfig::CC
     cov::M
     Linv::M′
     known_attitude::A
