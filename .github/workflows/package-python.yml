@@ -9,7 +9,8 @@ concurrency:
 
 jobs:
   package-python:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
+    container: almalinux:8
     steps:
       - uses: actions/checkout@v4
 
