@@ -1,9 +1,4 @@
-"""
-Camera projection model for runway pose estimation.
-
-This module implements the pinhole camera model for projecting 3D points
-to 2D image coordinates, with support for units and realistic camera parameters.
-"""
+"Camera projection model for runway pose estimation."
 
 using LinearAlgebra
 using Unitful
@@ -42,50 +37,7 @@ const CAMERA_CONFIG_OFFSET = CameraConfig{:offset}(
     1499.5 * 1pixel              # Principal point y-coordinate (image center)
 )
 
-"""
-    CameraMatrix{S} <: AbstractCameraConfig{S}
-
-Camera model using a 3x4 projection matrix for direct matrix-based projection.
-
-# Fields
-- `matrix::SMatrix{3,4,Float64}`: 3x4 camera projection matrix
-- `image_width::typeof(1pixel)`: Image width for coordinate system handling
-- `image_height::typeof(1pixel)`: Image height for coordinate system handling
-
-# Type Parameter
-- `S`: Coordinate system type (`:centered` or `:offset`)
-
-# Matrix Format
-The 3x4 projection matrix should be in the standard computer vision format:
-```
-[fx  s   cx  tx]
-[0   fy  cy  ty]  
-[0   0   1   tz]
-```
-where:
-- fx, fy: focal lengths in pixels
-- cx, cy: principal point coordinates
-- s: skew parameter (usually 0)
-- tx, ty, tz: translation components (usually 0 for intrinsic matrix)
-
-# Coordinate Systems
-For `:centered` coordinates, the principal point should be relative to image center.
-For `:offset` coordinates, the principal point should be relative to top-left corner.
-
-# Examples
-```julia
-# Create camera matrix for offset coordinates
-matrix = @SMatrix [
-    2000.0  0.0     2048.0  0.0;
-    0.0     2000.0  1500.0  0.0;
-    0.0     0.0     1.0     0.0
-]
-cam = CameraMatrix{:offset}(matrix, 4096px, 3000px)
-
-# Use in projection
-result = project(camera_pos, camera_rot, world_point, cam)
-```
-"""
+"Camera model using 3x3 projection matrix with uniform pixel units."
 struct CameraMatrix{S,T} <: AbstractCameraConfig{S}
     matrix::SMatrix{3,3,T}  # 3x3 matrix for normalized coordinate projection
     image_width::WithDims(px)
@@ -128,52 +80,7 @@ end
 # Convenience constructor without explicit type parameter
 CameraMatrix(S::Symbol, matrix::SMatrix{3,3,T}, width::WithDims(px), height::WithDims(px)) where {T} = CameraMatrix{S}(matrix, width, height)
 
-"""
-    project(cam_pos::WorldPoint, cam_rot::RotZYX, world_pt::WorldPoint, 
-            config::CameraConfig{S}=CAMERA_CONFIG_OFFSET) -> ProjectionPoint{T, S}
-
-Project a 3D world point to 2D image coordinates using pinhole camera model.
-
-# Arguments
-- `cam_pos::WorldPoint`: Camera position in world coordinates
-- `cam_rot::RotZYX`: Camera orientation (ZYX Euler angles)
-- `world_pt::WorldPoint`: 3D point to project in world coordinates
-- `config::CameraConfig{S}`: Camera configuration with coordinate system type
-
-# Returns
-- `ProjectionPoint{T, S}`: 2D image coordinates in pixels with matching coordinate system
-
-# Coordinate Systems
-For `:centered` coordinates:
-- Origin at image center
-- X-axis: Left (positive follows cross-track left convention)
-- Y-axis: Up (positive follows height up convention)
-
-For `:offset` coordinates:
-- Origin at top-left corner
-- X-axis: Right (positive to the right)
-- Y-axis: Down (positive downward)
-
-# Algorithm
-1. Transform world point to camera coordinates
-2. Apply pinhole projection model
-3. Convert to appropriate coordinate system
-
-# Exceptions
-- `DivideError`: If point is at or behind the camera (X ≤ 0)
-- `DomainError`: If projection results in invalid coordinates
-
-# Examples
-```julia
-# Project to centered coordinates
-cam_pos = WorldPoint(-500.0u"m", 0.0u"m", 100.0u"m")
-cam_rot = RotZYX(0.0, 0.1, 0.0)
-runway_corner = WorldPoint(0.0u"m", 25.0u"m", 0.0u"m")
-
-centered_coords = project(cam_pos, cam_rot, runway_corner, CAMERA_CONFIG_CENTERED)
-offset_coords = project(cam_pos, cam_rot, runway_corner, CAMERA_CONFIG_OFFSET)
-```
-"""
+"Project 3D world point to 2D image coordinates using pinhole camera model."
 function project(
         cam_pos::WorldPoint{T}, cam_rot::RotZYX, world_pt::WorldPoint{T′},
         camconfig::CameraConfig{S} = CAMERA_CONFIG_OFFSET
@@ -204,32 +111,6 @@ function project(
     end
 end
 
-"""
-    project(cam_pos::WorldPoint, cam_rot::RotZYX, world_pt::WorldPoint, 
-            camconfig::CameraMatrix{S}) -> ProjectionPoint{T, S}
-
-Project a 3D world point to 2D image coordinates using a camera projection matrix.
-
-# Arguments
-- `cam_pos::WorldPoint`: Camera position in world coordinates
-- `cam_rot::RotZYX`: Camera orientation (ZYX Euler angles)
-- `world_pt::WorldPoint`: 3D point to project in world coordinates
-- `camconfig::CameraMatrix{S}`: Camera matrix configuration
-
-# Returns
-- `ProjectionPoint{T, S}`: 2D image coordinates in pixels with matching coordinate system
-
-# Algorithm
-1. Transform world point to camera coordinates
-2. Convert to homogeneous coordinates
-3. Apply camera matrix multiplication
-4. Normalize by homogeneous coordinate
-5. Handle coordinate system conversion if needed
-
-# Exceptions
-- `BehindCameraException`: If point is at or behind the camera
-- `DivideError`: If homogeneous coordinate is zero
-"""
 function project(
         cam_pos::WorldPoint{T}, cam_rot::RotZYX, world_pt::WorldPoint{T′},
         camconfig::CameraMatrix{S,U}
@@ -288,31 +169,7 @@ end
 # Same coordinate system - no conversion needed
 convertcamconf(to::AbstractCameraConfig{S}, from::AbstractCameraConfig{S}, proj::ProjectionPoint{T, S}) where {T, S} = proj
 
-"""
-    camera_config_to_matrix(config::CameraConfig{S}) -> CameraMatrix{S}
-
-Convert a parametric CameraConfig to an equivalent CameraMatrix.
-
-# Arguments
-- `config::CameraConfig{S}`: Parametric camera configuration
-
-# Returns
-- `CameraMatrix{S}`: Equivalent camera matrix configuration
-
-# Algorithm
-Constructs a 3x4 camera intrinsic matrix from the focal length, pixel size, 
-and principal point parameters in the CameraConfig.
-
-# Examples
-```julia
-# Convert the default offset configuration
-matrix_config = camera_config_to_matrix(CAMERA_CONFIG_OFFSET)
-
-# Both should produce identical results
-result1 = project(cam_pos, cam_rot, world_pt, CAMERA_CONFIG_OFFSET)
-result2 = project(cam_pos, cam_rot, world_pt, matrix_config)
-```
-"""
+"Convert parametric CameraConfig to equivalent CameraMatrix."
 function camera_config_to_matrix(config::CameraConfig{S}) where S
     # Calculate focal length in pixels (for normalized coordinates)
     f_pixels_raw = config.focal_length / config.pixel_size
@@ -349,31 +206,7 @@ function camera_config_to_matrix(config::CameraConfig{S}) where S
     return CameraMatrix{S}(matrix, config.image_width, config.image_height)
 end
 
-"""
-    validate_camera_matrix(matrix::SMatrix{3,3,Float64}) -> Bool
-
-Validate that a 3x3 matrix is suitable for camera projection.
-
-# Arguments
-- `matrix::SMatrix{3,3,Float64}`: Camera projection matrix to validate
-
-# Returns
-- `Bool`: true if matrix is valid, false otherwise
-
-# Validation Checks
-- Bottom row should be [0, 0, 1] for proper homogeneous coordinates
-- Focal length components (matrix[1,1], matrix[2,2]) should be non-zero
-- Matrix should not contain NaN or Inf values
-
-# Examples
-```julia
-good_matrix = @SMatrix [2000.0 0.0 1024.0; 0.0 2000.0 512.0; 0.0 0.0 1.0]
-bad_matrix = @SMatrix [0.0 0.0 1024.0; 0.0 2000.0 512.0; 0.0 0.0 1.0]
-
-validate_camera_matrix(good_matrix)  # true
-validate_camera_matrix(bad_matrix)   # false (zero focal length)
-```
-"""
+"Validate 3x3 matrix for camera projection."
 function validate_camera_matrix(matrix::SMatrix{3,3,Float64})
     # Check for NaN or Inf values
     if any(!isfinite, matrix)
