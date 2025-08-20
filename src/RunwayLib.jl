@@ -53,7 +53,10 @@ export get_runway_corners, validate_runway_spec
 export Table
 
 # Export configuration
-export CAMERA_CONFIG, CAMERA_CONFIG_CENTERED, CAMERA_CONFIG_OFFSET, CameraConfig, DEFAULT_OPTIMIZATION_CONFIG, convertcamconf
+export CAMERA_CONFIG, CAMERA_CONFIG_CENTERED, CAMERA_CONFIG_OFFSET, CameraConfig, DEFAULT_OPTIMIZATION_CONFIG, convertcamconf, CameraMatrix
+
+# Export WithDims for flexible typing
+export WithDims, WithUnits
 
 # Export custom units
 export pixel, px
@@ -64,6 +67,7 @@ export BehindCameraException
 include("coordinate_systems/types.jl")
 include("coordinate_systems/transformations.jl")
 include("pose_estimation/types.jl")
+include("camera_model/withdims.jl")
 include("camera_model/projection.jl")
 include("camera_model/errors.jl")
 # include("data_management/runway_database.jl")

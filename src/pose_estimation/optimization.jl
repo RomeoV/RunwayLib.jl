@@ -23,7 +23,7 @@ struct PoseOptimizationParams6DOF{
     } <: AbstractPoseOptimizationParams
     runway_corners::RC
     observed_corners::OC
-    camconfig::CameraConfig{S}
+    camconfig::AbstractCameraConfig{S}
     cov::M
     Linv::M′
 end
@@ -52,7 +52,7 @@ struct PoseOptimizationParams3DOF{
     } <: AbstractPoseOptimizationParams
     runway_corners::RC
     observed_corners::OC
-    camconfig::CameraConfig{S}
+    camconfig::AbstractCameraConfig{S}
     cov::M
     Linv::M′
     known_attitude::A
@@ -182,7 +182,7 @@ end
 function estimatepose6dof(
         runway_corners::AbstractVector{<:WorldPoint},
         observed_corners::AbstractVector{<:ProjectionPoint{T, S}},
-        config::CameraConfig{S} = CAMERA_CONFIG_OFFSET,
+        config::AbstractCameraConfig{S} = CAMERA_CONFIG_OFFSET,
         noise_model::N = _defaultnoisemodel(observed_corners);
         initial_guess_pos::AbstractVector{<:Length} = SA[-1000.0, 0.0, 100.0]m,
         initial_guess_rot::AbstractVector{<:DimensionlessQuantity} = SA[0.0, 0.0, 0.0]rad,
@@ -219,7 +219,7 @@ function estimatepose3dof(
         runway_corners::AbstractVector{<:WorldPoint},
         observed_corners::AbstractVector{<:ProjectionPoint{T, S}},
         known_attitude::RotZYX,
-        config::CameraConfig{S} = CAMERA_CONFIG_OFFSET,
+        config::AbstractCameraConfig{S} = CAMERA_CONFIG_OFFSET,
         noise_model::N = _defaultnoisemodel(observed_corners);
         initial_guess_pos::AbstractVector{<:Length} = SA[-1000.0, 0.0, 100.0]m,
         optimization_config = DEFAULT_OPTIMIZATION_CONFIG
