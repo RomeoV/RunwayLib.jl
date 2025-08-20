@@ -28,6 +28,13 @@ struct PoseEstimate_C
     converged::Cint
 end
 
+struct CameraMatrix_C
+    matrix::SMatrix{3, 3, Float64}  # 3x3 camera matrix
+    image_width::Float64           # Image width in pixels
+    image_height::Float64          # Image height in pixels
+    coordinate_system::Cint        # 0 for centered, 1 for offset
+end
+
 @cenum POSEEST_ERROR::Cint begin
     POSEEST_SUCCESS = 0
     POSEEST_ERROR_INVALID_INPUT = -1
@@ -39,7 +46,7 @@ end
 # Global variable to track library initialization
 const LIBRARY_INITIALIZED = Ref(false)
 
-@cenum(CAMERA_CONFIG_C, CAMERA_CONFIG_CENTERED_C = Cint(0), CAMERA_CONFIG_OFFSET_C = Cint(1))
+@cenum(CAMERA_CONFIG_C, CAMERA_CONFIG_CENTERED_C = Cint(0), CAMERA_CONFIG_OFFSET_C = Cint(1), CAMERA_CONFIG_MATRIX_C = Cint(2))
 
 @cenum COVARIANCE_TYPE_C::Cint begin
     COV_DEFAULT = 0         # Use default noise model (pointer can be null)
@@ -49,11 +56,28 @@ const LIBRARY_INITIALIZED = Ref(false)
     COV_FULL_MATRIX = 4     # Full covariance matrix (length = 4*n_keypoints^2)
 end
 
-function get_camera_config(config_type::CAMERA_CONFIG_C)
+function get_camera_config(config_type::CAMERA_CONFIG_C, camera_matrix_ptr::Ptr{CameraMatrix_C} = C_NULL)
     if config_type == CAMERA_CONFIG_CENTERED_C
         return CAMERA_CONFIG_CENTERED
     elseif config_type == CAMERA_CONFIG_OFFSET_C
         return CAMERA_CONFIG_OFFSET
+    elseif config_type == CAMERA_CONFIG_MATRIX_C
+        if camera_matrix_ptr == C_NULL
+            throw(ArgumentError("Camera matrix pointer cannot be null for CAMERA_CONFIG_MATRIX_C"))
+        end
+        
+        # Load the camera matrix from C
+        camera_matrix_c = unsafe_load(camera_matrix_ptr)
+        
+        # Convert coordinate system
+        coord_system = camera_matrix_c.coordinate_system == 0 ? :centered : :offset
+        
+        # Create CameraMatrix with proper units
+        matrix_with_units = camera_matrix_c.matrix * 1px
+        width_with_units = camera_matrix_c.image_width * 1px
+        height_with_units = camera_matrix_c.image_height * 1px
+        
+        return CameraMatrix{coord_system}(matrix_with_units, width_with_units, height_with_units)
     else
         throw(ArgumentError("Invalid camera config type: $config_type"))
     end
@@ -189,6 +213,7 @@ Base.@ccallable function estimate_pose_6dof(
     covariance_data::Ptr{Cdouble},
     covariance_type::COVARIANCE_TYPE_C,
     camera_config::CAMERA_CONFIG_C,
+    camera_matrix::Ptr{CameraMatrix_C},
     initial_guess_pos::Ptr{WorldPointF64},
     initial_guess_rot::Ptr{RotYPRF64},
     result::Ptr{PoseEstimate_C}
@@ -211,7 +236,7 @@ Base.@ccallable function estimate_pose_6dof(
         noise_model = parse_covariance_data(covariance_type, covariance_data, num_points) |> Matrix
 
         # Get camera configuration
-        camconfig = get_camera_config(camera_config)
+        camconfig = get_camera_config(camera_config, camera_matrix)
 
         # Handle initial guess parameters
         if initial_guess_pos != C_NULL
@@ -263,6 +288,7 @@ Base.@ccallable function estimate_pose_3dof(
     covariance_data::Ptr{Cdouble},
     covariance_type::COVARIANCE_TYPE_C,
     camera_config::CAMERA_CONFIG_C,
+    camera_matrix::Ptr{CameraMatrix_C},
     initial_guess_pos::Ptr{WorldPointF64},
     result::Ptr{PoseEstimate_C}
 )::Cint
@@ -288,7 +314,7 @@ Base.@ccallable function estimate_pose_3dof(
         noise_model = parse_covariance_data(covariance_type, covariance_data, num_points) |> Matrix
 
         # Get camera configuration
-        camconfig = get_camera_config(camera_config)
+        camconfig = get_camera_config(camera_config, camera_matrix)
 
         # Handle initial guess for position
         if initial_guess_pos != C_NULL
@@ -332,6 +358,7 @@ Base.@ccallable function project_point(
     camera_rotation::Ptr{RotYPRF64},
     world_point::Ptr{WorldPointF64},
     camera_config::CAMERA_CONFIG_C,
+    camera_matrix::Ptr{CameraMatrix_C},
     result::Ptr{ProjectionPointF64}
 )::Cint
     # Validate inputs
@@ -350,7 +377,7 @@ Base.@ccallable function project_point(
     jl_world_pt = world_pt_c .* 1m
 
     # Get camera configuration
-    camconfig = get_camera_config(camera_config)
+    camconfig = get_camera_config(camera_config, camera_matrix)
 
     # Project point
     jl_projection = project(jl_cam_pos, jl_cam_rot, jl_world_pt, camconfig)
