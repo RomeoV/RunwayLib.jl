@@ -38,7 +38,7 @@ const CAMERA_CONFIG_OFFSET = CameraConfig{:offset}(
 )
 
 "Camera model using 3x3 projection matrix with uniform pixel units."
-struct CameraMatrix{S,T} <: AbstractCameraConfig{S}
+struct CameraMatrix{S,T<:WithDims(px)} <: AbstractCameraConfig{S}
     matrix::SMatrix{3,3,T}  # 3x3 matrix for normalized coordinate projection
     image_width::WithDims(px)
     image_height::WithDims(px)
@@ -50,29 +50,9 @@ struct CameraMatrix{S,T} <: AbstractCameraConfig{S}
     
     # Inner constructor with validation
     function CameraMatrix{S,T}(matrix::SMatrix{3,3,T}, width::WithDims(px), height::WithDims(px)) where {S,T}
-        # Validate matrix dimensions (already enforced by SMatrix type)
-        # Validate coordinate system type
-        if S ∉ (:centered, :offset)
-            throw(ArgumentError("Coordinate system S must be :centered or :offset, got $S"))
-        end
-        
-        # Validate that matrix is reasonable (non-zero focal lengths)
-        # Use ustrip to get the magnitude for comparison
-        if abs(ustrip(matrix[1,1])) < 1e-6 || abs(ustrip(matrix[2,2])) < 1e-6
-            throw(ArgumentError("Camera matrix focal length components (matrix[1,1], matrix[2,2]) must be non-zero"))
-        end
-        
-        # Validate that the bottom row is [0, 0, 1] for proper homogeneous coordinates
-        # Note: matrix[3,3] should have units px and magnitude 1.0
-        if abs(ustrip(matrix[3,1])) > 1e-6 || abs(ustrip(matrix[3,2])) > 1e-6 || abs(ustrip(matrix[3,3]) - 1.0) > 1e-6
-            throw(ArgumentError("Camera matrix bottom row should be [0, 0, 1], got [$(matrix[3,1]), $(matrix[3,2]), $(matrix[3,3])]"))
-        end
-        
-        # Validate image dimensions
-        if ustrip(width) <= 0.0 || ustrip(height) <= 0.0
-            throw(ArgumentError("Image dimensions must be positive"))
-        end
-        
+        S ∈ (:centered, :offset) || throw(ArgumentError("Coordinate system S must be :centered or :offset, got $S"))
+        all(!iszero, [matrix[1,1], matrix[2,2]]) || throw(ArgumentError("Camera matrix focal length components (matrix[1,1], matrix[2,2]) must be non-zero"))
+        matrix[3,:] ≈ SVector(0,0,1)  || throw(ArgumentError("Camera matrix bottom row should be [0, 0, 1], got [$(matrix[3,1]), $(matrix[3,2]), $(matrix[3,3])]"))
         new{S,T}(matrix, width, height)
     end
 end
@@ -119,29 +99,19 @@ function project(
     cam_pt = world_pt_to_cam_pt(cam_pos, cam_rot, world_pt)
     cam_pt.x <= 0m && throw(BehindCameraException(cam_pt.x))
     
-    # Step 1: Normalize by Z to get unitless normalized coordinates
     # P_norm = [X/Z, Y/Z, 1]^T (unitless) - ustrip needed for Julia's type system
-    P_norm = SA[ustrip(cam_pt.y/cam_pt.x), ustrip(cam_pt.z/cam_pt.x), 1.0]
+    P_norm = SA[cam_pt.y/cam_pt.x, cam_pt.z/cam_pt.x, 1.0]
     
-    # Step 2: Apply uniform [px] matrix to unitless vector → [px] result
     # p_img [px] = K_norm [px] * P_norm [unitless] = [result1, result2, result3] [px]
     image_coords_homogeneous = camconfig.matrix * P_norm
     
-    # Step 3: Check homogeneous coordinate (compare px with dimensionless threshold)
-    # ustrip needed because we're comparing a quantity with units to a dimensionless threshold
-    if abs(ustrip(image_coords_homogeneous[3])) < 1e-12
+    if abs(image_coords_homogeneous[3]) < 1e-12px
         throw(DivideError("Point projects to infinity (homogeneous coordinate near zero)"))
     end
     
-    # Step 4: Normalize to get dimensionless pixel coordinates
-    # Try natural division first: px/px should → dimensionless
-    u = image_coords_homogeneous[1] / image_coords_homogeneous[3]
-    v = image_coords_homogeneous[2] / image_coords_homogeneous[3]
-    
-    # Convert to appropriate type
+    u, v = image_coords_homogeneous[1:2] / image_coords_homogeneous[3]
+
     T′′ = typeof(u)
-    
-    # The matrix should be constructed appropriately for the target coordinate system
     return ProjectionPoint{T′′, S}(u, v)
 end
 
@@ -172,14 +142,10 @@ convertcamconf(to::AbstractCameraConfig{S}, from::AbstractCameraConfig{S}, proj:
 "Convert parametric CameraConfig to equivalent CameraMatrix."
 function camera_config_to_matrix(config::CameraConfig{S}) where S
     # Calculate focal length in pixels (for normalized coordinates)
-    f_pixels_raw = config.focal_length / config.pixel_size
-    # Convert to pixels by using the pixel unit from this module
-    f_pixels_quantity = f_pixels_raw |> _uconvert(pixel) 
-    f_pixels_value = ustrip(f_pixels_quantity)  # Extract numerical value
-    
-    # Extract principal point coordinates in pixels (already in correct units)
-    cx_value = ustrip(config.optical_center_u)  
-    cy_value = ustrip(config.optical_center_v)
+    f_px= config.focal_length / config.pixel_size |> _uconvert(px)
+
+    cx = config.optical_center_u
+    cy = config.optical_center_v
     
     # Build uniform camera matrix with [px] units for normalized coordinates
     # K_norm projects unitless normalized coordinates [X/Z, Y/Z, 1] to pixels
@@ -187,22 +153,16 @@ function camera_config_to_matrix(config::CameraConfig{S}) where S
     # [0   fy  cy] [px px px] 
     # [0   0   1 ] [px px px]
     # Build matrix based on coordinate system
-    if S == :centered
-        # For centered coordinates: u = f * (Y/X), v = f * (Z/X) - no sign flip needed
-        matrix = @SMatrix [
-            f_pixels_value*px  0.0px              cx_value*px;
-            0.0px              f_pixels_value*px  cy_value*px;
-            0.0px              0.0px              1.0px
-        ]
-    else  # :offset
-        # For offset coordinates: u = -f * (Y/X) + cx, v = -f * (Z/X) + cy - sign flip needed
-        matrix = @SMatrix [
-            -f_pixels_value*px  0.0px               cx_value*px;
-            0.0px               -f_pixels_value*px  cy_value*px;
-            0.0px               0.0px               1.0px
-        ]
-    end
-    
+    # For centered coordinates: u = f * (Y/X), v = f * (Z/X) - no sign flip needed
+    # For offset coordinates:   u = -f * (Y/X) + cx, v = -f * (Z/X) + cy - sign flip needed
+    # In offset coordinates, cx and cy will be nonzero.
+    sgn = (S == :centered ? +1 : -1)
+    matrix = @SMatrix [
+        sgn*f_px  0.0px     cx;
+        0.0px     sgn*f_px  cy;
+        0.0px     0.0px     1.0px
+    ]
+
     return CameraMatrix{S}(matrix, config.image_width, config.image_height)
 end
 
