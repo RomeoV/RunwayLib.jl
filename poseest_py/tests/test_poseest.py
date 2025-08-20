@@ -15,6 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import poseest
+import numpy as np
 
 
 class TestDataTypes:
@@ -312,6 +313,328 @@ class TestErrorHandling:
                 projections, 
                 poseest.CameraConfig.OFFSET
             )
+
+
+class TestCameraMatrix:
+    """Test CameraMatrix functionality and integration."""
+    
+    def test_camera_matrix_creation(self):
+        """Test CameraMatrix creation and validation."""
+        # Create a valid camera matrix
+        matrix = [
+            [1000.0, 0.0, 2048.0],
+            [0.0, 1000.0, 1536.0],
+            [0.0, 0.0, 1.0]
+        ]
+        
+        camera_matrix = poseest.CameraMatrix(
+            matrix=matrix,
+            image_width=4096.0,
+            image_height=3072.0,
+            coordinate_system='offset'
+        )
+        
+        assert camera_matrix.matrix == matrix
+        assert camera_matrix.image_width == 4096.0
+        assert camera_matrix.image_height == 3072.0
+        assert camera_matrix.coordinate_system == 'offset'
+    
+    def test_camera_matrix_validation(self):
+        """Test CameraMatrix validation catches invalid configurations."""
+        # Test invalid matrix dimensions
+        with pytest.raises(ValueError, match="Camera matrix must be 3x3"):
+            poseest.CameraMatrix(
+                matrix=[[1.0, 0.0], [0.0, 1.0]],  # 2x2 instead of 3x3
+                image_width=1000.0,
+                image_height=1000.0,
+                coordinate_system='centered'
+            )
+        
+        # Test invalid bottom row
+        with pytest.raises(ValueError, match="Bottom row of camera matrix must be"):
+            poseest.CameraMatrix(
+                matrix=[
+                    [1000.0, 0.0, 500.0],
+                    [0.0, 1000.0, 500.0],
+                    [1.0, 0.0, 1.0]  # Should be [0, 0, 1]
+                ],
+                image_width=1000.0,
+                image_height=1000.0,
+                coordinate_system='centered'
+            )
+        
+        # Test zero focal length
+        with pytest.raises(ValueError, match="Focal length components"):
+            poseest.CameraMatrix(
+                matrix=[
+                    [0.0, 0.0, 500.0],  # Zero focal length
+                    [0.0, 1000.0, 500.0],
+                    [0.0, 0.0, 1.0]
+                ],
+                image_width=1000.0,
+                image_height=1000.0,
+                coordinate_system='centered'
+            )
+        
+        # Test invalid coordinate system
+        with pytest.raises(ValueError, match="Coordinate system must be"):
+            poseest.CameraMatrix(
+                matrix=[
+                    [1000.0, 0.0, 500.0],
+                    [0.0, 1000.0, 500.0],
+                    [0.0, 0.0, 1.0]
+                ],
+                image_width=1000.0,
+                image_height=1000.0,
+                coordinate_system='invalid'
+            )
+        
+        # Test negative image dimensions
+        with pytest.raises(ValueError, match="Image width must be positive"):
+            poseest.CameraMatrix(
+                matrix=[
+                    [1000.0, 0.0, 500.0],
+                    [0.0, 1000.0, 500.0],
+                    [0.0, 0.0, 1.0]
+                ],
+                image_width=-100.0,
+                image_height=1000.0,
+                coordinate_system='centered'
+            )
+    
+    def test_camera_matrix_c_struct_conversion(self):
+        """Test conversion to/from C structures."""
+        # Create camera matrix
+        matrix = [
+            [1200.0, 0.0, 2048.0],
+            [0.0, 1200.0, 1536.0],
+            [0.0, 0.0, 1.0]
+        ]
+        
+        camera_matrix = poseest.CameraMatrix(
+            matrix=matrix,
+            image_width=4096.0,
+            image_height=3072.0,
+            coordinate_system='offset'
+        )
+        
+        # Convert to C struct
+        c_struct = camera_matrix.to_c_struct()
+        
+        # Verify C struct values
+        assert c_struct.image_width == 4096.0
+        assert c_struct.image_height == 3072.0
+        assert c_struct.coordinate_system == 1  # offset = 1
+        
+        # Check matrix values (flattened row-major)
+        expected_flat = [1200.0, 0.0, 2048.0, 0.0, 1200.0, 1536.0, 0.0, 0.0, 1.0]
+        for i, expected_val in enumerate(expected_flat):
+            assert abs(c_struct.matrix[i] - expected_val) < 1e-10
+        
+        # Convert back to Python
+        camera_matrix_back = poseest.CameraMatrix.from_c_struct(c_struct)
+        
+        assert camera_matrix_back.matrix == matrix
+        assert camera_matrix_back.image_width == 4096.0
+        assert camera_matrix_back.image_height == 3072.0
+        assert camera_matrix_back.coordinate_system == 'offset'
+    
+    def test_camera_matrix_projection(self):
+        """Test point projection with custom camera matrix."""
+        # Create a simple camera matrix 
+        matrix = [
+            [1000.0, 0.0, 2048.0],  # fx=1000, cx=2048
+            [0.0, 1000.0, 1536.0],  # fy=1000, cy=1536
+            [0.0, 0.0, 1.0]
+        ]
+        
+        camera_matrix = poseest.CameraMatrix(
+            matrix=matrix,
+            image_width=4096.0,
+            image_height=3072.0,
+            coordinate_system='offset'
+        )
+        
+        # Define test scenario - same as used in other tests
+        camera_position = poseest.WorldPoint(-1300.0, 0.0, 80.0)
+        camera_rotation = poseest.Rotation(yaw=0.05, pitch=0.04, roll=0.03)
+        world_point = poseest.WorldPoint(0.0, -50.0, 0.0)  # Left edge of runway
+        
+        # Project point
+        projection = poseest.project_point(
+            camera_position,
+            camera_rotation,
+            world_point,
+            camera_matrix
+        )
+        
+        # Verify projection is reasonable
+        assert isinstance(projection, poseest.ProjectionPoint)
+        assert 0.0 < projection.x < 4096.0  # Within image bounds
+        assert 0.0 < projection.y < 3072.0
+        
+        # Compare with equivalent traditional camera config
+        traditional_projection = poseest.project_point(
+            camera_position,
+            camera_rotation,
+            world_point,
+            poseest.CameraConfig.OFFSET
+        )
+        
+        # Results should be similar (within reasonable tolerance due to different parameters)
+        # This is not an exact comparison since we're using different camera parameters
+        assert abs(projection.x - traditional_projection.x) < 1000.0
+        assert abs(projection.y - traditional_projection.y) < 1000.0
+    
+    def test_camera_matrix_6dof_pose_estimation(self):
+        """Test 6DOF pose estimation with custom camera matrix."""
+        # Set random seed for reproducible results
+        random.seed(42)
+        
+        # Create camera matrix
+        matrix = [
+            [1100.0, 0.0, 2048.0],
+            [0.0, 1100.0, 1536.0],
+            [0.0, 0.0, 1.0]
+        ]
+        
+        camera_matrix = poseest.CameraMatrix(
+            matrix=matrix,
+            image_width=4096.0,
+            image_height=3072.0,
+            coordinate_system='offset'
+        )
+        
+        # Generate test data
+        num_keypoints = 8
+        runway_corners = []
+        runway_length = 3000.0
+        num_pairs = num_keypoints // 2
+        
+        for i in range(num_pairs):
+            x_pos = (i / (num_pairs - 1)) * runway_length
+            runway_corners.append(poseest.WorldPoint(x_pos, -50.0, 0.0))  # Left
+            runway_corners.append(poseest.WorldPoint(x_pos, 50.0, 0.0))   # Right
+        
+        # True pose
+        true_position = poseest.WorldPoint(-1300.0, 0.0, 80.0)
+        true_rotation = poseest.Rotation(yaw=0.05, pitch=0.04, roll=0.03)
+        
+        # Generate projections with camera matrix
+        projections = []
+        for corner in runway_corners:
+            projection = poseest.project_point(
+                true_position,
+                true_rotation,
+                corner,
+                camera_matrix
+            )
+            # Add small amount of noise
+            noise_x = random.gauss(0, 0.5)
+            noise_y = random.gauss(0, 0.5)
+            projection = poseest.ProjectionPoint(
+                projection.x + noise_x,
+                projection.y + noise_y
+            )
+            projections.append(projection)
+        
+        # Estimate pose using camera matrix
+        pose = poseest.estimate_pose_6dof(
+            runway_corners,
+            projections,
+            camera_matrix
+        )
+        
+        # Verify results
+        assert isinstance(pose, poseest.PoseEstimate)
+        assert pose.converged
+        
+        # Should be reasonably close to true pose
+        tolerance_pos = 50.0
+        tolerance_rot = 0.1
+        
+        assert abs(pose.position.x - true_position.x) < tolerance_pos
+        assert abs(pose.position.y - true_position.y) < tolerance_pos
+        assert abs(pose.position.z - true_position.z) < tolerance_pos
+        
+        assert abs(pose.rotation.yaw - true_rotation.yaw) < tolerance_rot
+        assert abs(pose.rotation.pitch - true_rotation.pitch) < tolerance_rot
+        assert abs(pose.rotation.roll - true_rotation.roll) < tolerance_rot
+    
+    def test_camera_matrix_3dof_pose_estimation(self):
+        """Test 3DOF pose estimation with custom camera matrix."""
+        # Set random seed for reproducible results  
+        random.seed(42)
+        
+        # Create camera matrix with different parameters
+        matrix = [
+            [900.0, 0.0, 2000.0],
+            [0.0, 900.0, 1500.0],
+            [0.0, 0.0, 1.0]
+        ]
+        
+        camera_matrix = poseest.CameraMatrix(
+            matrix=matrix,
+            image_width=4000.0,
+            image_height=3000.0,
+            coordinate_system='offset'
+        )
+        
+        # Generate test data - fewer points needed for 3DOF
+        num_keypoints = 6
+        runway_corners = []
+        runway_length = 3000.0
+        num_pairs = num_keypoints // 2
+        
+        for i in range(num_pairs):
+            x_pos = (i / (num_pairs - 1)) * runway_length
+            runway_corners.append(poseest.WorldPoint(x_pos, -50.0, 0.0))
+            runway_corners.append(poseest.WorldPoint(x_pos, 50.0, 0.0))
+        
+        # True pose
+        true_position = poseest.WorldPoint(-1200.0, 10.0, 90.0)
+        true_rotation = poseest.Rotation(yaw=0.03, pitch=0.02, roll=0.01)
+        
+        # Generate projections
+        projections = []
+        for corner in runway_corners:
+            projection = poseest.project_point(
+                true_position,
+                true_rotation,
+                corner,
+                camera_matrix
+            )
+            # Add noise
+            noise_x = random.gauss(0, 0.3)
+            noise_y = random.gauss(0, 0.3)
+            projection = poseest.ProjectionPoint(
+                projection.x + noise_x,
+                projection.y + noise_y
+            )
+            projections.append(projection)
+        
+        # Estimate position with known rotation using camera matrix
+        pose = poseest.estimate_pose_3dof(
+            runway_corners,
+            projections,
+            true_rotation,  # Known rotation
+            camera_matrix
+        )
+        
+        # Verify results
+        assert isinstance(pose, poseest.PoseEstimate)
+        assert pose.converged
+        
+        # Position should be close to true position
+        tolerance_pos = 30.0
+        assert abs(pose.position.x - true_position.x) < tolerance_pos
+        assert abs(pose.position.y - true_position.y) < tolerance_pos
+        assert abs(pose.position.z - true_position.z) < tolerance_pos
+        
+        # Rotation should match exactly (it was given as input)
+        assert abs(pose.rotation.yaw - true_rotation.yaw) < 1e-10
+        assert abs(pose.rotation.pitch - true_rotation.pitch) < 1e-10
+        assert abs(pose.rotation.roll - true_rotation.roll) < 1e-10
 
 
 if __name__ == "__main__":

@@ -71,6 +71,16 @@ class RotYPRF64(ctypes.Structure):
     ]
 
 
+class CameraMatrix_C(ctypes.Structure):
+    """C structure for camera matrix configurations."""
+    _fields_ = [
+        ("matrix", ctypes.c_double * 9),  # 3x3 matrix in row-major order
+        ("image_width", ctypes.c_double),  # Image width in pixels
+        ("image_height", ctypes.c_double),  # Image height in pixels 
+        ("coordinate_system", ctypes.c_int),  # 0 for centered, 1 for offset
+    ]
+
+
 class PoseEstimate_C(ctypes.Structure):
     """C structure for pose estimation results."""
     _fields_ = [
@@ -89,6 +99,7 @@ class CameraConfig(IntEnum):
     """Camera configuration options."""
     CENTERED = 0  # Origin at image center, Y-axis up
     OFFSET = 1    # Origin at top-left, Y-axis down
+    MATRIX = 2    # Custom camera matrix
 
 
 class CovarianceType(IntEnum):
@@ -188,6 +199,101 @@ class Rotation:
     def from_c_struct(cls, c_struct: RotYPRF64) -> 'Rotation':
         """Create from C structure."""
         return cls(c_struct.data[0], c_struct.data[1], c_struct.data[2])
+
+
+@dataclass
+class CameraMatrix:
+    """
+    Custom camera matrix configuration.
+    
+    Attributes:
+        matrix: 3x3 camera matrix (list of lists, row-major order)
+        image_width: Image width in pixels
+        image_height: Image height in pixels
+        coordinate_system: Either 'centered' or 'offset'
+    """
+    matrix: List[List[float]]  # 3x3 matrix
+    image_width: float
+    image_height: float
+    coordinate_system: str  # 'centered' or 'offset'
+    
+    def __post_init__(self):
+        """Validate camera matrix parameters."""
+        self.validate()
+    
+    def validate(self) -> None:
+        """Validate camera matrix configuration."""
+        # Check matrix dimensions
+        if len(self.matrix) != 3:
+            raise ValueError("Camera matrix must be 3x3")
+        for i, row in enumerate(self.matrix):
+            if len(row) != 3:
+                raise ValueError(f"Row {i} of camera matrix must have 3 elements")
+        
+        # Check image dimensions
+        if self.image_width <= 0:
+            raise ValueError("Image width must be positive")
+        if self.image_height <= 0:
+            raise ValueError("Image height must be positive")
+        
+        # Check coordinate system
+        if self.coordinate_system not in ('centered', 'offset'):
+            raise ValueError("Coordinate system must be 'centered' or 'offset'")
+        
+        # Basic validation of camera matrix structure
+        # Bottom row should be [0, 0, 1]
+        bottom_row = self.matrix[2]
+        if abs(bottom_row[0]) > 1e-10 or abs(bottom_row[1]) > 1e-10 or abs(bottom_row[2] - 1.0) > 1e-10:
+            raise ValueError("Bottom row of camera matrix must be [0, 0, 1]")
+        
+        # Focal length components should be non-zero
+        if abs(self.matrix[0][0]) < 1e-10 or abs(self.matrix[1][1]) < 1e-10:
+            raise ValueError("Focal length components (matrix[0][0], matrix[1][1]) must be non-zero")
+        
+        # Check for finite values
+        for i, row in enumerate(self.matrix):
+            for j, val in enumerate(row):
+                if not math.isfinite(val):
+                    raise ValueError(f"Matrix element [{i}][{j}] must be finite")
+    
+    def to_c_struct(self) -> CameraMatrix_C:
+        """Convert to C structure."""
+        c_struct = CameraMatrix_C()
+        
+        # Flatten matrix in row-major order
+        flat_matrix = []
+        for row in self.matrix:
+            flat_matrix.extend(row)
+        
+        # Copy to C array
+        for i, val in enumerate(flat_matrix):
+            c_struct.matrix[i] = val
+        
+        c_struct.image_width = self.image_width
+        c_struct.image_height = self.image_height
+        c_struct.coordinate_system = 0 if self.coordinate_system == 'centered' else 1
+        
+        return c_struct
+    
+    @classmethod
+    def from_c_struct(cls, c_struct: CameraMatrix_C) -> 'CameraMatrix':
+        """Create from C structure."""
+        # Reconstruct matrix from flat array
+        matrix = []
+        for i in range(3):
+            row = []
+            for j in range(3):
+                row.append(c_struct.matrix[i * 3 + j])
+            matrix.append(row)
+        
+        coord_system = 'centered' if c_struct.coordinate_system == 0 else 'offset'
+        
+        return cls(
+            matrix=matrix,
+            image_width=c_struct.image_width,
+            image_height=c_struct.image_height,
+            coordinate_system=coord_system
+        )
 
 
 @dataclass
@@ -383,6 +489,7 @@ def _setup_function_signatures(lib):
         ctypes.POINTER(ctypes.c_double),   # covariance_data
         ctypes.c_int,                      # covariance_type
         ctypes.c_int,                      # camera_config
+        ctypes.POINTER(CameraMatrix_C),    # camera_matrix
         ctypes.POINTER(WorldPointF64),     # initial_guess_pos
         ctypes.POINTER(RotYPRF64),        # initial_guess_rot
         ctypes.POINTER(PoseEstimate_C)     # result
@@ -398,6 +505,7 @@ def _setup_function_signatures(lib):
         ctypes.POINTER(ctypes.c_double),   # covariance_data
         ctypes.c_int,                      # covariance_type
         ctypes.c_int,                      # camera_config
+        ctypes.POINTER(CameraMatrix_C),    # camera_matrix
         ctypes.POINTER(WorldPointF64),     # initial_guess_pos
         ctypes.POINTER(PoseEstimate_C)     # result
     ]
@@ -409,6 +517,7 @@ def _setup_function_signatures(lib):
         ctypes.POINTER(RotYPRF64),        # camera_rotation
         ctypes.POINTER(WorldPointF64),      # world_point
         ctypes.c_int,                      # camera_config
+        ctypes.POINTER(CameraMatrix_C),    # camera_matrix
         ctypes.POINTER(ProjectionPointF64)  # result
     ]
     lib.project_point.restype = ctypes.c_int
@@ -451,7 +560,7 @@ def _ensure_initialized():
 def estimate_pose_6dof(
     runway_corners: List[WorldPoint],
     projections: List[ProjectionPoint], 
-    camera_config: CameraConfig = CameraConfig.OFFSET,
+    camera_config: Union[CameraConfig, CameraMatrix] = CameraConfig.OFFSET,
     covariance: Optional[CovarianceSpec] = None,
     initial_guess_pos: Optional[WorldPoint] = None,
     initial_guess_rot: Optional[Rotation] = None
@@ -462,7 +571,7 @@ def estimate_pose_6dof(
     Args:
         runway_corners: List of at least 4 runway corners in world coordinates
         projections: List of corresponding image projections  
-        camera_config: Camera coordinate system configuration
+        camera_config: Camera configuration - either CameraConfig enum or CameraMatrix object
         covariance: Optional covariance specification for noise modeling
         initial_guess_pos: Optional initial guess for aircraft position (default: (-1000, 0, 100))
         initial_guess_rot: Optional initial guess for aircraft rotation (default: (0, 0, 0))
@@ -514,6 +623,15 @@ def estimate_pose_6dof(
     else:
         initial_rot_ptr = None
     
+    # Handle camera configuration
+    if isinstance(camera_config, CameraMatrix):
+        camera_config_enum = CameraConfig.MATRIX
+        camera_matrix_c = camera_config.to_c_struct()
+        camera_matrix_ptr = ctypes.byref(camera_matrix_c)
+    else:
+        camera_config_enum = camera_config
+        camera_matrix_ptr = None
+    
     # Call unified function (always with covariance parameters and initial guesses)
     error_code = lib.estimate_pose_6dof(
         corners_array,
@@ -521,7 +639,8 @@ def estimate_pose_6dof(
         num_points,
         cov_data,
         int(cov_type),
-        int(camera_config),
+        int(camera_config_enum),
+        camera_matrix_ptr,
         initial_pos_ptr,
         initial_rot_ptr,
         ctypes.byref(result)
@@ -538,7 +657,7 @@ def estimate_pose_3dof(
     runway_corners: List[WorldPoint],
     projections: List[ProjectionPoint],
     known_rotation: Rotation,
-    camera_config: CameraConfig = CameraConfig.OFFSET,
+    camera_config: Union[CameraConfig, CameraMatrix] = CameraConfig.OFFSET,
     covariance: Optional[CovarianceSpec] = None,
     initial_guess_pos: Optional[WorldPoint] = None
 ) -> PoseEstimate:
@@ -549,7 +668,7 @@ def estimate_pose_3dof(
         runway_corners: List of at least 3 runway corners in world coordinates
         projections: List of corresponding image projections
         known_rotation: Known aircraft attitude
-        camera_config: Camera coordinate system configuration
+        camera_config: Camera configuration - either CameraConfig enum or CameraMatrix object
         covariance: Optional covariance specification for noise modeling
         initial_guess_pos: Optional initial guess for aircraft position (default: (-1000, 0, 100))
         
@@ -595,6 +714,15 @@ def estimate_pose_3dof(
     else:
         initial_pos_ptr = None
     
+    # Handle camera configuration
+    if isinstance(camera_config, CameraMatrix):
+        camera_config_enum = CameraConfig.MATRIX
+        camera_matrix_c = camera_config.to_c_struct()
+        camera_matrix_ptr = ctypes.byref(camera_matrix_c)
+    else:
+        camera_config_enum = camera_config
+        camera_matrix_ptr = None
+    
     # Call unified function (always with covariance parameters and initial guess)
     error_code = lib.estimate_pose_3dof(
         corners_array,
@@ -603,7 +731,8 @@ def estimate_pose_3dof(
         ctypes.byref(rotation_c),
         cov_data,
         int(cov_type),
-        int(camera_config),
+        int(camera_config_enum),
+        camera_matrix_ptr,
         initial_pos_ptr,
         ctypes.byref(result)
     )
@@ -619,7 +748,7 @@ def project_point(
     camera_position: WorldPoint,
     camera_rotation: Rotation,
     world_point: WorldPoint,
-    camera_config: CameraConfig = CameraConfig.OFFSET
+    camera_config: Union[CameraConfig, CameraMatrix] = CameraConfig.OFFSET
 ) -> ProjectionPoint:
     """
     Project a 3D world point to 2D image coordinates.
@@ -628,7 +757,7 @@ def project_point(
         camera_position: Camera position in world coordinates
         camera_rotation: Camera attitude (ZYX Euler angles)
         world_point: 3D point to project
-        camera_config: Camera coordinate system configuration
+        camera_config: Camera configuration - either CameraConfig enum or CameraMatrix object
         
     Returns:
         2D image projection of the world point
@@ -649,12 +778,22 @@ def project_point(
     # Prepare result structure
     result = ProjectionPointF64()
     
+    # Handle camera configuration
+    if isinstance(camera_config, CameraMatrix):
+        camera_config_enum = CameraConfig.MATRIX
+        camera_matrix_c = camera_config.to_c_struct()
+        camera_matrix_ptr = ctypes.byref(camera_matrix_c)
+    else:
+        camera_config_enum = camera_config
+        camera_matrix_ptr = None
+    
     # Call C function
     error_code = lib.project_point(
         ctypes.byref(cam_pos_c),
         ctypes.byref(cam_rot_c),
         ctypes.byref(world_pt_c),
-        int(camera_config),
+        int(camera_config_enum),
+        camera_matrix_ptr,
         ctypes.byref(result)
     )
     
