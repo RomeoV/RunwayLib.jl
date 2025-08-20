@@ -10,10 +10,10 @@ abstract type AbstractCameraConfig{S} end
 
 # Camera configuration with type parameter for coordinate system
 struct CameraConfig{S} <: AbstractCameraConfig{S}
-    focal_length::typeof(1.0 * u"mm")
-    pixel_size::typeof(1.0 * u"μm" / 1pixel)
-    image_width::typeof(1pixel)
-    image_height::typeof(1pixel)
+    focal_length::typeof(1.0mm)
+    pixel_size::typeof(1.0μm/px)
+    image_width::typeof(1.0px)
+    image_height::typeof(1.0px)
 end
 
 # Default camera configurations
@@ -22,7 +22,7 @@ const CAMERA_CONFIG_OFFSET = CameraConfig{:offset}(25.0u"mm", 3.45u"μm" / 1pixe
 
 "Camera model using 3x3 projection matrix with uniform pixel units."
 struct CameraMatrix{S, T <: WithDims(px)} <: AbstractCameraConfig{S}
-    matrix::SMatrix{3, 3, T}  # 3x3 matrix for normalized coordinate projection
+    matrix::SMatrix{3, 3, T, 9}  # 3x3 matrix for normalized coordinate projection
     image_width::WithDims(px)
     image_height::WithDims(px)
 
@@ -36,8 +36,8 @@ struct CameraMatrix{S, T <: WithDims(px)} <: AbstractCameraConfig{S}
         Base.isconcretetype(T) || throw(ArgumentError("CameraMatrix eltype must be concrete."))
         S ∈ (:centered, :offset) || throw(ArgumentError("Coordinate system S must be :centered or :offset, got $S"))
         validate_camera_matrix(matrix) || throw(ArgumentError("Invalid camera matrix"))
-        ustrip(width) > 0 || throw(ArgumentError("Image width must be positive, got $width"))
-        ustrip(height) > 0 || throw(ArgumentError("Image height must be positive, got $height"))
+        ustrip(width) > 0 || throw(ArgumentError("Image width must be positive"))
+        ustrip(height) > 0 || throw(ArgumentError("Image height must be positive"))
         return new{S, T}(matrix, width, height)
     end
 end
