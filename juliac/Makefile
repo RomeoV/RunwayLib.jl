@@ -33,40 +33,25 @@ $(INCLUDE_DIR)/libposeest.h: libposeest.h
 	@mkdir -p $(INCLUDE_DIR)
 	cp libposeest.h $(INCLUDE_DIR)/
 
-# Create share directory
-$(SHARE_DIR): share
-	@mkdir -p $(COMPILED_DIR)
-	cp -r share $(SHARE_DIR)
-
-$(LIB_DIR): $(LIB_DIR)/.cleaned $(LIB_DIR)/libposeest.so
+$(LIB_DIR): $(LIB_DIR)/.installed $(LIB_DIR)/libposeest.so
 
 # Complete bundle target
-bundle: $(LIB_DIR) $(INCLUDE_DIR)/libposeest.h $(SHARE_DIR) $(LIB_DIR)/libposeest.so
+bundle: $(LIB_DIR) $(LIB_DIR)/.installed $(INCLUDE_DIR)/libposeest.h $(LIB_DIR)/libposeest.so
 	@echo "RunwayLibCompiled bundle created successfully"
 	@echo "Bundle size: $$(du -sh $(COMPILED_DIR) | cut -f1)"
 
-$(LIB_DIR)/.installed:
+$(LIB_DIR)/.installed: Manifest.toml
 	@echo "Creating directory structure..."
 	@mkdir -p $(LIB_DIR)
+	-rm -rf $(SHARE_DIR)
+	-rm -rf $(LIB_DIR)/julia
+	-rm -f $(LIB_DIR)/libjulia*
 	@echo "Copying Julia libraries..."
-	JULIA_LIB_DIR=$$($(JULIA) -e "print(joinpath(Sys.BINDIR, \"..\", \"lib\"))"); \
-	cp -r "$$JULIA_LIB_DIR"/* $(LIB_DIR)
+	$(JULIA) --project=@PackageCompiler -e "isnothing(Base.find_package(\"PackageCompiler\")) && (import Pkg; Pkg.add(\"PackageCompiler\"))"
+	COMPILED_DIR=$(COMPILED_DIR) $(JULIA) --project=@PackageCompiler ./install_libraries_and_artifacts.jl
+	@echo "Size after cleaning: $$(du -sh $(COMPILED_DIR) | cut -f1)"
 	@touch $(LIB_DIR)/.installed
 	@echo "Julia libraries installed to $(LIB_DIR)"
-
-$(LIB_DIR)/.cleaned: $(LIB_DIR)/.installed required_libraries.txt
-	@echo "Cleaning $(LIB_DIR)/julia directory based on required_libraries.txt"
-	@echo "Before cleanup: $$(du -sh $(LIB_DIR)/ | cut -f1)"
-	cd $(LIB_DIR)/julia && \
-	for file in *.so*; do \
-		[ -f "$$file" ] && \
-		stem=$$(echo "$$file" | sed 's/\.so.*/.so/') && \
-		! grep -q "$$stem" ../../../required_libraries.txt && \
-		rm -f "$$file" || true; \
-	done
-	@echo "After cleanup: $$(du -sh $(LIB_DIR)/julia/ | cut -f1)"
-	@touch $(LIB_DIR)/.cleaned
-
 
 .PHONY: clean run bundle
 
