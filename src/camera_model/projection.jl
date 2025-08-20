@@ -264,64 +264,29 @@ function project(
     return ProjectionPoint{T′′, S}(u, v)
 end
 
-function convertcamconf(to::CameraConfig{:centered}, from::CameraConfig{:offset}, proj::ProjectionPoint{T, :offset}) where {T}
+# Clean dispatch-based coordinate conversion using AbstractCameraConfig
+function convertcamconf(to::AbstractCameraConfig{:centered}, from::AbstractCameraConfig{:offset}, proj::ProjectionPoint{T, :offset}) where {T}
     u, v = proj.x, proj.y
-    u_centered = -(u - from.optical_center_u)
-    v_centered = -(v - from.optical_center_v)
+    # For CameraMatrix, extract principal point from matrix; for CameraConfig, use fields
+    cx = from isa CameraMatrix ? from.matrix[1,3] : from.optical_center_u
+    cy = from isa CameraMatrix ? from.matrix[2,3] : from.optical_center_v
+    u_centered = -(u - cx)
+    v_centered = -(v - cy)
     return ProjectionPoint{T, :centered}(u_centered, v_centered)
 end
 
-function convertcamconf(to::CameraConfig{:offset}, from::CameraConfig{:centered}, proj::ProjectionPoint{T, :centered}) where {T}
+function convertcamconf(to::AbstractCameraConfig{:offset}, from::AbstractCameraConfig{:centered}, proj::ProjectionPoint{T, :centered}) where {T}
     u_centered, v_centered = proj.x, proj.y
-    u = -u_centered + to.optical_center_u
-    v = -v_centered + to.optical_center_v
+    # For CameraConfig, use optical_center fields; for CameraMatrix, need to get from somewhere else
+    cx = to isa CameraConfig ? to.optical_center_u : throw(ArgumentError("Cannot convert to CameraMatrix{:offset} without knowing target principal point"))
+    cy = to isa CameraConfig ? to.optical_center_v : throw(ArgumentError("Cannot convert to CameraMatrix{:offset} without knowing target principal point"))
+    u = -u_centered + cx
+    v = -v_centered + cy
     return ProjectionPoint{T, :offset}(u, v)
 end
-convertcamconf(to::CameraConfig{S}, from::CameraConfig{S}, proj::ProjectionPoint{T, S}) where {T, S} = proj
 
-# Add support for CameraMatrix conversion - delegate to coordinate system conversion
-function convertcamconf(to::CameraConfig{S1}, from::CameraMatrix{S2}, proj::ProjectionPoint{T, S2}) where {T, S1, S2}
-    # For CameraMatrix, we only need to handle coordinate system conversion, not intrinsic parameter conversion
-    # since CameraMatrix doesn't have the same parametric structure as CameraConfig
-    if S1 == S2
-        return proj  # Same coordinate system, no conversion needed
-    elseif S1 == :centered && S2 == :offset
-        # Convert from offset to centered: u_centered = -(u - cx), v_centered = -(v - cy)
-        # We need to extract the principal point from the CameraMatrix
-        # For a CameraMatrix, the principal point is in the matrix elements [1,3] and [2,3]
-        cx = from.matrix[1,3]
-        cy = from.matrix[2,3]
-        u_centered = -(proj.x - cx)
-        v_centered = -(proj.y - cy)
-        return ProjectionPoint{T, :centered}(u_centered, v_centered)
-    elseif S1 == :offset && S2 == :centered
-        # Convert from centered to offset: u = -u_centered + cx, v = -v_centered + cy
-        # We need the target camera config's principal point - but we only have the destination config
-        u = -proj.x + to.optical_center_u
-        v = -proj.y + to.optical_center_v
-        return ProjectionPoint{T, :offset}(u, v)
-    else
-        error("Unsupported coordinate system conversion from $S2 to $S1")
-    end
-end
-
-# Support for converting from CameraConfig to CameraMatrix (delegate to CameraConfig methods)
-function convertcamconf(to::CameraMatrix{S1}, from::CameraConfig{S2}, proj::ProjectionPoint{T, S2}) where {T, S1, S2}
-    if S1 == S2
-        return proj  # Same coordinate system, no conversion needed
-    else
-        # Convert to an equivalent CameraConfig first, then handle coordinate conversion
-        temp_config = CameraConfig{S1}(
-            25.0u"mm", 3.45u"μm"/pixel, from.image_width, from.image_height,
-            S1 == :centered ? 0.0pixel : from.image_width/2, 
-            S1 == :centered ? 0.0pixel : from.image_height/2
-        )
-        return convertcamconf(temp_config, from, proj)
-    end
-end
-
-# Support for CameraMatrix to CameraMatrix (mostly just coordinate system conversion)
-convertcamconf(to::CameraMatrix{S}, from::CameraMatrix{S}, proj::ProjectionPoint{T, S}) where {T, S} = proj
+# Same coordinate system - no conversion needed
+convertcamconf(to::AbstractCameraConfig{S}, from::AbstractCameraConfig{S}, proj::ProjectionPoint{T, S}) where {T, S} = proj
 
 """
     camera_config_to_matrix(config::CameraConfig{S}) -> CameraMatrix{S}
