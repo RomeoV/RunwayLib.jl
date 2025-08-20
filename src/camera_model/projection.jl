@@ -33,6 +33,7 @@ struct CameraMatrix{S, T <: WithDims(px)} <: AbstractCameraConfig{S}
 
     # Inner constructor with validation
     function CameraMatrix{S, T}(matrix::SMatrix{3, 3, T}, width::WithDims(px), height::WithDims(px)) where {S, T}
+        Base.isconcretetype(T) || throw(ArgumentError("CameraMatrix eltype must be concrete."))
         S ∈ (:centered, :offset) || throw(ArgumentError("Coordinate system S must be :centered or :offset, got $S"))
         validate_camera_matrix(matrix) || throw(ArgumentError("Invalid camera matrix"))
         ustrip(width) > 0 || throw(ArgumentError("Image width must be positive, got $width"))
