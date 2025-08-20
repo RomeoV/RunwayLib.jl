@@ -110,10 +110,8 @@ function pose_optimization_objective(
 
     # Compute reprojection errors
     error_vectors = [
-        # we change the type here from a strongly typed "ProjectionPoint"
-        # to a more weakly typed vector because we are about to concatenate them
         (proj - obs)
-            for (proj, obs) in zip(projected_corners, ps.observed_corners)
+        for (proj, obs) in zip(projected_corners, ps.observed_corners)
     ]
     errors = reduce(vcat, error_vectors)
 
