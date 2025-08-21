@@ -54,7 +54,7 @@ packages = ["poseest", "poseest.native"]
 include-package-data = true
 
 [tool.setuptools.package-data]
-poseest.native = [
+"poseest.native" = [
     "lib/**/*",
     "include/**/*",
     "share/**/*",
