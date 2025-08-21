@@ -6,6 +6,7 @@ This module provides the main Python interface to the Julia/C pose estimation li
 
 import ctypes
 import os
+import math
 from enum import IntEnum
 from typing import List, Union, Tuple, Optional
 from dataclasses import dataclass
@@ -488,7 +489,6 @@ def _setup_function_signatures(lib):
         ctypes.c_int,                      # num_points
         ctypes.POINTER(ctypes.c_double),   # covariance_data
         ctypes.c_int,                      # covariance_type
-        ctypes.c_int,                      # camera_config
         ctypes.POINTER(CameraMatrix_C),    # camera_matrix
         ctypes.POINTER(WorldPointF64),     # initial_guess_pos
         ctypes.POINTER(RotYPRF64),        # initial_guess_rot
@@ -504,7 +504,6 @@ def _setup_function_signatures(lib):
         ctypes.POINTER(RotYPRF64),        # known_rotation
         ctypes.POINTER(ctypes.c_double),   # covariance_data
         ctypes.c_int,                      # covariance_type
-        ctypes.c_int,                      # camera_config
         ctypes.POINTER(CameraMatrix_C),    # camera_matrix
         ctypes.POINTER(WorldPointF64),     # initial_guess_pos
         ctypes.POINTER(PoseEstimate_C)     # result
@@ -516,7 +515,6 @@ def _setup_function_signatures(lib):
         ctypes.POINTER(WorldPointF64),      # camera_position
         ctypes.POINTER(RotYPRF64),        # camera_rotation
         ctypes.POINTER(WorldPointF64),      # world_point
-        ctypes.c_int,                      # camera_config
         ctypes.POINTER(CameraMatrix_C),    # camera_matrix
         ctypes.POINTER(ProjectionPointF64)  # result
     ]
@@ -560,7 +558,7 @@ def _ensure_initialized():
 def estimate_pose_6dof(
     runway_corners: List[WorldPoint],
     projections: List[ProjectionPoint], 
-    camera_config: Union[CameraConfig, CameraMatrix] = CameraConfig.OFFSET,
+    camera_matrix: CameraMatrix,
     covariance: Optional[CovarianceSpec] = None,
     initial_guess_pos: Optional[WorldPoint] = None,
     initial_guess_rot: Optional[Rotation] = None
@@ -571,7 +569,7 @@ def estimate_pose_6dof(
     Args:
         runway_corners: List of at least 4 runway corners in world coordinates
         projections: List of corresponding image projections  
-        camera_config: Camera configuration - either CameraConfig enum or CameraMatrix object
+        camera_matrix: Camera matrix configuration
         covariance: Optional covariance specification for noise modeling
         initial_guess_pos: Optional initial guess for aircraft position (default: (-1000, 0, 100))
         initial_guess_rot: Optional initial guess for aircraft rotation (default: (0, 0, 0))
@@ -623,23 +621,17 @@ def estimate_pose_6dof(
     else:
         initial_rot_ptr = None
     
-    # Handle camera configuration
-    if isinstance(camera_config, CameraMatrix):
-        camera_config_enum = CameraConfig.MATRIX
-        camera_matrix_c = camera_config.to_c_struct()
-        camera_matrix_ptr = ctypes.byref(camera_matrix_c)
-    else:
-        camera_config_enum = camera_config
-        camera_matrix_ptr = None
+    # Convert camera matrix to C struct
+    camera_matrix_c = camera_matrix.to_c_struct()
+    camera_matrix_ptr = ctypes.byref(camera_matrix_c)
     
-    # Call unified function (always with covariance parameters and initial guesses)
+    # Call C function (simplified interface - always uses camera matrices)
     error_code = lib.estimate_pose_6dof(
         corners_array,
         projs_array, 
         num_points,
         cov_data,
         int(cov_type),
-        int(camera_config_enum),
         camera_matrix_ptr,
         initial_pos_ptr,
         initial_rot_ptr,
@@ -657,7 +649,7 @@ def estimate_pose_3dof(
     runway_corners: List[WorldPoint],
     projections: List[ProjectionPoint],
     known_rotation: Rotation,
-    camera_config: Union[CameraConfig, CameraMatrix] = CameraConfig.OFFSET,
+    camera_matrix: CameraMatrix,
     covariance: Optional[CovarianceSpec] = None,
     initial_guess_pos: Optional[WorldPoint] = None
 ) -> PoseEstimate:
@@ -668,7 +660,7 @@ def estimate_pose_3dof(
         runway_corners: List of at least 3 runway corners in world coordinates
         projections: List of corresponding image projections
         known_rotation: Known aircraft attitude
-        camera_config: Camera configuration - either CameraConfig enum or CameraMatrix object
+        camera_matrix: Camera matrix configuration
         covariance: Optional covariance specification for noise modeling
         initial_guess_pos: Optional initial guess for aircraft position (default: (-1000, 0, 100))
         
@@ -714,16 +706,11 @@ def estimate_pose_3dof(
     else:
         initial_pos_ptr = None
     
-    # Handle camera configuration
-    if isinstance(camera_config, CameraMatrix):
-        camera_config_enum = CameraConfig.MATRIX
-        camera_matrix_c = camera_config.to_c_struct()
-        camera_matrix_ptr = ctypes.byref(camera_matrix_c)
-    else:
-        camera_config_enum = camera_config
-        camera_matrix_ptr = None
+    # Convert camera matrix to C struct
+    camera_matrix_c = camera_matrix.to_c_struct()
+    camera_matrix_ptr = ctypes.byref(camera_matrix_c)
     
-    # Call unified function (always with covariance parameters and initial guess)
+    # Call C function (simplified interface - always uses camera matrices)
     error_code = lib.estimate_pose_3dof(
         corners_array,
         projs_array,
@@ -731,7 +718,6 @@ def estimate_pose_3dof(
         ctypes.byref(rotation_c),
         cov_data,
         int(cov_type),
-        int(camera_config_enum),
         camera_matrix_ptr,
         initial_pos_ptr,
         ctypes.byref(result)
@@ -748,7 +734,7 @@ def project_point(
     camera_position: WorldPoint,
     camera_rotation: Rotation,
     world_point: WorldPoint,
-    camera_config: Union[CameraConfig, CameraMatrix] = CameraConfig.OFFSET
+    camera_matrix: CameraMatrix
 ) -> ProjectionPoint:
     """
     Project a 3D world point to 2D image coordinates.
@@ -757,7 +743,7 @@ def project_point(
         camera_position: Camera position in world coordinates
         camera_rotation: Camera attitude (ZYX Euler angles)
         world_point: 3D point to project
-        camera_config: Camera configuration - either CameraConfig enum or CameraMatrix object
+        camera_matrix: Camera matrix configuration
         
     Returns:
         2D image projection of the world point
@@ -778,21 +764,15 @@ def project_point(
     # Prepare result structure
     result = ProjectionPointF64()
     
-    # Handle camera configuration
-    if isinstance(camera_config, CameraMatrix):
-        camera_config_enum = CameraConfig.MATRIX
-        camera_matrix_c = camera_config.to_c_struct()
-        camera_matrix_ptr = ctypes.byref(camera_matrix_c)
-    else:
-        camera_config_enum = camera_config
-        camera_matrix_ptr = None
+    # Convert camera matrix to C struct
+    camera_matrix_c = camera_matrix.to_c_struct()
+    camera_matrix_ptr = ctypes.byref(camera_matrix_c)
     
-    # Call C function
+    # Call C function (simplified interface - always uses camera matrices)
     error_code = lib.project_point(
         ctypes.byref(cam_pos_c),
         ctypes.byref(cam_rot_c),
         ctypes.byref(world_pt_c),
-        int(camera_config_enum),
         camera_matrix_ptr,
         ctypes.byref(result)
     )

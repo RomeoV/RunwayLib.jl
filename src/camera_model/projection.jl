@@ -1,7 +1,7 @@
 "Camera projection model for runway pose estimation."
 
 using LinearAlgebra
-using Unitful
+using Unitful, Unitful.DefaultSymbols
 using StaticArrays
 import Moshi.Match: @match
 
@@ -23,8 +23,8 @@ const CAMERA_CONFIG_OFFSET = CameraConfig{:offset}(25.0u"mm", 3.45u"μm" / 1pixe
 "Camera model using 3x3 projection matrix with uniform pixel units."
 struct CameraMatrix{S, T <: WithDims(px)} <: AbstractCameraConfig{S}
     matrix::SMatrix{3, 3, T, 9}  # 3x3 matrix for normalized coordinate projection
-    image_width::WithDims(px)
-    image_height::WithDims(px)
+    image_width::typeof(1.0px)
+    image_height::typeof(1.0px)
 
     function CameraMatrix{S}(matrix::SMatrix{3, 3, T}, width::WithDims(px), height::WithDims(px)) where {S, T}
         # Delegate to the validating constructor
@@ -66,6 +66,26 @@ function CameraMatrix(config::CameraConfig{S}) where {S}
         0px        0px        1px
     ]
     return CameraMatrix{S}(matrix, config.image_width, config.image_height)
+end
+
+# Constructor from CameraMatrix - inverse conversion
+function CameraConfig(camera_matrix::CameraMatrix{S}, pixel_size::typeof(1.0 * u"μm" / 1pixel) = 3.45u"μm" / 1pixel) where {S}
+    # Extract focal length in pixels from diagonal elements (ignore off-diagonal terms)
+    f_px_x = abs(camera_matrix.matrix[1, 1])  # Take absolute value to handle sign differences
+    f_px_y = abs(camera_matrix.matrix[2, 2])
+    
+    # Use average focal length if x and y are different (assuming square pixels)
+    f_px = (f_px_x + f_px_y) / 2
+    
+    # Convert focal length back to physical units
+    focal_length = f_px * pixel_size |> _uconvert(u"mm")
+    
+    return CameraConfig{S}(
+        focal_length,
+        pixel_size,
+        camera_matrix.image_width,
+        camera_matrix.image_height,
+    )
 end
 
 "Project 3D world point to 2D image coordinates using pinhole camera model."
@@ -138,4 +158,4 @@ convertcamconf(to::AbstractCameraConfig{S}, from::AbstractCameraConfig{S}, proj:
 
 
 "Validate 3x3 matrix for camera projection."
-validate_camera_matrix(matrix::SMatrix{3, 3}) = all(!iszero, [matrix[1, 1], matrix[2, 2]]) && matrix[3, :] ≈ SVector(0, 0, 1)px && all(isfinite, matrix)
+validate_camera_matrix(matrix::SMatrix{3, 3}) = all(!iszero, [matrix[1, 1], matrix[2, 2]]) && (matrix[3, :] ≈ SVector(0, 0, 1)px) && all(isfinite, matrix)
