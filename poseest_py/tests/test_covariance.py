@@ -11,7 +11,7 @@ This module tests:
 import unittest
 import numpy as np
 from poseest import (
-    WorldPoint, ProjectionPoint, Rotation, CameraConfig,
+    WorldPoint, ProjectionPoint, Rotation, CameraConfig, CameraMatrix,
     DefaultCovariance, ScalarCovariance, DiagonalCovariance, BlockDiagonalCovariance, FullCovariance,
     estimate_pose_6dof, estimate_pose_3dof, project_point,
     InvalidInputError, InsufficientPointsError
@@ -201,6 +201,23 @@ class TestCovarianceIntegration(unittest.TestCase):
         self.true_position = WorldPoint(-500.0, 10.0, 100.0)
         self.known_rotation = Rotation(yaw=-0.01, pitch=0.1, roll=0.02)
         
+        # Create equivalent camera matrix for offset coordinate system
+        # Based on CAMERA_CONFIG_OFFSET: 25mm focal length, 3.45μm pixel size, 4096x3000 image
+        focal_length_px = 25.0 / (3.45e-3)  # ~7246 pixels
+        cx = (4096 + 1) / 2  # 2048.5
+        cy = (3000 + 1) / 2  # 1500.5
+        
+        self.camera_matrix = CameraMatrix(
+            matrix=[
+                [-focal_length_px, 0.0, cx],  # negative for offset coordinate system
+                [0.0, -focal_length_px, cy],
+                [0.0, 0.0, 1.0]
+            ],
+            image_width=4096.0,
+            image_height=3000.0,
+            coordinate_system='offset'
+        )
+        
         # Generate realistic projections using the project_point function
         self.projections = []
         for corner in self.runway_corners:
@@ -208,7 +225,7 @@ class TestCovarianceIntegration(unittest.TestCase):
                 camera_position=self.true_position,
                 camera_rotation=self.known_rotation, 
                 world_point=corner,
-                camera_config=CameraConfig.OFFSET
+                camera_matrix=self.camera_matrix
             )
             self.projections.append(proj)
     
@@ -219,7 +236,7 @@ class TestCovarianceIntegration(unittest.TestCase):
         result = estimate_pose_6dof(
             runway_corners=self.runway_corners,
             projections=self.projections,
-            camera_config=CameraConfig.OFFSET,
+            camera_matrix=self.camera_matrix,
             covariance=cov
         )
         
@@ -242,7 +259,7 @@ class TestCovarianceIntegration(unittest.TestCase):
         result = estimate_pose_6dof(
             runway_corners=self.runway_corners,
             projections=self.projections,
-            camera_config=CameraConfig.OFFSET,
+            camera_matrix=self.camera_matrix,
             covariance=cov
         )
         
@@ -265,7 +282,7 @@ class TestCovarianceIntegration(unittest.TestCase):
         result = estimate_pose_6dof(
             runway_corners=self.runway_corners,
             projections=self.projections,
-            camera_config=CameraConfig.OFFSET,
+            camera_matrix=self.camera_matrix,
             covariance=cov
         )
         
@@ -289,7 +306,7 @@ class TestCovarianceIntegration(unittest.TestCase):
             runway_corners=self.runway_corners,
             projections=self.projections,
             known_rotation=self.known_rotation,
-            camera_config=CameraConfig.OFFSET,
+            camera_matrix=self.camera_matrix,
             covariance=cov
         )
         
@@ -310,7 +327,7 @@ class TestCovarianceIntegration(unittest.TestCase):
         result_6dof = estimate_pose_6dof(
             runway_corners=self.runway_corners,
             projections=self.projections,
-            camera_config=CameraConfig.OFFSET
+            camera_matrix=self.camera_matrix
         )
         
         # Check that 6DOF result is close to true pose
@@ -324,7 +341,7 @@ class TestCovarianceIntegration(unittest.TestCase):
             runway_corners=self.runway_corners,
             projections=self.projections,
             known_rotation=self.known_rotation,
-            camera_config=CameraConfig.OFFSET
+            camera_matrix=self.camera_matrix
         )
         
         # Check that 3DOF position is close to true position
@@ -342,7 +359,7 @@ class TestCovarianceIntegration(unittest.TestCase):
             estimate_pose_6dof(
                 runway_corners=self.runway_corners,
                 projections=self.projections,
-                camera_config=CameraConfig.OFFSET,
+                camera_matrix=self.camera_matrix,
                 covariance=invalid_cov
             )
     
@@ -355,7 +372,7 @@ class TestCovarianceIntegration(unittest.TestCase):
             estimate_pose_6dof(
                 runway_corners=self.runway_corners[:3],  # Only 3 points
                 projections=self.projections[:3],
-                camera_config=CameraConfig.OFFSET,
+                camera_matrix=self.camera_matrix,
                 covariance=cov
             )
         
@@ -365,7 +382,7 @@ class TestCovarianceIntegration(unittest.TestCase):
                 runway_corners=self.runway_corners[:2],  # Only 2 points
                 projections=self.projections[:2],
                 known_rotation=self.known_rotation,
-                camera_config=CameraConfig.OFFSET,
+                camera_matrix=self.camera_matrix,
                 covariance=cov
             )
 

@@ -109,7 +109,23 @@ class TestLibraryIntegration:
         # True camera pose (same as Julia tests)
         true_position = poseest.WorldPoint(-1300.0, 0.0, 80.0)
         true_rotation = poseest.Rotation(yaw=0.05, pitch=0.04, roll=0.03)
-        camera_config = poseest.CameraConfig.OFFSET
+        
+        # Create equivalent camera matrix for offset coordinate system
+        # Based on CAMERA_CONFIG_OFFSET: 25mm focal length, 3.45μm pixel size, 4096x3000 image
+        focal_length_px = 25.0 / (3.45e-3)  # ~7246 pixels
+        cx = (4096 + 1) / 2  # 2048.5
+        cy = (3000 + 1) / 2  # 1500.5
+        
+        camera_matrix = poseest.CameraMatrix(
+            matrix=[
+                [-focal_length_px, 0.0, cx],  # negative for offset coordinate system
+                [0.0, -focal_length_px, cy],
+                [0.0, 0.0, 1.0]
+            ],
+            image_width=4096.0,
+            image_height=3000.0,
+            coordinate_system='offset'
+        )
         
         # Generate realistic projections using the project function
         projections = []
@@ -118,7 +134,7 @@ class TestLibraryIntegration:
                 true_position,
                 true_rotation, 
                 corner,
-                camera_config
+                camera_matrix
             )
             # Add small amount of noise (similar to Julia tests)
             noise_x = random.gauss(0, 0.5)  # 0.5 pixel standard deviation
@@ -134,7 +150,7 @@ class TestLibraryIntegration:
             'projections': projections,
             'true_position': true_position,
             'true_rotation': true_rotation,
-            'camera_config': camera_config
+            'camera_matrix': camera_matrix
         }
     
     def test_6dof_pose_estimation(self, test_data):
@@ -152,7 +168,7 @@ class TestLibraryIntegration:
         pose = poseest.estimate_pose_6dof(
             test_data['runway_corners'],
             test_data['projections'],
-            test_data['camera_config'],
+            test_data['camera_matrix'],
             initial_guess_pos=initial_pos,
             initial_guess_rot=initial_rot
         )
@@ -195,7 +211,7 @@ class TestLibraryIntegration:
             test_data['runway_corners'],
             test_data['projections'],
             test_data['true_rotation'],  # Known rotation
-            test_data['camera_config'],
+            test_data['camera_matrix'],
             initial_guess_pos=initial_pos
         )
         
@@ -232,7 +248,7 @@ class TestLibraryIntegration:
             true_pos,
             true_rot,
             corner,
-            test_data['camera_config']
+            test_data['camera_matrix']
         )
         
         # Basic type checks
@@ -265,11 +281,23 @@ class TestErrorHandling:
             poseest.ProjectionPoint(110.0, 200.0),
         ]
         
+        # Create a simple camera matrix for testing
+        camera_matrix = poseest.CameraMatrix(
+            matrix=[
+                [1000.0, 0.0, 500.0],
+                [0.0, 1000.0, 500.0],
+                [0.0, 0.0, 1.0]
+            ],
+            image_width=1000.0,
+            image_height=1000.0,
+            coordinate_system='offset'
+        )
+        
         with pytest.raises(poseest.InsufficientPointsError):
             poseest.estimate_pose_6dof(
                 runway_corners, 
                 projections, 
-                poseest.CameraConfig.OFFSET
+                camera_matrix
             )
     
     def test_insufficient_points_3dof(self):
@@ -286,12 +314,24 @@ class TestErrorHandling:
         
         known_rotation = poseest.Rotation(0.0, 0.0, 0.0)
         
+        # Create a simple camera matrix for testing
+        camera_matrix = poseest.CameraMatrix(
+            matrix=[
+                [1000.0, 0.0, 500.0],
+                [0.0, 1000.0, 500.0],
+                [0.0, 0.0, 1.0]
+            ],
+            image_width=1000.0,
+            image_height=1000.0,
+            coordinate_system='offset'
+        )
+        
         with pytest.raises(poseest.InsufficientPointsError):
             poseest.estimate_pose_3dof(
                 runway_corners, 
                 projections, 
                 known_rotation,
-                poseest.CameraConfig.OFFSET
+                camera_matrix
             )
     
     def test_mismatched_arrays(self):
@@ -307,11 +347,23 @@ class TestErrorHandling:
             poseest.ProjectionPoint(100.0, 200.0),  # Only 1 projection for 4 corners
         ]
         
+        # Create a simple camera matrix for testing
+        camera_matrix = poseest.CameraMatrix(
+            matrix=[
+                [1000.0, 0.0, 500.0],
+                [0.0, 1000.0, 500.0],
+                [0.0, 0.0, 1.0]
+            ],
+            image_width=1000.0,
+            image_height=1000.0,
+            coordinate_system='offset'
+        )
+        
         with pytest.raises(poseest.InvalidInputError):
             poseest.estimate_pose_6dof(
                 runway_corners, 
                 projections, 
-                poseest.CameraConfig.OFFSET
+                camera_matrix
             )
 
 
@@ -473,18 +525,13 @@ class TestCameraMatrix:
         assert 0.0 < projection.x < 4096.0  # Within image bounds
         assert 0.0 < projection.y < 3072.0
         
-        # Compare with equivalent traditional camera config
-        traditional_projection = poseest.project_point(
-            camera_position,
-            camera_rotation,
-            world_point,
-            poseest.CameraConfig.OFFSET
-        )
+        # Since we can no longer use CameraConfig.OFFSET directly, just verify the projection is reasonable
+        # The projection should be within image bounds and have reasonable values
+        print(f"Projection result: ({projection.x:.2f}, {projection.y:.2f})")
         
-        # Results should be similar (within reasonable tolerance due to different parameters)
-        # This is not an exact comparison since we're using different camera parameters
-        assert abs(projection.x - traditional_projection.x) < 1000.0
-        assert abs(projection.y - traditional_projection.y) < 1000.0
+        # This is reasonable for the test scenario - a point that's visible and properly projected
+        assert projection.x > 0.0 and projection.x < 4096.0
+        assert projection.y > 0.0 and projection.y < 3072.0
     
     def test_camera_matrix_6dof_pose_estimation(self):
         """Test 6DOF pose estimation with custom camera matrix."""

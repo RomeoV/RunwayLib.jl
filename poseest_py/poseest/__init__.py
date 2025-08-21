@@ -22,6 +22,7 @@ from .core import (
     
     # Configuration
     CameraConfig,
+    CameraMatrix,
     
     # Covariance specifications
     CovarianceSpec,
@@ -58,6 +59,7 @@ __all__ = [
     
     # Configuration
     "CameraConfig",
+    "CameraMatrix",
     
     # Covariance specifications
     "CovarianceSpec",
