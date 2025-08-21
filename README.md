@@ -389,7 +389,7 @@ e.g. using `uv`
 unzip poseest-python-package.zip -d poseest
 cd poseest
 uv venv
-uv pip install -e .
+uv pip install .
 uv run python
 ```
 
