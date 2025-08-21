@@ -50,14 +50,14 @@ Documentation = "https://poseest-py.readthedocs.io/"
 "Bug Tracker" = "https://github.com/yourusername/poseest-py/issues"
 
 [tool.setuptools]
-packages = ["poseest"]
+packages = ["poseest", "poseest.native"]
 include-package-data = true
 
 [tool.setuptools.package-data]
-poseest = [
-    "native/lib/**/*",
-    "native/include/**/*",
-    "native/share/**/*",
+poseest.native = [
+    "lib/**/*",
+    "include/**/*",
+    "share/**/*",
 ]
 
 [tool.setuptools.dynamic]
