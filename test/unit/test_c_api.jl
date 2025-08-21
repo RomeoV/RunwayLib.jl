@@ -1,6 +1,6 @@
 using Test
 using RunwayLib
-using RunwayLib: _ustrip
+using RunwayLib: _ustrip, CameraMatrix
 using StaticArrays
 using Rotations
 using Unitful
@@ -39,22 +39,31 @@ using LinearAlgebra: I
         # Allocate result struct
         result = Ref{RunwayLib.PoseEstimate_C}()
 
+        # Create camera matrix for testing (convert from CameraConfig)
+        camera_matrix_jl = CameraMatrix(CAMERA_CONFIG_OFFSET)
+        camera_matrix_c = RunwayLib.CameraMatrix_C(
+            camera_matrix_jl.matrix .|> RunwayLib._ustrip(px),
+            camera_matrix_jl.image_width |> RunwayLib._ustrip(px),
+            camera_matrix_jl.image_height |> RunwayLib._ustrip(px),
+            Cint(1)  # offset coordinate system
+        )
+        
         # Test function call (may return NO_CONVERGENCE due to optimizer issue)
         dummy_cov_data = [0.0]  # Dummy data for COV_DEFAULT case
         error_code = RunwayLib.estimate_pose_6dof(
             pointer(runway_corners_), pointer(projections_),
             Cint(length(runway_corners_)), pointer(dummy_cov_data), RunwayLib.COV_DEFAULT,
-            RunwayLib.CAMERA_CONFIG_OFFSET_C, Base.unsafe_convert(Ptr{RunwayLib.PoseEstimate_C}, result)
+            Base.unsafe_convert(Ptr{RunwayLib.CameraMatrix_C}, Ref(camera_matrix_c)), Ptr{RunwayLib.WorldPointF64}(0), Ptr{RunwayLib.RotYPRF64}(0), Base.unsafe_convert(Ptr{RunwayLib.PoseEstimate_C}, result)
         )
 
         # Function should not crash - accept either success or convergence error
         @test error_code == RunwayLib.POSEEST_SUCCESS
         @test result[].position * m ≈ true_pos rtol = 1e-2
 
-        @test_opt stacktrace_types_limit=1 RunwayLib.estimate_pose_6dof(
+        @test_opt RunwayLib.estimate_pose_6dof(
             pointer(runway_corners_), pointer(projections_),
             Cint(length(runway_corners_)), pointer(dummy_cov_data), RunwayLib.COV_DEFAULT,
-            RunwayLib.CAMERA_CONFIG_OFFSET_C, Base.unsafe_convert(Ptr{RunwayLib.PoseEstimate_C}, result)
+            Base.unsafe_convert(Ptr{RunwayLib.CameraMatrix_C}, Ref(camera_matrix_c)), Ptr{RunwayLib.WorldPointF64}(0), Ptr{RunwayLib.RotYPRF64}(0), Base.unsafe_convert(Ptr{RunwayLib.PoseEstimate_C}, result)
         )
     end
 
@@ -69,24 +78,33 @@ using LinearAlgebra: I
         # Create known rotation for 3DOF
         known_rot_c = Rotations.params(true_rot)
 
+        # Create camera matrix for testing (convert from CameraConfig)
+        camera_matrix_jl = CameraMatrix(CAMERA_CONFIG_OFFSET)
+        camera_matrix_c = RunwayLib.CameraMatrix_C(
+            camera_matrix_jl.matrix .|> RunwayLib._ustrip(px),
+            camera_matrix_jl.image_width |> RunwayLib._ustrip(px),
+            camera_matrix_jl.image_height |> RunwayLib._ustrip(px),
+            Cint(1)  # offset coordinate system
+        )
+        
         # Test function call (may return NO_CONVERGENCE due to optimizer issue)
         dummy_cov_data = [0.0]  # Dummy data for COV_DEFAULT case
         error_code = RunwayLib.estimate_pose_3dof(
             pointer(runway_corners_), pointer(projections_),
             Cint(length(runway_corners_)), Base.unsafe_convert(Ptr{RunwayLib.RotYPRF64}, Ref(known_rot_c)),
             pointer(dummy_cov_data), RunwayLib.COV_DEFAULT,
-            RunwayLib.CAMERA_CONFIG_OFFSET_C, Base.unsafe_convert(Ptr{RunwayLib.PoseEstimate_C}, result)
+            Base.unsafe_convert(Ptr{RunwayLib.CameraMatrix_C}, Ref(camera_matrix_c)), Ptr{RunwayLib.WorldPointF64}(0), Base.unsafe_convert(Ptr{RunwayLib.PoseEstimate_C}, result)
         )
 
         # Function should not crash - accept either success or convergence error
         @test error_code == RunwayLib.POSEEST_SUCCESS
         @test result[].position * m ≈ true_pos rtol = 1e-2
 
-        @test_opt stacktrace_types_limit=1 RunwayLib.estimate_pose_3dof(
+        @test_opt RunwayLib.estimate_pose_3dof(
             pointer(runway_corners_), pointer(projections_),
             Cint(length(runway_corners_)), Base.unsafe_convert(Ptr{RunwayLib.RotYPRF64}, Ref(known_rot_c)),
             pointer(dummy_cov_data), RunwayLib.COV_DEFAULT,
-            RunwayLib.CAMERA_CONFIG_OFFSET_C, Base.unsafe_convert(Ptr{RunwayLib.PoseEstimate_C}, result)
+            Base.unsafe_convert(Ptr{RunwayLib.CameraMatrix_C}, Ref(camera_matrix_c)), Ptr{RunwayLib.WorldPointF64}(0), Base.unsafe_convert(Ptr{RunwayLib.PoseEstimate_C}, result)
         )
     end
 
@@ -99,12 +117,21 @@ using LinearAlgebra: I
         # Allocate result
         result = Ref{RunwayLib.ProjectionPointF64}()
 
+        # Create camera matrix for testing (convert from CameraConfig)
+        camera_matrix_jl = CameraMatrix(CAMERA_CONFIG_OFFSET)
+        camera_matrix_c = RunwayLib.CameraMatrix_C(
+            camera_matrix_jl.matrix .|> RunwayLib._ustrip(px),
+            camera_matrix_jl.image_width |> RunwayLib._ustrip(px),
+            camera_matrix_jl.image_height |> RunwayLib._ustrip(px),
+            Cint(1)  # offset coordinate system
+        )
+        
         # Test projection
         error_code = RunwayLib.project_point(
             Base.unsafe_convert(Ptr{RunwayLib.WorldPointF64}, Ref(position)),
             Base.unsafe_convert(Ptr{RunwayLib.RotYPRF64}, Ref(rotation)),
             Base.unsafe_convert(Ptr{RunwayLib.WorldPointF64}, Ref(world_point)),
-            RunwayLib.CAMERA_CONFIG_OFFSET_C, Base.unsafe_convert(Ptr{RunwayLib.ProjectionPointF64}, result)
+            Base.unsafe_convert(Ptr{RunwayLib.CameraMatrix_C}, Ref(camera_matrix_c)), Base.unsafe_convert(Ptr{RunwayLib.ProjectionPointF64}, result)
         )
 
         @test error_code == RunwayLib.POSEEST_SUCCESS
@@ -121,11 +148,20 @@ using LinearAlgebra: I
         projection_points_ = [RunwayLib.ProjectionPointF64(0.0, 0.0)]
         result = Ref{RunwayLib.PoseEstimate_C}()
 
+        # Create dummy camera matrix for error testing (convert from CameraConfig)
+        camera_matrix_jl = CameraMatrix(CAMERA_CONFIG_OFFSET)
+        camera_matrix_c = RunwayLib.CameraMatrix_C(
+            camera_matrix_jl.matrix .|> RunwayLib._ustrip(px),
+            camera_matrix_jl.image_width |> RunwayLib._ustrip(px),
+            camera_matrix_jl.image_height |> RunwayLib._ustrip(px),
+            Cint(1)  # offset coordinate system
+        )
+        
         dummy_cov_data = [0.0]  # Dummy data for COV_DEFAULT case
         error_code = RunwayLib.estimate_pose_6dof(
             pointer(world_points_), pointer(projection_points_),
             Cint(1), pointer(dummy_cov_data), RunwayLib.COV_DEFAULT,
-            RunwayLib.CAMERA_CONFIG_OFFSET_C, Base.unsafe_convert(Ptr{RunwayLib.PoseEstimate_C}, result)  # Only 1 point, need at least 4
+            Base.unsafe_convert(Ptr{RunwayLib.CameraMatrix_C}, Ref(camera_matrix_c)), Ptr{RunwayLib.WorldPointF64}(0), Ptr{RunwayLib.RotYPRF64}(0), Base.unsafe_convert(Ptr{RunwayLib.PoseEstimate_C}, result)  # Only 1 point, need at least 4
         )
         @test error_code == RunwayLib.POSEEST_ERROR_INSUFFICIENT_POINTS
 
