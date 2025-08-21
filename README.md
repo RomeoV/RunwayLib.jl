@@ -401,7 +401,7 @@ The compiled library can be used from Python:
 ```python
 from poseest import (
     estimate_pose_3dof, estimate_pose_6dof, WorldPoint, ProjectionPoint, Rotation,
-    CameraConfig, DiagonalCovariance
+    CameraMatrix, DiagonalCovariance
 )
 
 # Define runway corners in world coordinates (meters)
@@ -420,6 +420,23 @@ projections = [
     ProjectionPoint(320.0, 280.0)
 ]
 
+# Create camera matrix for offset coordinate system
+# Based on typical camera: 25mm focal length, 3.45μm pixel size, 4096x3000 image
+focal_length_px = 25.0 / (3.45e-3)  # ~7246 pixels
+cx = (4096 + 1) / 2  # Principal point x: 2048.5
+cy = (3000 + 1) / 2  # Principal point y: 1500.5
+
+camera_matrix = CameraMatrix(
+    matrix=[
+        [-focal_length_px, 0.0, cx],  # negative for offset coordinate system
+        [0.0, -focal_length_px, cy],
+        [0.0, 0.0, 1.0]
+    ],
+    image_width=4096.0,
+    image_height=3000.0,
+    coordinate_system='offset'
+)
+
 # Diagonal covariance (pixel variances, not std deviations)
 pixel_variances = [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5]
 covariance = DiagonalCovariance(variances=pixel_variances)
@@ -428,7 +445,7 @@ covariance = DiagonalCovariance(variances=pixel_variances)
 result_6dof = estimate_pose_6dof(
     runway_corners=runway_corners,
     projections=projections,
-    camera_config=CameraConfig.OFFSET,
+    camera_matrix=camera_matrix,
     covariance=covariance
 )
 
@@ -438,7 +455,7 @@ result_3dof = estimate_pose_3dof(
     runway_corners=runway_corners,
     projections=projections,
     known_rotation=known_rotation,
-    camera_config=CameraConfig.OFFSET,
+    camera_matrix=camera_matrix,
     covariance=covariance
 )
 
