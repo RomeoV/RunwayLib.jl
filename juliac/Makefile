@@ -53,7 +53,24 @@ $(LIB_DIR)/.installed: Manifest.toml
 	@touch $(LIB_DIR)/.installed
 	@echo "Julia libraries installed to $(LIB_DIR)"
 
-.PHONY: clean run bundle
+$(LIB_DIR)/.cleaned: $(LIB_DIR)/.installed required_libraries.txt
+	@echo "Cleaning $(LIB_DIR)/julia directory based on required_libraries.txt"
+	@echo "Before cleanup: $$(du -sh $(LIB_DIR)/ | cut -f1)"
+	cd $(LIB_DIR)/julia && \
+	for file in *.so*; do \
+		[ -f "$$file" ] && \
+		stem=$$(echo "$$file" | sed 's/\.so.*/.so/') && \
+		! grep -q "$$stem" ../../../required_libraries.txt && \
+		rm -f "$$file" || true; \
+	done
+	@echo "After cleanup: $$(du -sh $(LIB_DIR)/julia/ | cut -f1)"
+	@touch $(LIB_DIR)/.cleaned
+
+symlink: bundle
+	rm -rf ../poseest_py/poseest/native/RunwayLibCompiled; \
+	ln -rs ./RunwayLibCompiled ../poseest_py/poseest/native/RunwayLibCompiled
+
+.PHONY: clean run bundle symlink
 
 clean:
 	-rm -rf mainc Manifest.toml abiinfo.json $(COMPILED_DIR)
