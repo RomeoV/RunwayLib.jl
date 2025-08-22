@@ -7,6 +7,7 @@ This module provides the main Python interface to the Julia/C pose estimation li
 import ctypes
 import os
 import math
+import numpy as np
 from enum import IntEnum
 from typing import List, Union, Tuple, Optional
 from dataclasses import dataclass
@@ -261,10 +262,10 @@ class CameraMatrix:
         """Convert to C structure."""
         c_struct = CameraMatrix_C()
         
-        # Flatten matrix in row-major order
-        flat_matrix = []
-        for row in self.matrix:
-            flat_matrix.extend(row)
+        # Convert to numpy array and flatten in column-major order (Fortran order)
+        # Julia SMatrix expects column-major storage
+        matrix_np = np.array(self.matrix, dtype=np.float64)
+        flat_matrix = matrix_np.flatten(order='F')  # 'F' = Fortran/column-major order
         
         # Copy to C array
         for i, val in enumerate(flat_matrix):
@@ -279,13 +280,11 @@ class CameraMatrix:
     @classmethod
     def from_c_struct(cls, c_struct: CameraMatrix_C) -> 'CameraMatrix':
         """Create from C structure."""
-        # Reconstruct matrix from flat array
-        matrix = []
-        for i in range(3):
-            row = []
-            for j in range(3):
-                row.append(c_struct.matrix[i * 3 + j])
-            matrix.append(row)
+        # Reconstruct matrix from flat array (stored in column-major order)
+        flat_array = np.array([c_struct.matrix[i] for i in range(9)], dtype=np.float64)
+        # Reshape from column-major (Fortran order) back to 3x3
+        matrix_np = flat_array.reshape((3, 3), order='F')
+        matrix = matrix_np.tolist()
         
         coord_system = 'centered' if c_struct.coordinate_system == 0 else 'offset'
         
