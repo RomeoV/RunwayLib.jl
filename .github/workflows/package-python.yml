@@ -25,7 +25,7 @@ jobs:
       - name: Build executable and library
         working-directory: juliac
         env:
-          JULIA_CPU_TARGET: "generic;sandybridge,-xsaveopt,clone_all;haswell,-rdrnd,base(1)"
+          JULIA_CPU_TARGET: "generic"
         run: |
           # CPU target set similar to official binaries: https://docs.julialang.org/en/v1/devdocs/sysimg/#Specifying-multiple-system-image-targets
           make
