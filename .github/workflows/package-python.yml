@@ -10,11 +10,8 @@ concurrency:
 jobs:
   package-python:
     runs-on: ubuntu-latest
-    container: almalinux:8
+    container: ubuntu:22.04
     steps:
-      - name: Install Build Tools
-        run: dnf groupinstall "Development Tools" -y
-
       - uses: actions/checkout@v4
 
       - name: Setup Julia
