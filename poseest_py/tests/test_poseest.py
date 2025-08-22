@@ -478,8 +478,8 @@ class TestCameraMatrix:
         assert c_struct.image_height == 3072.0
         assert c_struct.coordinate_system == 1  # offset = 1
         
-        # Check matrix values (flattened row-major)
-        expected_flat = [1200.0, 0.0, 2048.0, 0.0, 1200.0, 1536.0, 0.0, 0.0, 1.0]
+        # Check matrix values (flattened column-major for Julia SMatrix)
+        expected_flat = [1200.0, 0.0, 0.0, 0.0, 1200.0, 0.0, 2048.0, 1536.0, 1.0]
         for i, expected_val in enumerate(expected_flat):
             assert abs(c_struct.matrix[i] - expected_val) < 1e-10
         
