@@ -10,15 +10,21 @@ abstract type AbstractCameraConfig{S} end
 
 # Camera configuration with type parameter for coordinate system
 struct CameraConfig{S} <: AbstractCameraConfig{S}
-    focal_length::typeof(1.0mm)
-    pixel_size::typeof(1.0μm/px)
+    focal_length_px::typeof(1.0px)
     image_width::typeof(1.0px)
     image_height::typeof(1.0px)
 end
 
 # Default camera configurations
-const CAMERA_CONFIG_CENTERED = CameraConfig{:centered}(25.0u"mm", 3.45u"μm" / 1pixel, 4096pixel, 3000pixel)
-const CAMERA_CONFIG_OFFSET = CameraConfig{:offset}(25.0u"mm", 3.45u"μm" / 1pixel, 4096pixel, 3000pixel)
+# 25.0mm ÷ 3.45μm = 7246.4 pixels
+const CAMERA_CONFIG_CENTERED = CameraConfig{:centered}(7246.4px, 4096px, 3000px)
+const CAMERA_CONFIG_OFFSET = CameraConfig{:offset}(7246.4px, 4096px, 3000px)
+
+# Backward compatibility constructor for existing code
+function CameraConfig{S}(focal_length::typeof(1.0mm), pixel_size::typeof(1.0μm/px), image_width::typeof(1.0px), image_height::typeof(1.0px)) where {S}
+    focal_length_px = focal_length / pixel_size |> _uconvert(px)
+    return CameraConfig{S}(focal_length_px, image_width, image_height)
+end
 
 "Camera model using 3x3 projection matrix with uniform pixel units."
 struct CameraMatrix{S, T <: WithDims(px)} <: AbstractCameraConfig{S}
@@ -52,7 +58,7 @@ getopticalcenter(cam::CameraMatrix) = SA[cam.matrix[1, 3], cam.matrix[2, 3]]
 
 # Constructor from CameraConfig
 function CameraMatrix(config::CameraConfig{S}) where {S}
-    f_px = config.focal_length / config.pixel_size |> _uconvert(px)
+    f_px = config.focal_length_px
     cx, cy = getopticalcenter(config)
     sgn = S == :centered ? +1 : -1
     # Build uniform camera matrix with [px] units for normalized coordinates
@@ -69,24 +75,27 @@ function CameraMatrix(config::CameraConfig{S}) where {S}
 end
 
 # Constructor from CameraMatrix - inverse conversion
-function CameraConfig(camera_matrix::CameraMatrix{S}, pixel_size::typeof(1.0 * u"μm" / 1pixel) = 3.45u"μm" / 1pixel) where {S}
+CameraConfig(camera_matrix::CameraMatrix{S}) where {S} = CameraConfig{S}(camera_matrix)
+function CameraConfig{S′}(camera_matrix::CameraMatrix{S}) where {S, S′}
     # Extract focal length in pixels from diagonal elements (ignore off-diagonal terms)
     f_px_x = abs(camera_matrix.matrix[1, 1])  # Take absolute value to handle sign differences
     f_px_y = abs(camera_matrix.matrix[2, 2])
     
     # Use average focal length if x and y are different (assuming square pixels)
-    f_px = (f_px_x + f_px_y) / 2
+    focal_length_px = (f_px_x + f_px_y) / 2
     
-    # Convert focal length back to physical units
-    focal_length = f_px * pixel_size |> _uconvert(u"mm")
-    
-    return CameraConfig{S}(
-        focal_length,
-        pixel_size,
+    return CameraConfig{S′}(
+        focal_length_px,
         camera_matrix.image_width,
         camera_matrix.image_height,
     )
 end
+CameraConfig(cameraconf::CameraConfig{S}) where {S} = cameraconf
+CameraConfig{S′}(cameraconf::CameraConfig{S}) where {S, S′} = CameraConfig{S′}(
+    cameraconf.focal_length_px,
+    cameraconf.image_width,
+    cameraconf.image_height
+)
 
 "Project 3D world point to 2D image coordinates using pinhole camera model."
 function project(
@@ -96,9 +105,8 @@ function project(
     cam_pt = world_pt_to_cam_pt(cam_pos, cam_rot, world_pt)
     cam_pt.x <= 0m && throw(BehindCameraException(cam_pt.x))
 
-    # Calculate focal length in pixels
-    (; focal_length, pixel_size) = camconfig
-    f_pixels = focal_length / pixel_size
+    # Get focal length in pixels
+    f_pixels = camconfig.focal_length_px
 
     u_centered = f_pixels * (cam_pt.y / cam_pt.x) |> _uconvert(pixel)  # Left positive
     v_centered = f_pixels * (cam_pt.z / cam_pt.x) |> _uconvert(pixel)  # Up positive
