@@ -147,6 +147,7 @@ const ALG = LevenbergMarquardt(; autodiff=AD, linsolve=CholeskyFactorization(),
 
 "Camera configuration type for precompilation"
 const CAMCONF4COMP = CAMERA_CONFIG_OFFSET
+const S4COMP = :offset
 
 const CACHE_6DOF = let
     (; runway_corners, projections, true_pos, true_rot) = setup_for_precompile()
@@ -182,7 +183,7 @@ end
 function estimatepose6dof(
         runway_corners::AbstractVector{<:WorldPoint},
         observed_corners::AbstractVector{<:ProjectionPoint{T, S}},
-        config::AbstractCameraConfig{S} = CAMERA_CONFIG_OFFSET,
+        camconfig::AbstractCameraConfig{S} = CAMERA_CONFIG_OFFSET,
         noise_model::N = _defaultnoisemodel(observed_corners);
         initial_guess_pos::AbstractVector{<:Length} = SA[-1000.0, 0.0, 100.0]m,
         initial_guess_rot::AbstractVector{<:DimensionlessQuantity} = SA[0.0, 0.0, 0.0]rad,
@@ -195,12 +196,12 @@ function estimatepose6dof(
 
     # for precompile we need the correct types
     observed_corners = [
-        convertcamconf(CAMCONF4COMP, config, proj)
+        convertcamconf(CAMCONF4COMP, camconfig, proj)
             for proj in observed_corners
     ]
     ps = PoseOptimizationParams6DOF(
         runway_corners |> Vector, observed_corners |> Vector,
-        CAMCONF4COMP, noise_model
+        CameraConfig{S4COMP}(camconfig), noise_model
     )
 
     # Get or create cache for this problem size
@@ -219,7 +220,7 @@ function estimatepose3dof(
         runway_corners::AbstractVector{<:WorldPoint},
         observed_corners::AbstractVector{<:ProjectionPoint{T, S}},
         known_attitude::RotZYX,
-        config::AbstractCameraConfig{S} = CAMERA_CONFIG_OFFSET,
+        camconfig::AbstractCameraConfig{S} = CAMERA_CONFIG_OFFSET,
         noise_model::N = _defaultnoisemodel(observed_corners);
         initial_guess_pos::AbstractVector{<:Length} = SA[-1000.0, 0.0, 100.0]m,
         optimization_config = DEFAULT_OPTIMIZATION_CONFIG
@@ -229,12 +230,12 @@ function estimatepose3dof(
 
     # for precompile we need the correct types
     observed_corners = [
-        convertcamconf(CAMCONF4COMP, config, proj)
+        convertcamconf(CAMCONF4COMP, camconfig, proj)
             for proj in observed_corners
     ]
     ps = PoseOptimizationParams3DOF(
         runway_corners |> Vector, observed_corners |> Vector,
-        CAMCONF4COMP, noise_model, known_attitude
+        CameraConfig{S4COMP}(camconfig), noise_model, known_attitude
     )
 
     # Get or create cache for this problem size
