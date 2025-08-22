@@ -21,11 +21,11 @@ mainc: main.c $(INCLUDE_DIR)/libposeest.h $(LIB_DIR)
 $(LIB_DIR)/libposeest.so: loadrunwaylib.jl Project.toml Manifest.toml $(SRC)
 	@mkdir -p $(LIB_DIR)
 	JULIAC=$$(julia -e 'print(normpath(joinpath(Sys.BINDIR, Base.DATAROOTDIR, "julia", "juliac", "juliac.jl")))' 2>/dev/null || echo "") ; \
-	$(JULIA) --project=. --depwarn=error "$$JULIAC" --experimental --trim=unsafe-warn --compile-ccallable --output-lib $(LIB_DIR)/libposeest loadrunwaylib.jl --relative-rpath
+	$(JULIA) --project=. --depwarn=error "$$JULIAC" --experimental --trim=unsafe-warn --compile-ccallable --output-lib $(LIB_DIR)/libposeest loadrunwaylib.jl --relative-rpath > trim.log
 
 Manifest.toml: Project.toml ../Project.toml
 	-rm -f Manifest.toml
-	$(JULIA) --project=. -e 'using Pkg; Pkg.instantiate()'
+	$(JULIA) --project=. -e 'using Pkg; Pkg.instantiate()' 2> Manifest.toml.log
 	@touch $@ # Pkg.instantiate doesn't update the mtime if there are no changes
 
 # Create include directory with header file
