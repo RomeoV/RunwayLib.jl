@@ -11,7 +11,7 @@ This module tests:
 import unittest
 import numpy as np
 from poseest import (
-    WorldPoint, ProjectionPoint, Rotation, CameraConfig, CameraMatrix,
+    WorldPoint, ProjectionPoint, Rotation, CameraMatrix,
     DefaultCovariance, ScalarCovariance, DiagonalCovariance, BlockDiagonalCovariance, FullCovariance,
     estimate_pose_6dof, estimate_pose_3dof, project_point,
     InvalidInputError, InsufficientPointsError
