@@ -28,6 +28,9 @@ struct PoseEstimate_C
     converged::Cint
 end
 
+# Type alias for integrity monitoring results - matches NamedTuple layout with C-compatible types
+const IntegrityResult_C = @NamedTuple{stat::Float64, p_value::Float64, dofs::Cint, residual_norm::Float64}
+
 struct CameraMatrix_C
     matrix::SMatrix{3, 3, Float64, 9}  # 3x3 camera matrix (unitless)
     image_width::Float64           # Image width in pixels (unitless)
@@ -397,4 +400,78 @@ Base.@ccallable function project_point(
     unsafe_store!(result, result_c)
 
     return POSEEST_SUCCESS
+end
+
+# Integrity monitoring function
+Base.@ccallable function compute_integrity(
+    camera_position::Ptr{WorldPointF64},
+    camera_rotation::Ptr{RotYPRF64}, 
+    runway_corners_::Ptr{WorldPointF64},
+    projections_::Ptr{ProjectionPointF64},
+    num_points::Cint,
+    covariance_data::Ptr{Cdouble},
+    covariance_type::COVARIANCE_TYPE_C,
+    camera_matrix::Ptr{CameraMatrix_C},
+    result::Ptr{IntegrityResult_C}
+)::Cint
+    try
+        # Validate inputs
+        if camera_position == C_NULL || camera_rotation == C_NULL || 
+           runway_corners_ == C_NULL || projections_ == C_NULL || result == C_NULL
+            return POSEEST_ERROR_INVALID_INPUT
+        end
+
+        if num_points < 4  # Need at least 4 points for 6-DOF integrity monitoring
+            return POSEEST_ERROR_INSUFFICIENT_POINTS
+        end
+
+        # Convert camera pose from C to Julia types
+        cam_pos_c = unsafe_load(camera_position)
+        cam_rot_c = unsafe_load(camera_rotation)
+        jl_cam_pos = cam_pos_c .* 1m
+        jl_cam_rot = RotZYX(cam_rot_c[1], cam_rot_c[2], cam_rot_c[3])
+
+        # Convert C arrays to Julia arrays
+        runway_corners = unsafe_wrap(Array, runway_corners_, num_points) .* 1m
+        projections = unsafe_wrap(Array, projections_, num_points) .* 1px
+
+        # Parse covariance specification
+        noise_cov = parse_covariance_data(covariance_type, covariance_data, num_points)
+
+        # Validate camera matrix
+        if camera_matrix == C_NULL
+            return POSEEST_ERROR_INVALID_INPUT
+        end
+        
+        # Load camera matrix and convert to CameraConfig
+        camera_matrix_c = unsafe_load(camera_matrix)
+        camconfig = get_camera_config_from_matrix(camera_matrix_c)
+
+        # Compute integrity statistics
+        integrity_result = compute_integrity_statistic(
+            jl_cam_pos, jl_cam_rot,
+            runway_corners, projections,
+            noise_cov, camconfig
+        )
+
+        # Convert result to C-compatible NamedTuple (cast dofs to Cint)
+        result_c = IntegrityResult_C((
+            integrity_result.stat,
+            integrity_result.p_value, 
+            Cint(integrity_result.dofs),
+            integrity_result.residual_norm |> _ustrip(px)
+        ))
+
+        # Write result to output pointer
+        unsafe_store!(result, result_c)
+
+        return POSEEST_SUCCESS
+
+    catch e
+        if isa(e, BoundsError) || isa(e, ArgumentError)
+            return POSEEST_ERROR_INVALID_INPUT
+        else
+            return POSEEST_ERROR_NO_CONVERGENCE
+        end
+    end
 end
