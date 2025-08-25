@@ -130,17 +130,13 @@ function project(
     cam_pt = world_pt_to_cam_pt(cam_pos, cam_rot, world_pt)
     cam_pt.x <= 0m && throw(BehindCameraException(cam_pt.x))
 
-    # P_norm = [X/Z, Y/Z, 1]^T (unitless) - ustrip needed for Julia's type system
+    # P_norm = [X/Z, Y/Z, 1]^T (unitless)
     P_norm = SA[cam_pt.y / cam_pt.x, cam_pt.z / cam_pt.x, 1.0]
 
     # p_img [px] = K_norm [px] * P_norm [unitless] = [result1, result2, result3] [px]
-    image_coords_homogeneous = camconfig.matrix * P_norm
+    image_coords = camconfig.matrix * P_norm
 
-    if abs(image_coords_homogeneous[3]) < 1.0e-12px
-        throw(DivideError("Point projects to infinity (homogeneous coordinate near zero)"))
-    end
-
-    u, v = image_coords_homogeneous[1:2] / image_coords_homogeneous[3]
+    u, v = image_coords[1:2]
 
     T′′ = typeof(u)
     return ProjectionPoint{T′′, S}(u, v)
