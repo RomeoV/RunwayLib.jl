@@ -1,11 +1,12 @@
 module RunwayLib
 
-using Distributions: Distributions, Normal
+using Distributions: Distributions, Normal, Chisq, ccdf
 using LinearAlgebra: LinearAlgebra, /, cholesky
 using LinearSolve: CholeskyFactorization, LinearSolve, NonlinearFunction,
     NonlinearLeastSquaresProblem, init
 using Rotations: Rotations, RotZYX, Rotation
 using ADTypes: AutoForwardDiff
+using DifferentiationInterface: DifferentiationInterface, jacobian
 using NonlinearSolveFirstOrder: LevenbergMarquardt, NonlinearLeastSquaresProblem, NonlinearFunction,
     reinit!, solve!
 import StaticArrays: similar_type
@@ -21,6 +22,7 @@ import SciMLBase
 
 _uconvert(u) = Base.Fix1(uconvert, u)
 _ustrip(u) = Base.Fix1(ustrip, u)
+_reduce(f::F) where F = Base.Fix1(reduce, f)
 
 # Define custom pixel unit
 @unit pixel "pixel" Pixel 1 false
@@ -73,6 +75,7 @@ include("camera_model/errors.jl")
 # include("data_management/runway_database.jl")
 include("pose_estimation/optimization.jl")
 include("pose_estimation/errors.jl")
+include("integrity/integrity.jl")
 include("entrypoints.jl")
 include("c_api.jl")
 
@@ -80,13 +83,8 @@ include("c_api.jl")
 export estimatepose6dof, estimatepose3dof, pose_optimization
 export PoseOptimizationParams6DOF, PoseOptimizationParams3DOF
 
-function compute_raim_statistic(pose_estimate, runway_spec, corners, noise_model)
-    error("compute_raim_statistic not yet implemented")
-end
-
-function check_integrity(raim_statistic; significance_level = 0.05)
-    error("check_integrity not yet implemented")
-end
+# Export integrity monitoring functions
+export compute_integrity_statistic, check_integrity, compute_jacobian, compute_residual
 
 function load_runway_database(filename)
     error("load_runway_database not yet implemented")

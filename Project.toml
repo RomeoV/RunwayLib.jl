@@ -8,6 +8,7 @@ ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
 CEnum = "fa961155-64e5-5f13-b03f-caf6b980ea82"
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 DiffEqBase = "2b5f629d-d688-5b77-993f-72d75c75574e"
+DifferentiationInterface = "a0c0ee7d-e4b9-4e03-894e-1c5f64a51d63"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -25,17 +26,18 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 TypedTables = "9d95f2ec-7b3d-5a63-8d20-e2491e220bb9"
 Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
-XLSX = "fdbf4ff8-1666-58a4-91e7-1b58723a45e0"
 
 [sources]
 ForwardDiff = {rev = "rv/remove-quote-assert-string-interpolation", url = "https://github.com/RomeoV/ForwardDiff.jl.git"}
-NonlinearSolveFirstOrder = {rev = "rv/fix-extra-kwargs", url = "https://github.com/RomeoV/NonlinearSolve.jl", subdir="lib/NonlinearSolveFirstOrder"}
+NonlinearSolveFirstOrder = {rev = "rv/fix-extra-kwargs", subdir = "lib/NonlinearSolveFirstOrder", url = "https://github.com/RomeoV/NonlinearSolve.jl"}
 SciMLBase = {rev = "as/fix-jet-opt", url = "https://github.com/AayushSabharwal/SciMLBase.jl"}
 
 [compat]
 ADTypes = "^1.16.0"
 CEnum = "^0.5.0"
 DiffEqBase = "^6.179.0"
+DifferentiationInterface = "0.7.7"
+Distributions = "0.25.120"
 ForwardDiff = "^1.0.1"
 LinearAlgebra = "^1.11.0"
 LinearSolve = "^3.25.0"
@@ -52,8 +54,8 @@ StatsBase = "0.34.5"
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
-[targets]
-test = ["Test"]
-
 [preferences.LinearSolve]
 LoadMKL_JLL = false
+
+[targets]
+test = ["Test"]
