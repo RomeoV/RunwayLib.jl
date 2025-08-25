@@ -400,8 +400,9 @@ The compiled library can be used from Python:
 
 ```python
 from poseest import (
-    estimate_pose_3dof, estimate_pose_6dof, WorldPoint, ProjectionPoint, Rotation,
-    CameraMatrix, DiagonalCovariance
+    estimate_pose_3dof, estimate_pose_6dof, compute_integrity,
+    WorldPoint, ProjectionPoint, Rotation, CameraMatrix, DiagonalCovariance,
+    IntegrityResult, ScalarCovariance
 )
 
 # Define runway corners in world coordinates (meters)
@@ -468,6 +469,47 @@ result_3dof = estimate_pose_3dof(
 print(f"6-DOF: position={result_6dof.position}, rotation={result_6dof.rotation}")
 print(f"3-DOF: position={result_3dof.position}")
 ```
+
+### Integrity Monitoring
+
+You can also perform integrity monitoring to assess the quality of pose estimates:
+
+```python
+# After getting a pose estimate, check its integrity
+integrity_result = compute_integrity(
+    camera_position=result_6dof.position,
+    camera_rotation=result_6dof.rotation,
+    runway_corners=runway_corners,
+    projections=projections,
+    camera_matrix=camera_matrix,
+    covariance=covariance  # Optional: uses default if not provided
+)
+
+# Check integrity at 5% significance level (95% confidence)
+if integrity_result.is_integrity_ok(alpha=0.05):
+    print("✅ Pose estimate passes integrity check")
+    print(f"   Chi-squared statistic: {integrity_result.stat:.3f}")
+    print(f"   p-value: {integrity_result.p_value:.6f}")
+    print(f"   Degrees of freedom: {integrity_result.dofs}")
+else:
+    print("❌ Integrity violation detected")
+    print(f"   Chi-squared statistic: {integrity_result.stat:.3f}")
+    print(f"   p-value: {integrity_result.p_value:.6f}")
+    print(f"   Consider rejecting this pose estimate")
+
+# You can also use different covariance models for integrity monitoring
+scalar_cov = ScalarCovariance(noise_std=1.5)  # 1.5 pixel standard deviation
+integrity_result_scalar = compute_integrity(
+    camera_position=result_6dof.position,
+    camera_rotation=result_6dof.rotation,
+    runway_corners=runway_corners,
+    projections=projections,
+    camera_matrix=camera_matrix,
+    covariance=scalar_cov
+)
+```
+
+### Covariance Options
 
 For full covariance matrices, use `FullCovariance(matrix=cov_8x8)` instead of `DiagonalCovariance`.
 
