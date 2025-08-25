@@ -14,11 +14,13 @@ from .core import (
     ProjectionPoint, 
     Rotation,
     PoseEstimate,
+    IntegrityResult,
     
     # Functions
     estimate_pose_6dof,
     estimate_pose_3dof,
     project_point,
+    compute_integrity,
     
     # Configuration
     CameraConfig,
@@ -51,11 +53,13 @@ __all__ = [
     "ProjectionPoint",
     "Rotation", 
     "PoseEstimate",
+    "IntegrityResult",
     
     # Functions
     "estimate_pose_6dof",
     "estimate_pose_3dof", 
     "project_point",
+    "compute_integrity",
     
     # Configuration
     "CameraConfig",
