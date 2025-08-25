@@ -441,12 +441,17 @@ camera_matrix = CameraMatrix(
 pixel_variances = [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5]
 covariance = DiagonalCovariance(variances=pixel_variances)
 
+initial_guess_pos = WorldPoint(-3000, 200, 10)
+initial_guess_rot = Rotation(yaw=0, pitch=0.1, roll=0.01)
+
 # 6-DOF estimation (position + orientation)
 result_6dof = estimate_pose_6dof(
     runway_corners=runway_corners,
     projections=projections,
     camera_matrix=camera_matrix,
-    covariance=covariance
+    covariance=covariance,
+    initial_guess_pos=initial_guess_pos,
+    initial_guess_rot=initial_guess_rot,
 )
 
 # 3-DOF estimation (position only, known orientation)
@@ -456,7 +461,8 @@ result_3dof = estimate_pose_3dof(
     projections=projections,
     known_rotation=known_rotation,
     camera_matrix=camera_matrix,
-    covariance=covariance
+    covariance=covariance,
+    initial_guess_pos=initial_guess_pos,
 )
 
 print(f"6-DOF: position={result_6dof.position}, rotation={result_6dof.rotation}")
