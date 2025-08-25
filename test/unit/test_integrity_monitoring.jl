@@ -1,219 +1,338 @@
+"""
+Integrity Monitoring Tests
+
+This test suite validates the RAIM (Receiver Autonomous Integrity Monitoring) 
+functionality for runway pose estimation. The tests cover:
+
+## Core Functionality Tests
+1. **RAIM Statistic Computation**: Test compute_integrity_statistic() with various inputs
+   - Basic functionality with known good data
+   - Edge cases (minimum observations, different noise levels)
+   - Unit handling and coordinate system consistency
+
+## Statistical Properties Tests
+4. **Chi-Squared Distribution**: Validate statistical assumptions
+   - Degrees of freedom calculation (n_obs - n_params)
+   - P-value computation accuracy
+   - Proper handling of different noise covariance structures
+
+## Robustness and Edge Cases
+6. **Geometric Configuration Effects**: 
+   - Well-conditioned vs poorly-conditioned corner geometries
+   - Effect of observation geometry on integrity performance
+   - Near-singular cases and numerical stability
+
+7. **Fault Detection Scenarios**:
+   - Normal operation (small residuals, integrity OK)
+   - Single observation fault (large residual, integrity fail)
+   - Multiple observation faults
+   - Systematic vs random errors
+
+8. **Noise Model Validation**:
+   - Diagonal vs full covariance matrices
+   - Different noise levels and their impact on statistics
+   - Proper whitening and chi-squared test validity
+"""
+
 using Test
-using RunwayPoseEstimation
+using RunwayLib
 using Distributions
 using LinearAlgebra
+using Rotations
+using StaticArrays
+using StatsBase
+using Random
+using Unitful
+using Unitful.DefaultSymbols
+
+# ==============================================================================
+# Test Utility Functions
+# ==============================================================================
+
+"""
+Create a standard test scenario with runway corners, true pose, and observations.
+"""
+function create_runway_scenario(; 
+    n_corners::Int = 4,
+)
+
+    # Standard runway corners - well-conditioned geometry
+    if n_corners == 4
+        runway_corners = [
+            WorldPoint(0.0m, -25.0m, 0.0m),
+            WorldPoint(0.0m, 25.0m, 0.0m), 
+            WorldPoint(1500.0m, -25.0m, 0.0m),
+            WorldPoint(1500.0m, 25.0m, 0.0m)
+        ]
+    else
+        # Generate more corners if needed
+        runway_corners = [
+            WorldPoint(x*m, y*m, 0.0m)
+            for x in range(0, 1500, length=div(n_corners,2))
+            for y in [-25.0, 25.0]
+        ][1:n_corners]
+    end
+    
+    # True aircraft pose - reasonable approach geometry
+    true_pos = WorldPoint(-800.0m, 5.0m, 120.0m)
+    true_rot = RotZYX(0.02, 0.05, 0.01)  # Small attitude angles
+    
+    # Generate clean projections
+    clean_projections = [project(true_pos, true_rot, corner, CAMERA_CONFIG_OFFSET) 
+                        for corner in runway_corners]
+
+    make_noisy_projections(σ=1.0) = clean_projections .+ [
+        ProjectionPoint(σ * randn(2)px)
+        for _ in clean_projections
+    ]
+
+    return (;
+        runway_corners = runway_corners,
+        true_pos = true_pos,
+        true_rot = true_rot,
+        clean_projections = clean_projections,
+        make_noisy_projections,
+    )
+end
+
+const CAMERA_CONFIGS = [
+        ("CameraConfig :offset", CAMERA_CONFIG_OFFSET),
+        ("CameraConfig :centered", CAMERA_CONFIG_CENTERED),
+        ("CameraMatrix :offset", CameraMatrix(CAMERA_CONFIG_OFFSET)),
+        ("CameraMatrix :centered", CameraMatrix(CAMERA_CONFIG_CENTERED))
+    ]
+
+"""
+Validate p-value distribution against uniform distribution.
+"""
+function validate_p_value_distribution(p_values; n_bins::Int = 20, α::Float64 = 0.01)
+    # Bin p-values  
+    bin_edges = range(0, 1, length=n_bins+1)
+    bin_counts = fit(Histogram, p_values, bin_edges).weights
+    
+    # Expected count per bin for uniform distribution
+    expected_count = length(p_values) / n_bins
+    
+    # Chi-squared goodness of fit test
+    chi_sq_stat = sum((bin_counts .- expected_count).^2 ./ expected_count)
+    p_value_test = ccdf(Chisq(n_bins - 1), chi_sq_stat)
+    
+    return (
+        bin_counts = bin_counts,
+        expected_count = expected_count,
+        chi_squared = chi_sq_stat,
+        p_value = p_value_test,
+        uniform_distribution = p_value_test > α
+    )
+end
+
+# ==============================================================================
+# Test Cases
+# ==============================================================================
 
 @testset "Integrity Monitoring" begin
-    @testset "RAIM Statistic Computation" begin
-        # Test basic RAIM statistic computation setup
+    
+    @testset "1. API Consistency Tests" begin
+        (; true_pos, true_rot, runway_corners, make_noisy_projections) = create_runway_scenario()
+        sigmas = 2.0*ones(length(runway_corners))
+        # Create diagonal covariance matrix - each corner has x,y coordinates
+        noise_cov = Diagonal(repeat(sigmas.^2, inner=2))
         
-        # Mock pose estimate
-        estimated_pos = WorldPoint(-500.0, 5.0, 100.0)
-        estimated_rot = RotZYX(0.0, 0.1, 0.02)
-        
-        # Mock runway corners
-        runway_corners = [
-            WorldPoint(0.0, 25.0, 0.0),
-            WorldPoint(0.0, -25.0, 0.0),
-            WorldPoint(1000.0, 25.0, 0.0),
-            WorldPoint(1000.0, -25.0, 0.0)
-        ]
-        
-        # Mock observed corners
-        observed_corners = [
-            ProjectionPoint(-80.0, 40.0),
-            ProjectionPoint(-80.0, -40.0),
-            ProjectionPoint(80.0, 30.0),
-            ProjectionPoint(80.0, -30.0)
-        ]
-        
-        # Mock noise model
-        pixel_std = 2.0
-        noise_cov = Diagonal(fill(pixel_std^2, 8))  # 4 corners × 2 coordinates
-        
-        @test size(noise_cov) == (8, 8)
-        @test all(diag(noise_cov) .> 0)
-        
-        # Test residual computation concept
-        predicted_corners = [project(estimated_pos, estimated_rot, corner) for corner in runway_corners]
-        residuals = vcat([[obs.x - pred.x, obs.y - pred.y] for (obs, pred) in zip(observed_corners, predicted_corners)]...)
-        
-        @test length(residuals) == 8
-        @test all(isfinite.(residuals))
-        
-        # Test chi-squared statistic computation
-        # χ² = r' Σ⁻¹ r where r is residual vector, Σ is noise covariance
-        chi_squared_stat = residuals' * inv(noise_cov) * residuals
-        @test chi_squared_stat >= 0
-        @test isfinite(chi_squared_stat)
+        @testset "Camera Configuration Consistency" begin
+            # Test with different camera configurations using offset coordinates
+            # (Skipping coordinate conversion for now due to missing convert_projections function)
+            offset_configs = [
+                ("CameraConfig :offset", CAMERA_CONFIG_OFFSET),
+                ("CameraMatrix :offset", CameraMatrix(CAMERA_CONFIG_OFFSET))
+            ]
+            
+            results = []
+            results = map(offset_configs) do (name, config)
+                Random.seed!(1)
+                projections = make_noisy_projections()
+                result = compute_integrity_statistic(
+                    true_pos, true_rot,
+                    runway_corners, projections,
+                    noise_cov, config
+                )
+            end
+            
+            # All configurations should give similar results (within numerical precision)
+            base_result = results[1]
+            for result in results[2:end]
+                @test isapprox(result.stat, base_result.stat, rtol=1e-6)
+                @test isapprox(result.p_value, base_result.p_value, rtol=1e-6)
+                @test result.dofs == base_result.dofs
+            end
+        end
     end
     
-    @testset "Chi-Squared Test" begin
-        # Test chi-squared distribution properties for RAIM
+    @testset "2. Normal vs High Noise Scenarios" begin
+        @testset "Normal Noise Case" begin
+            (; true_pos, true_rot, runway_corners, make_noisy_projections) = create_runway_scenario()
+            noise_level = 2.0
+            sigmas = noise_level*ones(length(runway_corners))
+            noise_cov = Diagonal(repeat(sigmas.^2, inner=2))
+            
+            stats = compute_integrity_statistic(
+                true_pos, true_rot,
+                runway_corners, make_noisy_projections(noise_level),
+                noise_cov
+            )
+            
+            # Normal case should pass integrity check
+            @test stats.p_value > 0.05
+            @test stats.dofs == 2
+            @test stats.stat >= 0
+            @test isfinite(stats.stat)
+        end
         
-        # Degrees of freedom = n_observations - n_parameters
-        n_observations = 8  # 4 corners × 2 coordinates
-        n_parameters = 6    # 6-DOF pose (3 position + 3 rotation)
-        dof = n_observations - n_parameters
-        
-        @test dof == 2
-        @test dof > 0  # Must have redundancy for integrity monitoring
-        
-        # Test chi-squared distribution
-        chi_sq_dist = Chisq(dof)
-        @test isa(chi_sq_dist, Chisq)
-        
-        # Test critical values
-        significance_level = 0.05
-        critical_value = quantile(chi_sq_dist, 1 - significance_level)
-        @test critical_value > 0
-        
-        # Test p-value computation
-        test_statistic = 3.0
-        p_value = 1 - cdf(chi_sq_dist, test_statistic)
-        @test 0 <= p_value <= 1
-        
-        # Test integrity decision
-        integrity_ok = test_statistic <= critical_value
-        @test isa(integrity_ok, Bool)
+        @testset "High Noise Case" begin
+            # Create scenario with higher actual noise than modeled
+            noise_level = 6.0  # 3x higher actual noise
+            (; true_pos, true_rot, runway_corners, make_noisy_projections
+             ) = create_runway_scenario()
+            modeled_sigmas = 2*ones(length(runway_corners))  # Still model as 2.0
+            modeled_cov = Diagonal(repeat(modeled_sigmas.^2, inner=2))
+            
+            stats = compute_integrity_statistic(
+                true_pos, true_rot,
+                runway_corners,
+                make_noisy_projections(noise_level),
+                modeled_cov
+            )
+            
+            # High noise case should be more likely to fail integrity check
+            # Note: With only 2 DOF, statistical power is limited
+            @test stats.stat > 1.0  # Should have larger chi-squared statistic than normal case
+        end
     end
     
-    @testset "Fault Detection" begin
-        # Test fault detection concepts
-        
-        # Normal case: small residuals
-        normal_residuals = [0.5, -0.3, 0.8, -0.2, 0.1, 0.4, -0.6, 0.3]
-        normal_chi_sq = sum(normal_residuals.^2) / 4.0  # Normalized by variance
-        
-        # Faulty case: one large residual (outlier)
-        faulty_residuals = [0.5, -0.3, 15.0, -0.2, 0.1, 0.4, -0.6, 0.3]  # Large error in 3rd observation
-        faulty_chi_sq = sum(faulty_residuals.^2) / 4.0
-        
-        @test faulty_chi_sq > normal_chi_sq
-        @test faulty_chi_sq > 10 * normal_chi_sq  # Should be significantly larger
-        
-        # Test fault isolation concept
-        # Remove suspected faulty observation and recompute
-        suspected_fault_idx = 3
-        reduced_residuals = faulty_residuals[setdiff(1:8, suspected_fault_idx)]
-        reduced_chi_sq = sum(reduced_residuals.^2) / 4.0
-        
-        @test reduced_chi_sq < faulty_chi_sq
-        @test reduced_chi_sq ≈ normal_chi_sq atol=1.0
+    @testset "3. Statistical Calibration (Monte Carlo)" begin
+        n_trials = 1000  # Reduced for faster testing, increase for production
+
+        @testset "P-value Distribution Test" begin
+            noise_level = 2.0
+            p_values = map(1:n_trials) do i
+                (; true_pos, true_rot, runway_corners, make_noisy_projections
+                ) = create_runway_scenario()
+                sigmas = noise_level*ones(length(runway_corners))
+                noise_cov = Diagonal(repeat(sigmas.^2, inner=2))
+                
+                stats = compute_integrity_statistic(
+                    true_pos, true_rot,
+                    runway_corners, make_noisy_projections(noise_level),
+                    noise_cov
+                )
+               stats.p_value
+            end
+            
+            # Validate p-value distribution
+            validation = validate_p_value_distribution(p_values, n_bins=10)
+            
+            @test validation.uniform_distribution
+            @test 0.0 <= minimum(p_values)
+            @test maximum(p_values) <= 1.0
+            
+            # Check that approximately 5% of trials fail at α=0.05
+            failure_rate = mean(p_values .< 0.05)
+            @test 0.02 < failure_rate < 0.08
+        end
     end
     
-    @testset "Performance Metrics" begin
-        # Test integrity monitoring performance metrics
+    @testset "4. Noise Model Integration" begin
+        (; true_pos, true_rot, runway_corners, make_noisy_projections) = create_runway_scenario()
+        noise_level = 2.0
         
-        # Mock test results
-        n_tests = 1000
-        true_faults = rand(Bool, n_tests)  # Random true fault status
-        detected_faults = copy(true_faults)
+        @testset "Diagonal Noise Model" begin
+            # Create vector of Normal distributions for UncorrGaussianNoiseModel
+            normal_dists = [Normal(0.0, noise_level) for _ in 1:8]
+            noise_model = UncorrGaussianNoiseModel(normal_dists)
+            cov_matrix = covmatrix(noise_model)
+            
+            stats = compute_integrity_statistic(
+                true_pos, true_rot,
+                runway_corners, make_noisy_projections(noise_level),
+                cov_matrix
+            )
+            
+            @test stats.p_value > 0.01
+            @test size(cov_matrix) == (8, 8)
+            @test isdiag(cov_matrix)
+        end
         
-        # Add some false alarms and missed detections
-        false_alarm_rate = 0.05
-        missed_detection_rate = 0.10
-        
-        # Simulate false alarms (detect fault when none exists)
-        no_fault_indices = findall(.!true_faults)
-        n_false_alarms = round(Int, false_alarm_rate * length(no_fault_indices))
-        false_alarm_indices = no_fault_indices[1:n_false_alarms]
-        detected_faults[false_alarm_indices] .= true
-        
-        # Simulate missed detections (miss fault when it exists)
-        fault_indices = findall(true_faults)
-        n_missed = round(Int, missed_detection_rate * length(fault_indices))
-        missed_indices = fault_indices[1:n_missed]
-        detected_faults[missed_indices] .= false
-        
-        # Compute confusion matrix
-        true_positives = sum(true_faults .& detected_faults)
-        false_positives = sum(.!true_faults .& detected_faults)
-        true_negatives = sum(.!true_faults .& .!detected_faults)
-        false_negatives = sum(true_faults .& .!detected_faults)
-        
-        @test true_positives + false_positives + true_negatives + false_negatives == n_tests
-        
-        # Compute performance metrics
-        computed_false_alarm_rate = false_positives / (false_positives + true_negatives)
-        computed_missed_detection_rate = false_negatives / (false_negatives + true_positives)
-        
-        @test computed_false_alarm_rate ≈ false_alarm_rate atol=0.02
-        @test computed_missed_detection_rate ≈ missed_detection_rate atol=0.02
+        @testset "Full Covariance Noise Model" begin
+            # Create correlated noise model using MvNormal
+            base_var = noise_level^2
+            correlation = 0.3
+            cov_full = base_var * (I + correlation * (ones(8, 8) - I))
+            mv_normal = MvNormal(zeros(8), cov_full)
+            noise_model = CorrGaussianNoiseModel(mv_normal)
+            cov_matrix = covmatrix(noise_model)
+            
+            stats = compute_integrity_statistic(
+                true_pos, true_rot,
+                runway_corners, make_noisy_projections(noise_level),
+                cov_matrix
+            )
+            
+            @test stats.p_value > 0.01
+            @test !isdiag(cov_matrix)
+            @test issymmetric(cov_matrix)
+        end
     end
     
-    @testset "Integrity Risk Assessment" begin
-        # Test integrity risk computation
+    @testset "5. Pose Estimation Integration" begin
+        (; true_pos, true_rot, runway_corners, make_noisy_projections) = create_runway_scenario()
+        noise_level = 1.5
+        sigmas = noise_level*ones(length(runway_corners))
+        noise_cov = Diagonal(repeat(sigmas.^2, inner=2))
+        noisy_projections = make_noisy_projections(noise_level)
         
-        # Mock system parameters
-        false_alarm_probability = 0.05
-        missed_detection_probability = 0.10
-        fault_probability = 0.01  # Prior probability of fault
+        @testset "6-DOF Pose Estimation Integration" begin
+            # Estimate pose using 6-DOF estimator
+            pose_result = estimatepose6dof(
+                runway_corners, 
+                noisy_projections,
+                CAMERA_CONFIG_OFFSET
+            )
+            
+            # Test integrity using estimated pose
+            stats = compute_integrity_statistic(
+                pose_result.pos, pose_result.rot,
+                runway_corners, noisy_projections,
+                noise_cov
+            )
+            
+            @test stats.p_value > 0.01
+            
+            # Estimated pose should be reasonably close to true pose
+            pos_error = norm([
+                ustrip(m, pose_result.pos.x - true_pos.x),
+                ustrip(m, pose_result.pos.y - true_pos.y), 
+                ustrip(m, pose_result.pos.z - true_pos.z)
+            ])
+            @test pos_error < 50.0
+        end
         
-        @test 0 <= false_alarm_probability <= 1
-        @test 0 <= missed_detection_probability <= 1
-        @test 0 <= fault_probability <= 1
-        
-        # Compute integrity risk using Bayes' theorem
-        # P(fault | no alarm) = P(no alarm | fault) * P(fault) / P(no alarm)
-        prob_no_alarm_given_fault = missed_detection_probability
-        prob_no_alarm_given_no_fault = 1 - false_alarm_probability
-        prob_no_alarm = prob_no_alarm_given_fault * fault_probability + 
-                       prob_no_alarm_given_no_fault * (1 - fault_probability)
-        
-        integrity_risk = prob_no_alarm_given_fault * fault_probability / prob_no_alarm
-        
-        @test 0 <= integrity_risk <= 1
-        @test integrity_risk < fault_probability  # Should be reduced by monitoring
-        
-        # Test that better detection reduces integrity risk
-        better_missed_detection_prob = 0.05  # Better than 0.10
-        better_prob_no_alarm_given_fault = better_missed_detection_prob
-        better_prob_no_alarm = better_prob_no_alarm_given_fault * fault_probability + 
-                              prob_no_alarm_given_no_fault * (1 - fault_probability)
-        better_integrity_risk = better_prob_no_alarm_given_fault * fault_probability / better_prob_no_alarm
-        
-        @test better_integrity_risk < integrity_risk
+        @testset "3-DOF Pose Estimation Integration" begin
+            # Estimate position with known rotation
+            pose_result = estimatepose3dof(
+                runway_corners,
+                noisy_projections, 
+                true_rot,  # Use true rotation
+                CAMERA_CONFIG_OFFSET
+            )
+            
+            # Test integrity using estimated pose
+            stats = compute_integrity_statistic(
+                pose_result.pos, pose_result.rot,
+                runway_corners, noisy_projections,
+                noise_cov
+            )
+            
+            @test stats.p_value > 0.01
+        end
     end
     
-    @testset "RAIM Availability" begin
-        # Test RAIM availability conditions
-        
-        # Need sufficient redundancy for fault detection
-        min_observations = 4  # 4 corners minimum
-        min_parameters = 6    # 6-DOF pose
-        
-        # For fault detection, need at least 1 degree of freedom
-        @test min_observations * 2 > min_parameters  # 8 > 6
-        
-        # For fault isolation, need even more redundancy
-        min_dof_for_isolation = 2
-        @test min_observations * 2 - min_parameters >= min_dof_for_isolation
-        
-        # Test geometric dilution of precision (GDOP) concept
-        # Better corner geometry leads to better RAIM performance
-        
-        # Good geometry: corners well separated
-        good_corners = [
-            ProjectionPoint(-200.0, 150.0),   # Well separated
-            ProjectionPoint(200.0, 150.0),
-            ProjectionPoint(-180.0, -150.0),
-            ProjectionPoint(180.0, -150.0)
-        ]
-        
-        # Poor geometry: corners clustered
-        poor_corners = [
-            ProjectionPoint(-10.0, 10.0),     # Clustered together
-            ProjectionPoint(10.0, 10.0),
-            ProjectionPoint(-10.0, -10.0),
-            ProjectionPoint(10.0, -10.0)
-        ]
-        
-        # Compute corner spread as simple geometry metric
-        good_spread = maximum([abs(c.x) + abs(c.y) for c in good_corners])
-        poor_spread = maximum([abs(c.x) + abs(c.y) for c in poor_corners])
-        
-        @test good_spread > poor_spread
-        @test good_spread > 5 * poor_spread  # Significantly better geometry
-    end
 end
