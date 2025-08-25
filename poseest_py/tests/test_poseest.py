@@ -684,6 +684,315 @@ class TestCameraMatrix:
         assert abs(pose.rotation.roll - true_rotation.roll) < 1e-10
 
 
+class TestIntegrityMonitoring:
+    """Test integrity monitoring functionality."""
+    
+    def test_integrity_result_basic(self):
+        """Test basic IntegrityResult functionality."""
+        # Create a sample integrity result
+        integrity_result = poseest.IntegrityResult(
+            stat=5.2,
+            p_value=0.15, 
+            dofs=6,
+            residual_norm=0.8
+        )
+        
+        # Test basic properties
+        assert integrity_result.stat == 5.2
+        assert integrity_result.p_value == 0.15
+        assert integrity_result.dofs == 6
+        assert integrity_result.residual_norm == 0.8
+        
+        # Test integrity check with different alpha levels
+        assert integrity_result.is_integrity_ok(alpha=0.05)  # OK at 5% level (p=0.15 > 0.05)
+        assert not integrity_result.is_integrity_ok(alpha=0.20)  # Not OK at 20% level (p=0.15 < 0.20)
+    
+    def test_compute_integrity_basic(self):
+        """Test compute_integrity function with known good data."""
+        # Set random seed for reproducible results
+        random.seed(123)
+        
+        # Generate test data similar to pose estimation tests
+        num_keypoints = 8
+        runway_corners = []
+        runway_length = 3000.0
+        num_pairs = num_keypoints // 2
+        
+        for i in range(num_pairs):
+            x_pos = (i / (num_pairs - 1)) * runway_length
+            runway_corners.append(poseest.WorldPoint(x_pos, -50.0, 0.0))
+            runway_corners.append(poseest.WorldPoint(x_pos, 50.0, 0.0))
+        
+        # True camera pose
+        true_position = poseest.WorldPoint(-1300.0, 0.0, 80.0)
+        true_rotation = poseest.Rotation(yaw=0.05, pitch=0.04, roll=0.03)
+        
+        # Camera matrix
+        focal_length_px = 25.0 / (3.45e-3)  # ~7246 pixels
+        cx = (4096 + 1) / 2  # 2048.5
+        cy = (3000 + 1) / 2  # 1500.5
+        
+        camera_matrix = poseest.CameraMatrix(
+            matrix=[
+                [-focal_length_px, 0.0, cx],
+                [0.0, -focal_length_px, cy],
+                [0.0, 0.0, 1.0]
+            ],
+            image_width=4096.0,
+            image_height=3000.0,
+            coordinate_system='offset'
+        )
+        
+        # Generate clean projections (minimal noise for good integrity)
+        projections = []
+        for corner in runway_corners:
+            projection = poseest.project_point(
+                true_position,
+                true_rotation,
+                corner,
+                camera_matrix
+            )
+            # Add very small noise
+            noise_x = random.gauss(0, 0.1)
+            noise_y = random.gauss(0, 0.1) 
+            projection = poseest.ProjectionPoint(
+                projection.x + noise_x,
+                projection.y + noise_y
+            )
+            projections.append(projection)
+        
+        # Compute integrity for the true pose (should have good integrity)
+        integrity_result = poseest.compute_integrity(
+            camera_position=true_position,
+            camera_rotation=true_rotation,
+            runway_corners=runway_corners,
+            projections=projections,
+            camera_matrix=camera_matrix
+        )
+        
+        # Basic type checks
+        assert isinstance(integrity_result, poseest.IntegrityResult)
+        assert isinstance(integrity_result.stat, float)
+        assert isinstance(integrity_result.p_value, float)
+        assert isinstance(integrity_result.dofs, int)
+        assert isinstance(integrity_result.residual_norm, float)
+        
+        # With good data and true pose, we expect:
+        # - degrees of freedom = 2*8 - 6 = 10
+        # - reasonable chi-squared statistic
+        # - high p-value (good integrity)
+        # - small residual norm
+        assert integrity_result.dofs == 10  # 2*8 points - 6 parameters = 10 DOF
+        assert integrity_result.p_value > 0.05  # Should pass integrity check
+        assert integrity_result.stat >= 0.0  # Chi-squared is non-negative
+        assert integrity_result.residual_norm >= 0.0  # Residual norm is non-negative
+        assert integrity_result.is_integrity_ok(alpha=0.05)  # Should pass at 5% level
+        
+        print(f"Good pose integrity: stat={integrity_result.stat:.3f}, p={integrity_result.p_value:.6f}, dofs={integrity_result.dofs}")
+    
+    def test_compute_integrity_bad_pose(self):
+        """Test compute_integrity with intentionally bad pose estimate."""
+        # Set random seed for reproducible results
+        random.seed(456)
+        
+        # Generate test data
+        num_keypoints = 6
+        runway_corners = []
+        runway_length = 3000.0
+        num_pairs = num_keypoints // 2
+        
+        for i in range(num_pairs):
+            x_pos = (i / (num_pairs - 1)) * runway_length
+            runway_corners.append(poseest.WorldPoint(x_pos, -50.0, 0.0))
+            runway_corners.append(poseest.WorldPoint(x_pos, 50.0, 0.0))
+        
+        # True camera pose (for generating projections)
+        true_position = poseest.WorldPoint(-1300.0, 0.0, 80.0)
+        true_rotation = poseest.Rotation(yaw=0.05, pitch=0.04, roll=0.03)
+        
+        # Bad estimate (significantly different from truth)
+        bad_position = poseest.WorldPoint(-1100.0, -30.0, 120.0)  # Wrong by ~200m in x, 30m in y, 40m in z
+        bad_rotation = poseest.Rotation(yaw=0.15, pitch=0.12, roll=0.08)  # Wrong angles
+        
+        # Camera matrix
+        focal_length_px = 25.0 / (3.45e-3)
+        cx = (4096 + 1) / 2
+        cy = (3000 + 1) / 2
+        
+        camera_matrix = poseest.CameraMatrix(
+            matrix=[
+                [-focal_length_px, 0.0, cx],
+                [0.0, -focal_length_px, cy],
+                [0.0, 0.0, 1.0]
+            ],
+            image_width=4096.0,
+            image_height=3000.0,
+            coordinate_system='offset'
+        )
+        
+        # Generate projections from TRUE pose (but test with BAD pose)
+        projections = []
+        for corner in runway_corners:
+            projection = poseest.project_point(
+                true_position,
+                true_rotation,
+                corner,
+                camera_matrix
+            )
+            # Add small noise
+            noise_x = random.gauss(0, 0.3)
+            noise_y = random.gauss(0, 0.3)
+            projection = poseest.ProjectionPoint(
+                projection.x + noise_x,
+                projection.y + noise_y
+            )
+            projections.append(projection)
+        
+        # Compute integrity using the BAD pose (should have poor integrity)
+        integrity_result = poseest.compute_integrity(
+            camera_position=bad_position,
+            camera_rotation=bad_rotation,
+            runway_corners=runway_corners,
+            projections=projections,
+            camera_matrix=camera_matrix
+        )
+        
+        # With bad pose estimate, we expect:
+        # - Higher chi-squared statistic
+        # - Lower p-value (poor integrity)
+        # - Larger residual norm
+        assert integrity_result.dofs == 6  # 2*6 points - 6 parameters = 6 DOF
+        assert integrity_result.stat > 0.0
+        assert integrity_result.residual_norm > 0.0
+        
+        # Bad pose should likely fail integrity check (though not guaranteed due to randomness)
+        print(f"Bad pose integrity: stat={integrity_result.stat:.3f}, p={integrity_result.p_value:.6f}, dofs={integrity_result.dofs}")
+        
+        # The bad pose should have higher statistic and lower p-value than good pose
+        # This is a probabilistic test, so we use lenient thresholds
+        assert integrity_result.stat > 1.0  # Should be elevated
+    
+    def test_compute_integrity_with_covariance(self):
+        """Test compute_integrity with custom covariance specification."""
+        # Set random seed for reproducible results  
+        random.seed(789)
+        
+        # Generate minimal test data
+        runway_corners = [
+            poseest.WorldPoint(0.0, -50.0, 0.0),
+            poseest.WorldPoint(0.0, 50.0, 0.0),
+            poseest.WorldPoint(1500.0, -50.0, 0.0),
+            poseest.WorldPoint(1500.0, 50.0, 0.0),
+        ]
+        
+        # True pose
+        true_position = poseest.WorldPoint(-1000.0, 0.0, 100.0)
+        true_rotation = poseest.Rotation(yaw=0.02, pitch=0.03, roll=0.01)
+        
+        # Simple camera matrix
+        camera_matrix = poseest.CameraMatrix(
+            matrix=[
+                [1000.0, 0.0, 2048.0],
+                [0.0, 1000.0, 1500.0], 
+                [0.0, 0.0, 1.0]
+            ],
+            image_width=4096.0,
+            image_height=3000.0,
+            coordinate_system='offset'
+        )
+        
+        # Generate projections
+        projections = []
+        for corner in runway_corners:
+            projection = poseest.project_point(
+                true_position,
+                true_rotation,
+                corner,
+                camera_matrix
+            )
+            projections.append(projection)
+        
+        # Test with scalar covariance
+        scalar_cov = poseest.ScalarCovariance(noise_std=1.0)
+        integrity_result = poseest.compute_integrity(
+            camera_position=true_position,
+            camera_rotation=true_rotation,
+            runway_corners=runway_corners,
+            projections=projections,
+            camera_matrix=camera_matrix,
+            covariance=scalar_cov
+        )
+        
+        # Should work and give reasonable results
+        assert isinstance(integrity_result, poseest.IntegrityResult)
+        assert integrity_result.dofs == 2  # 2*4 points - 6 parameters = 2 DOF
+        assert integrity_result.stat >= 0.0
+        assert integrity_result.p_value >= 0.0 and integrity_result.p_value <= 1.0
+        
+        print(f"Scalar covariance integrity: stat={integrity_result.stat:.3f}, p={integrity_result.p_value:.6f}")
+    
+    def test_compute_integrity_error_cases(self):
+        """Test error handling for compute_integrity."""
+        # Test insufficient points
+        runway_corners = [
+            poseest.WorldPoint(0.0, -50.0, 0.0),
+            poseest.WorldPoint(0.0, 50.0, 0.0),
+            poseest.WorldPoint(1500.0, -50.0, 0.0),  # Only 3 points
+        ]
+        
+        projections = [
+            poseest.ProjectionPoint(100.0, 200.0),
+            poseest.ProjectionPoint(110.0, 200.0),
+            poseest.ProjectionPoint(120.0, 210.0),
+        ]
+        
+        position = poseest.WorldPoint(-1000.0, 0.0, 100.0)
+        rotation = poseest.Rotation(0.0, 0.0, 0.0)
+        
+        camera_matrix = poseest.CameraMatrix(
+            matrix=[
+                [1000.0, 0.0, 2048.0],
+                [0.0, 1000.0, 1500.0],
+                [0.0, 0.0, 1.0]
+            ],
+            image_width=4096.0,
+            image_height=3000.0,
+            coordinate_system='offset'
+        )
+        
+        # Should raise insufficient points error
+        with pytest.raises(poseest.InsufficientPointsError):
+            poseest.compute_integrity(
+                camera_position=position,
+                camera_rotation=rotation,
+                runway_corners=runway_corners,
+                projections=projections,
+                camera_matrix=camera_matrix
+            )
+        
+        # Test mismatched array sizes
+        runway_corners_4 = [
+            poseest.WorldPoint(0.0, -50.0, 0.0),
+            poseest.WorldPoint(0.0, 50.0, 0.0),
+            poseest.WorldPoint(1500.0, -50.0, 0.0),
+            poseest.WorldPoint(1500.0, 50.0, 0.0),
+        ]
+        
+        projections_2 = [
+            poseest.ProjectionPoint(100.0, 200.0),
+            poseest.ProjectionPoint(110.0, 200.0),  # Only 2 projections for 4 corners
+        ]
+        
+        with pytest.raises(poseest.InvalidInputError):
+            poseest.compute_integrity(
+                camera_position=position,
+                camera_rotation=rotation,
+                runway_corners=runway_corners_4,
+                projections=projections_2,
+                camera_matrix=camera_matrix
+            )
+
+
 if __name__ == "__main__":
     # Run the tests if executed directly
     pytest.main([__file__, "-v"])

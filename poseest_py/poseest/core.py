@@ -93,6 +93,16 @@ class PoseEstimate_C(ctypes.Structure):
     ]
 
 
+class IntegrityResult_C(ctypes.Structure):
+    """C structure for integrity monitoring results."""
+    _fields_ = [
+        ("stat", ctypes.c_double),          # Chi-squared test statistic
+        ("p_value", ctypes.c_double),       # p-value from chi-squared test
+        ("dofs", ctypes.c_int),             # Degrees of freedom  
+        ("residual_norm", ctypes.c_double), # Raw residual norm
+    ]
+
+
 # ============================================================================
 # Enums and Constants
 # ============================================================================
@@ -323,6 +333,37 @@ class PoseEstimate:
         )
 
 
+@dataclass
+class IntegrityResult:
+    """
+    Integrity monitoring result.
+    
+    Attributes:
+        stat: Chi-squared test statistic
+        p_value: p-value from chi-squared distribution test
+        dofs: Degrees of freedom for the test
+        residual_norm: Raw residual norm from optimization
+    """
+    stat: float
+    p_value: float
+    dofs: int
+    residual_norm: float
+    
+    def is_integrity_ok(self, alpha: float = 0.05) -> bool:
+        """Check if integrity is OK at given significance level (default 5%)."""
+        return self.p_value > alpha
+    
+    @classmethod
+    def from_c_struct(cls, c_struct: IntegrityResult_C) -> 'IntegrityResult':
+        """Create from C structure."""
+        return cls(
+            stat=c_struct.stat,
+            p_value=c_struct.p_value,
+            dofs=c_struct.dofs,
+            residual_norm=c_struct.residual_norm
+        )
+
+
 # ============================================================================
 # Covariance Specification Classes
 # ============================================================================
@@ -518,6 +559,20 @@ def _setup_function_signatures(lib):
         ctypes.POINTER(ProjectionPointF64)  # result
     ]
     lib.project_point.restype = ctypes.c_int
+    
+    # compute_integrity
+    lib.compute_integrity.argtypes = [
+        ctypes.POINTER(WorldPointF64),      # camera_position
+        ctypes.POINTER(RotYPRF64),        # camera_rotation
+        ctypes.POINTER(WorldPointF64),      # runway_corners
+        ctypes.POINTER(ProjectionPointF64), # projections
+        ctypes.c_int,                      # num_points
+        ctypes.POINTER(ctypes.c_double),   # covariance_data
+        ctypes.c_int,                      # covariance_type
+        ctypes.POINTER(CameraMatrix_C),    # camera_matrix
+        ctypes.POINTER(IntegrityResult_C)   # result
+    ]
+    lib.compute_integrity.restype = ctypes.c_int
     
 
 
@@ -781,3 +836,102 @@ def project_point(
     
     # Convert result back to Python
     return ProjectionPoint.from_c_struct(result)
+
+
+def compute_integrity(
+    camera_position: WorldPoint,
+    camera_rotation: Rotation,
+    runway_corners: List[WorldPoint],
+    projections: List[ProjectionPoint],
+    camera_matrix: CameraMatrix,
+    covariance: Optional[CovarianceSpec] = None
+) -> IntegrityResult:
+    """
+    Compute integrity monitoring statistics for a given pose estimate.
+    
+    This function evaluates the consistency between the estimated aircraft pose
+    and the observed runway corner projections using chi-squared statistics.
+    
+    Args:
+        camera_position: Estimated aircraft position in world coordinates
+        camera_rotation: Estimated aircraft attitude (ZYX Euler angles)
+        runway_corners: List of runway corners in world coordinates (minimum 4)
+        projections: List of corresponding observed image projections
+        camera_matrix: Camera matrix configuration
+        covariance: Optional covariance specification for noise modeling
+        
+    Returns:
+        Integrity monitoring result with chi-squared statistic, p-value, 
+        degrees of freedom, and residual norm
+        
+    Raises:
+        InvalidInputError: If inputs are invalid
+        InsufficientPointsError: If fewer than 4 points provided
+        ConvergenceError: If computation fails
+        
+    Example:
+        >>> # After getting a pose estimate
+        >>> integrity = compute_integrity(
+        ...     camera_position=pose_result.position,
+        ...     camera_rotation=pose_result.rotation, 
+        ...     runway_corners=corners,
+        ...     projections=observations,
+        ...     camera_matrix=cam_matrix
+        ... )
+        >>> if integrity.is_integrity_ok(alpha=0.05):
+        ...     print("Integrity OK at 95% confidence")
+        ... else:
+        ...     print(f"Integrity violation: p-value = {integrity.p_value:.6f}")
+    """
+    if len(runway_corners) != len(projections):
+        raise InvalidInputError("Number of corners and projections must match")
+    
+    if len(runway_corners) < 4:
+        raise InsufficientPointsError("At least 4 points required for integrity monitoring")
+    
+    # Ensure library is initialized
+    _ensure_initialized()
+    lib = _get_library()
+    
+    # Convert to C arrays
+    num_points = len(runway_corners)
+    corners_array = (WorldPointF64 * num_points)(*[c.to_c_struct() for c in runway_corners])
+    projs_array = (ProjectionPointF64 * num_points)(*[p.to_c_struct() for p in projections])
+    
+    # Convert pose to C structures
+    cam_pos_c = camera_position.to_c_struct()
+    cam_rot_c = camera_rotation.to_c_struct()
+    
+    # Prepare result structure
+    result = IntegrityResult_C()
+    
+    # Handle covariance specification
+    if covariance is not None:
+        cov_data, cov_type = covariance.to_c_array(num_points)
+    else:
+        # Use default covariance
+        default_cov = DefaultCovariance()
+        cov_data, cov_type = default_cov.to_c_array(num_points)
+    
+    # Convert camera matrix to C struct
+    camera_matrix_c = camera_matrix.to_c_struct()
+    camera_matrix_ptr = ctypes.byref(camera_matrix_c)
+    
+    # Call C function
+    error_code = lib.compute_integrity(
+        ctypes.byref(cam_pos_c),
+        ctypes.byref(cam_rot_c),
+        corners_array,
+        projs_array,
+        num_points,
+        cov_data,
+        int(cov_type),
+        camera_matrix_ptr,
+        ctypes.byref(result)
+    )
+    
+    # Handle errors
+    _handle_error_code(error_code)
+    
+    # Convert result back to Python
+    return IntegrityResult.from_c_struct(result)
