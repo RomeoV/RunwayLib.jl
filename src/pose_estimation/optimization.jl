@@ -121,7 +121,7 @@ function pose_optimization_objective(
     return ustrip.(NoUnits, weighted_errors)
 end
 
-function setup_for_precompile()
+function setup_for_precompile(camconfig::AbstractCameraConfig{S}) where {S}
     runway_corners = [
         WorldPoint(1000.0m, -50.0m, 0.0m),
         WorldPoint(1000.0m, 50.0m, 0.0m),
@@ -130,7 +130,7 @@ function setup_for_precompile()
     ]
     true_pos = WorldPoint(-1300.0m, 0.0m, 80.0m)
     true_rot = RotZYX(roll = 0.03, pitch = 0.04, yaw = 0.05)
-    projections = [project(true_pos, true_rot, corner, CAMERA_CONFIG_OFFSET) for corner in runway_corners]
+    projections = [project(true_pos, true_rot, corner, camconfig) for corner in runway_corners]
     return (; runway_corners, projections, true_pos, true_rot)
 end
 
@@ -145,40 +145,51 @@ const POSEOPTFN = NonlinearFunction{false,FullSpecialize}(pose_optimization_obje
 const ALG = LevenbergMarquardt(; autodiff=AD, linsolve=CholeskyFactorization(),
     disable_geodesic=Val(true))
 
-"Camera configuration type for precompilation"
-const CAMCONF4COMP = CAMERA_CONFIG_OFFSET
-const S4COMP = :offset
 
-const CACHE_6DOF = let
-    (; runway_corners, projections, true_pos, true_rot) = setup_for_precompile()
+# Type-stable cache creation using OncePerTask (Julia 1.12+)
+# Parameterized cache creation functions
+
+"""
+Create a cache for 6DOF optimization with the given camera configuration and numeric type
+"""
+function _create_cache_6dof(camconfig::AbstractCameraConfig{S}, ::Type{T}) where {S, T}
+    (; runway_corners, projections, true_pos, true_rot) = setup_for_precompile(camconfig)
     noise_model = _defaultnoisemodel(projections)
     ps = PoseOptimizationParams6DOF(
-        runway_corners, projections,
-        CAMERA_CONFIG_OFFSET, noise_model
+        runway_corners, projections, camconfig, noise_model
     )
-    prob = NonlinearLeastSquaresProblem{false}(POSEOPTFN, rand(6), ps)
-    T = Float64
-    # sqrt of the default
+    prob = NonlinearLeastSquaresProblem{false}(POSEOPTFN, rand(T, 6), ps)
     reltol = real(oneunit(T)) * (eps(real(one(T))))^(2 // 5)
     abstol = real(oneunit(T)) * (eps(real(one(T))))^(2 // 5)
     init(prob, ALG; reltol, abstol)
 end
 
-const CACHE_3DOF = let
-    (; runway_corners, projections, true_pos, true_rot) = setup_for_precompile()
+"""
+Create a cache for 3DOF optimization with the given camera configuration and numeric type
+"""
+function _create_cache_3dof(camconfig::AbstractCameraConfig{S}, ::Type{T}) where {S, T}
+    (; runway_corners, projections, true_pos, true_rot) = setup_for_precompile(camconfig)
     noise_model = _defaultnoisemodel(projections)
     ps = PoseOptimizationParams3DOF(
-        runway_corners, projections,
-        CAMERA_CONFIG_OFFSET, noise_model,
-        true_rot
+        runway_corners, projections, camconfig, noise_model, true_rot
     )
-    prob = NonlinearLeastSquaresProblem{false}(POSEOPTFN, rand(3), ps)
-    T = Float64
-    # sqrt of the default
+    prob = NonlinearLeastSquaresProblem{false}(POSEOPTFN, rand(T, 3), ps)
     reltol = real(oneunit(T)) * (eps(real(one(T))))^(2 // 5)
     abstol = real(oneunit(T)) * (eps(real(one(T))))^(2 // 5)
     init(prob, ALG; reltol, abstol)
 end
+
+# OncePerTask cache objects for each combination
+const _CACHE_6DOF_OFFSET_FLOAT64 = OncePerTask(() -> _create_cache_6dof(CAMERA_CONFIG_OFFSET, Float64))
+const _CACHE_6DOF_CENTERED_FLOAT64 = OncePerTask(() -> _create_cache_6dof(CAMERA_CONFIG_CENTERED, Float64))
+const _CACHE_3DOF_OFFSET_FLOAT64 = OncePerTask(() -> _create_cache_3dof(CAMERA_CONFIG_OFFSET, Float64))
+const _CACHE_3DOF_CENTERED_FLOAT64 = OncePerTask(() -> _create_cache_3dof(CAMERA_CONFIG_CENTERED, Float64))
+
+# Type-stable cache dispatcher functions
+_get_cache(::Val{Symbol("6dof")}, ::Type{Val{:offset}}, ::Type{Float64}) = _CACHE_6DOF_OFFSET_FLOAT64()
+_get_cache(::Val{Symbol("6dof")}, ::Type{Val{:centered}}, ::Type{Float64}) = _CACHE_6DOF_CENTERED_FLOAT64()
+_get_cache(::Val{Symbol("3dof")}, ::Type{Val{:offset}}, ::Type{Float64}) = _CACHE_3DOF_OFFSET_FLOAT64()
+_get_cache(::Val{Symbol("3dof")}, ::Type{Val{:centered}}, ::Type{Float64}) = _CACHE_3DOF_CENTERED_FLOAT64()
 
 function estimatepose6dof(
         runway_corners::AbstractVector{<:WorldPoint},
@@ -194,18 +205,16 @@ function estimatepose6dof(
         initial_guess_rot .|> _ustrip(rad)
     ] |> Array
 
-    # for precompile we need the correct types
-    observed_corners = [
-        convertcamconf(CAMCONF4COMP, camconfig, proj)
-            for proj in observed_corners
-    ]
+    # Create parameters using actual input types (no conversions)
     ps = PoseOptimizationParams6DOF(
         runway_corners |> Vector, observed_corners |> Vector,
-        CameraConfig{S4COMP}(camconfig), noise_model
+        camconfig, noise_model
     )
 
-    # Get or create cache for this problem size
-    cache = CACHE_6DOF
+    # Get type-specific cache using runtime dispatch  
+    # Extract the underlying numeric type from Unitful quantities
+    T_inner = T <: Quantity ? typeof(ustrip(zero(T))) : T
+    cache = _get_cache(Val(Symbol("6dof")), Val{S}, T_inner)
     reinit!(cache, u₀; p=ps)
     solve!(cache)
     sol = (; u = cache.u, retcode = cache.retcode)
@@ -228,18 +237,16 @@ function estimatepose3dof(
 
     u₀ = initial_guess_pos .|> _ustrip(m) |> Array
 
-    # for precompile we need the correct types
-    observed_corners = [
-        convertcamconf(CAMCONF4COMP, camconfig, proj)
-            for proj in observed_corners
-    ]
+    # Create parameters using actual input types (no conversions)
     ps = PoseOptimizationParams3DOF(
         runway_corners |> Vector, observed_corners |> Vector,
-        CameraConfig{S4COMP}(camconfig), noise_model, known_attitude
+        camconfig, noise_model, known_attitude
     )
 
-    # Get or create cache for this problem size
-    cache = CACHE_3DOF
+    # Get type-specific cache using runtime dispatch
+    # Extract the underlying numeric type from Unitful quantities
+    T_inner = T <: Quantity ? typeof(ustrip(zero(T))) : T
+    cache = _get_cache(Val(Symbol("3dof")), Val{S}, T_inner)
     reinit!(cache, u₀; p=ps)
     solve!(cache)
     sol = (; u = cache.u, retcode = cache.retcode)
