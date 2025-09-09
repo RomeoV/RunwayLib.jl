@@ -19,6 +19,7 @@ using ProbabilisticParameterEstimators: UncorrGaussianNoiseModel, CorrGaussianNo
     NoiseModel, covmatrix
 using SciMLBase: successful_retcode, FullSpecialize
 import SciMLBase
+import Base: OncePerTask
 
 _uconvert(u) = Base.Fix1(uconvert, u)
 _ustrip(u) = Base.Fix1(ustrip, u)
