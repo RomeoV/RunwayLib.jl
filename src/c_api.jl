@@ -59,7 +59,7 @@ const LIBRARY_INITIALIZED = Ref(false)
     COV_FULL_MATRIX = 4     # Full covariance matrix (length = 4*n_keypoints^2)
 end
 
-function get_camera_config_from_matrix(camera_matrix_c::CameraMatrix_C)
+function get_camera_matrix_from_c(camera_matrix_c::CameraMatrix_C)
     # Only :offset coordinate system supported
     # Note: coordinate_system field ignored - always use :offset
 
@@ -69,10 +69,7 @@ function get_camera_config_from_matrix(camera_matrix_c::CameraMatrix_C)
     height_with_units = camera_matrix_c.image_height * px
 
     # Create CameraMatrix with :offset coordinates
-    camera_matrix = CameraMatrix{:offset}(matrix_with_units, width_with_units, height_with_units)
-
-    # Convert to CameraConfig using our new function
-    return CameraConfig(camera_matrix)
+    return CameraMatrix{:offset}(matrix_with_units, width_with_units, height_with_units)
 end
 
 function parse_covariance_data(covariance_type::COVARIANCE_TYPE_C, covariance_data::Ptr{Cdouble}, num_points::Integer)
@@ -224,16 +221,16 @@ Base.@ccallable function estimate_pose_6dof(
         projections = unsafe_wrap(Array, projections_, num_points) .* 1px
 
         # Parse covariance specification
-        noise_model = parse_covariance_data(covariance_type, covariance_data, num_points) |> Matrix
+        noise_model = parse_covariance_data(covariance_type, covariance_data, num_points)
 
         # Validate camera matrix
         if camera_matrix == C_NULL
             return POSEEST_ERROR_INVALID_INPUT
         end
 
-        # Load camera matrix and convert to CameraConfig
+        # Load camera matrix and convert to CameraMatrix
         camera_matrix_c = unsafe_load(camera_matrix)
-        camconfig = get_camera_config_from_matrix(camera_matrix_c)
+        cam_matrix = get_camera_matrix_from_c(camera_matrix_c)
 
         # Handle initial guess parameters
         if initial_guess_pos != C_NULL
@@ -251,7 +248,7 @@ Base.@ccallable function estimate_pose_6dof(
         end
 
         # Perform pose estimation with custom noise model and initial guesses
-        sol = estimatepose6dof(runway_corners, projections, camconfig, noise_model;
+        sol = estimatepose6dof(runway_corners, projections, cam_matrix, noise_model;
             initial_guess_pos=initial_pos, initial_guess_rot=initial_rot)
 
         # Convert result back to C struct
@@ -271,6 +268,7 @@ Base.@ccallable function estimate_pose_6dof(
         if isa(e, BoundsError) || isa(e, ArgumentError)
             return POSEEST_ERROR_INVALID_INPUT
         else
+            rethrow(e)
             return POSEEST_ERROR_NO_CONVERGENCE
         end
     end
@@ -307,16 +305,16 @@ Base.@ccallable function estimate_pose_3dof(
         jl_rotation = RotZYX(known_rot_c[1], known_rot_c[2], known_rot_c[3])
 
         # Parse covariance specification
-        noise_model = parse_covariance_data(covariance_type, covariance_data, num_points) |> Matrix
+        noise_model = parse_covariance_data(covariance_type, covariance_data, num_points)
 
         # Validate camera matrix
         if camera_matrix == C_NULL
             return POSEEST_ERROR_INVALID_INPUT
         end
 
-        # Load camera matrix and convert to CameraConfig
+        # Load camera matrix and convert to CameraMatrix
         camera_matrix_c = unsafe_load(camera_matrix)
-        camconfig = get_camera_config_from_matrix(camera_matrix_c)
+        cam_matrix = get_camera_matrix_from_c(camera_matrix_c)
 
         # Handle initial guess for position
         if initial_guess_pos != C_NULL
@@ -327,7 +325,7 @@ Base.@ccallable function estimate_pose_3dof(
         end
 
         # Perform pose estimation with custom noise model and initial guess
-        sol = estimatepose3dof(runway_corners, projections, jl_rotation, camconfig, noise_model;
+        sol = estimatepose3dof(runway_corners, projections, jl_rotation, cam_matrix, noise_model;
             initial_guess_pos=initial_pos)
 
         # Convert result back to C struct
@@ -382,12 +380,12 @@ Base.@ccallable function project_point(
         return POSEEST_ERROR_INVALID_INPUT
     end
 
-    # Load camera matrix and convert to CameraConfig
+    # Load camera matrix and convert to CameraMatrix
     camera_matrix_c = unsafe_load(camera_matrix)
-    camconfig = get_camera_config_from_matrix(camera_matrix_c)
+    cam_matrix = get_camera_matrix_from_c(camera_matrix_c)
 
     # Project point
-    jl_projection = project(jl_cam_pos, jl_cam_rot, jl_world_pt, camconfig)
+    jl_projection = project(jl_cam_pos, jl_cam_rot, jl_world_pt, cam_matrix)
 
     # Convert result back to C struct
     result_c = jl_projection .|> _ustrip(px)
@@ -439,15 +437,15 @@ Base.@ccallable function compute_integrity(
             return POSEEST_ERROR_INVALID_INPUT
         end
 
-        # Load camera matrix and convert to CameraConfig
+        # Load camera matrix and convert to CameraMatrix
         camera_matrix_c = unsafe_load(camera_matrix)
-        camconfig = get_camera_config_from_matrix(camera_matrix_c)
+        cam_matrix = get_camera_matrix_from_c(camera_matrix_c)
 
         # Compute integrity statistics
         integrity_result = compute_integrity_statistic(
             jl_cam_pos, jl_cam_rot,
             runway_corners, projections,
-            noise_cov, camconfig
+            noise_cov, cam_matrix
         )
 
         # Convert result to C-compatible NamedTuple (cast dofs to Cint)
