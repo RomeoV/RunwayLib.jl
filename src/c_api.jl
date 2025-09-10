@@ -10,6 +10,10 @@ using LinearAlgebra: isposdef
 using ProbabilisticParameterEstimators: CorrGaussianNoiseModel, UncorrGaussianNoiseModel, NoiseModel
 using LightSumTypes
 
+# Import from other modules in the package
+using ..RunwayLib: WorldPoint, ProjectionPoint, CameraMatrix, project, estimatepose6dof, estimatepose3dof, 
+                   compute_integrity_statistic, _ustrip, _defaultnoisemodel, CAMERA_CONFIG_OFFSET
+
 # Type aliases for C interop
 # These use the same memory layout as the existing parametric structs
 const WorldPointF64 = WorldPoint{Float64}
@@ -252,14 +256,14 @@ Base.@ccallable function estimate_pose_6dof(
             initial_pos_c = unsafe_load(initial_guess_pos)
             initial_pos = SA[initial_pos_c.x, initial_pos_c.y, initial_pos_c.z] * 1m
         else
-            initial_pos = SA[-1000.0, 0.0, 100.0]m  # Default value
+            initial_pos = SA[-1000.0, 0.0, 100.0] .* m  # Default value
         end
 
         if initial_guess_rot != C_NULL
             initial_rot_c = unsafe_load(initial_guess_rot)
             initial_rot = SA[initial_rot_c.data[1], initial_rot_c.data[2], initial_rot_c.data[3]] * 1rad
         else
-            initial_rot = SA[0.0, 0.0, 0.0]rad  # Default value
+            initial_rot = SA[0.0, 0.0, 0.0] .* rad  # Default value
         end
 
         # Perform pose estimation with custom noise model and initial guesses
@@ -337,7 +341,7 @@ Base.@ccallable function estimate_pose_3dof(
             initial_pos_c = unsafe_load(initial_guess_pos)
             initial_pos = SA[initial_pos_c.x, initial_pos_c.y, initial_pos_c.z] * 1m
         else
-            initial_pos = SA[-1000.0, 0.0, 100.0]m  # Default value
+            initial_pos = SA[-1000.0, 0.0, 100.0] .* m  # Default value
         end
 
         # Perform pose estimation with custom noise model and initial guess
