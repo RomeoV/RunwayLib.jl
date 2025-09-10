@@ -23,9 +23,12 @@ using StaticArrays
             # Test with default camera config
             @test_opt stacktrace_types_limit=3 project(cam_pos, cam_rot, world_pt)
             
-            # Test with explicit camera configs
-            @test_opt stacktrace_types_limit=3 project(cam_pos, cam_rot, world_pt, CAMERA_CONFIG_CENTERED)
+            # Test with explicit camera config (:offset only)
             @test_opt stacktrace_types_limit=3 project(cam_pos, cam_rot, world_pt, CAMERA_CONFIG_OFFSET)
+            
+            # Test with CameraMatrix
+            camera_matrix = CameraMatrix(CAMERA_CONFIG_OFFSET)
+            @test_opt stacktrace_types_limit=3 project(cam_pos, cam_rot, world_pt, camera_matrix)
         end
     end
 
@@ -39,8 +42,8 @@ using StaticArrays
         ]
         true_pos = WorldPoint(-1300.0m, 0.0m, 80.0m)
         true_rot = RotZYX(roll=0.03, pitch=0.04, yaw=0.05)
-        camconfig = CAMERA_CONFIG_OFFSET
-        projections = [project(true_pos, true_rot, corner, camconfig) for corner in runway_corners]
+        camera_matrix = CameraMatrix(CAMERA_CONFIG_OFFSET)
+        projections = [project(true_pos, true_rot, corner, camera_matrix) for corner in runway_corners]
         
 
         # Test the pose optimization objective function
@@ -58,7 +61,7 @@ using StaticArrays
             
             ps_6dof = PoseOptimizationParams6DOF(
                 runway_corners, projections,
-                camconfig, noise_model
+                camera_matrix, noise_model
             )
             
             @test_opt stacktrace_types_limit=3 RunwayLib.pose_optimization_objective(opt_params_6dof, ps_6dof)
@@ -68,7 +71,7 @@ using StaticArrays
             
             ps_3dof = PoseOptimizationParams3DOF(
                 runway_corners, projections,
-                camconfig, noise_model, true_rot
+                camera_matrix, noise_model, true_rot
             )
             
             @test_opt stacktrace_types_limit=3 RunwayLib.pose_optimization_objective(opt_params_3dof, ps_3dof)
@@ -77,11 +80,11 @@ using StaticArrays
         # Test the pose estimation functions
         @testset "estimatepose functions" begin
             @test_opt stacktrace_types_limit=3 estimatepose6dof(
-                runway_corners, projections, camconfig
+                runway_corners, projections, camera_matrix
             )
             
             @test_opt stacktrace_types_limit=3 estimatepose3dof(
-                runway_corners, projections, true_rot, camconfig
+                runway_corners, projections, true_rot, camera_matrix
             )
         end
     end
