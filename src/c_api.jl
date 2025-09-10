@@ -7,7 +7,8 @@ using Unitful, Unitful.DefaultSymbols
 using CEnum
 using Distributions: Normal, MvNormal
 using LinearAlgebra: isposdef
-using ProbabilisticParameterEstimators: CorrGaussianNoiseModel
+using ProbabilisticParameterEstimators: CorrGaussianNoiseModel, UncorrGaussianNoiseModel, NoiseModel
+using LightSumTypes
 
 # Type aliases for C interop
 # These use the same memory layout as the existing parametric structs
@@ -59,6 +60,12 @@ const LIBRARY_INITIALIZED = Ref(false)
     COV_FULL_MATRIX = 4     # Full covariance matrix (length = 4*n_keypoints^2)
 end
 
+# Define sum type for all possible noise models
+@sumtype NoiseModelVariant(
+    UncorrGaussianNoiseModel,
+    CorrGaussianNoiseModel
+)
+
 function get_camera_matrix_from_c(camera_matrix_c::CameraMatrix_C)
     # Only :offset coordinate system supported
     # Note: coordinate_system field ignored - always use :offset
@@ -72,88 +79,92 @@ function get_camera_matrix_from_c(camera_matrix_c::CameraMatrix_C)
     return CameraMatrix{:offset}(matrix_with_units, width_with_units, height_with_units)
 end
 
+# Dispatched parsing functions for each covariance type
+function parse_covariance_data(::Val{COV_DEFAULT}, covariance_data::Ptr{Cdouble}, num_points::Integer)
+    # Return default noise model (pointer can be null in this case)
+    return NoiseModelVariant(_defaultnoisemodel(1:num_points))
+end
+
+function parse_covariance_data(::Val{COV_SCALAR}, covariance_data::Ptr{Cdouble}, num_points::Integer)
+    # Single noise standard deviation for all measurements
+    noise_std = unsafe_load(covariance_data, 1)
+    if noise_std <= 0
+        throw(ArgumentError("Noise standard deviation must be positive"))
+    end
+    distributions = [Normal(0.0, noise_std) for _ in 1:(2*num_points)]
+    return NoiseModelVariant(UncorrGaussianNoiseModel(distributions))
+end
+
+function parse_covariance_data(::Val{COV_DIAGONAL_FULL}, covariance_data::Ptr{Cdouble}, num_points::Integer)
+    # Diagonal covariance matrix: variances for each measurement
+    variances = unsafe_wrap(Array, covariance_data, 2 * num_points)
+    if any(variances .<= 0)
+        throw(ArgumentError("All variances must be positive"))
+    end
+    distributions = [Normal(0.0, sqrt(var)) for var in variances]
+    return NoiseModelVariant(UncorrGaussianNoiseModel(distributions))
+end
+
+function parse_covariance_data(::Val{COV_BLOCK_DIAGONAL}, covariance_data::Ptr{Cdouble}, num_points::Integer)
+    # 2x2 covariance matrix for each keypoint
+    data_length = 4 * num_points
+    cov_data = unsafe_wrap(Array, covariance_data, data_length)
+
+    # Create individual 2x2 covariance matrices for each keypoint
+    distributions = Vector{MvNormal}(undef, num_points)
+    for i in 1:num_points
+        idx = (1:4) .+ (i - 1) * 4
+        cov_2x2 = reshape(cov_data[idx], 2, 2)
+        
+        if !isposdef(cov_2x2)
+            throw(ArgumentError("Covariance matrix for keypoint $i must be positive definite"))
+        end
+        
+        distributions[i] = MvNormal(zeros(2), cov_2x2)
+    end
+    return NoiseModelVariant(UncorrGaussianNoiseModel(distributions))
+end
+
+function parse_covariance_data(::Val{COV_FULL_MATRIX}, covariance_data::Ptr{Cdouble}, num_points::Integer)
+    # Full covariance matrix - use CorrGaussianNoiseModel for correlated observations
+    matrix_size = 2 * num_points
+    data_length = matrix_size * matrix_size
+    cov_data = unsafe_wrap(Array, covariance_data, data_length)
+
+    # Reconstruct matrix from row-major storage, but since symmetric don't worry
+    cov_matrix = reshape(cov_data, matrix_size, matrix_size)
+
+    if !isposdef(cov_matrix) || !issymmetric(cov_matrix)
+        throw(ArgumentError("Full covariance matrix must be symmetric and positive definite"))
+    end
+
+    # Create a single MvNormal for all measurements (correlated case)
+    corr_noise = MvNormal(zeros(matrix_size), cov_matrix)
+    return NoiseModelVariant(CorrGaussianNoiseModel(corr_noise))
+end
+
+# Main parsing function that dispatches based on covariance type
 function parse_covariance_data(covariance_type::COVARIANCE_TYPE_C, covariance_data::Ptr{Cdouble}, num_points::Integer)
     """
     Parse covariance data from C pointer based on covariance type enum.
-    Returns a NoiseModel that can be used with the optimization infrastructure.
+    Returns a NoiseModelVariant sum type that can be used with the optimization infrastructure.
     """
-    if covariance_type == COV_DEFAULT
-        # Return default noise model (pointer can be null in this case)
-        return _defaultnoisemodel(1:num_points)
-    end
-
-    # For all other types, we need valid covariance data
-    if covariance_data == C_NULL
+    # For non-default types, we need valid covariance data
+    if covariance_type != COV_DEFAULT && covariance_data == C_NULL
         throw(ArgumentError("Covariance data pointer cannot be null for covariance type: $covariance_type"))
     end
 
-    if covariance_type == COV_SCALAR
-        # Single noise standard deviation for all measurements
-        noise_std = unsafe_load(covariance_data, 1)
-        if noise_std <= 0
-            throw(ArgumentError("Noise standard deviation must be positive"))
-        end
-        distributions = [Normal(0.0, noise_std) for _ in 1:(2*num_points)]
-        return UncorrGaussianNoiseModel(distributions)
-
+    # Dispatch to appropriate parsing function using Val for type stability
+    if covariance_type == COV_DEFAULT
+        return parse_covariance_data(Val(COV_DEFAULT), covariance_data, num_points)
+    elseif covariance_type == COV_SCALAR
+        return parse_covariance_data(Val(COV_SCALAR), covariance_data, num_points)
     elseif covariance_type == COV_DIAGONAL_FULL
-        # Diagonal covariance matrix: variances for each measurement
-        variances = unsafe_wrap(Array, covariance_data, 2 * num_points)
-        if any(variances .<= 0)
-            throw(ArgumentError("All variances must be positive"))
-        end
-        distributions = [Normal(0.0, sqrt(var)) for var in variances]
-        return UncorrGaussianNoiseModel(distributions)
-
+        return parse_covariance_data(Val(COV_DIAGONAL_FULL), covariance_data, num_points)
     elseif covariance_type == COV_BLOCK_DIAGONAL
-        # 2x2 covariance matrix for each keypoint
-        data_length = 4 * num_points
-        cov_data = unsafe_wrap(Array, covariance_data, data_length)
-
-        # this has JET issues somehow...
-        # distributions = [MvNormal{Float64}(zeros(2), I(2)) for _ in 1:num_points]
-        # map!(distribution, Iterators.partition(eachindex(cov_data), 4)) do idx
-        #     # Extract 2x2 covariance matrix for this keypoint (stored row-major)
-        #     cov_2x2 = reshape(cov_data[idx], 2, 2)
-
-        #     # Check positive definite
-        #     if !isposdef(cov_2x2)
-        #         throw(ArgumentError("Covariance matrix for keypoint $i must be positive definite"))
-        #     end
-
-        #     MvNormal(zeros(2), cov_2x2)
-        # end
-        # return covmatrix(UncorrGaussianNoiseModel(distributions))
-        # Create individual 2x2 covariance matrices for each keypoint
-        distributions = Vector{MvNormal}(undef, num_points)
-        for i in 1:num_points
-            idx = (1:4) .+ (i - 1) * 4
-            cov_2x2 = reshape(cov_data[idx], 2, 2)
-            
-            if !isposdef(cov_2x2)
-                throw(ArgumentError("Covariance matrix for keypoint $i must be positive definite"))
-            end
-            
-            distributions[i] = MvNormal(zeros(2), cov_2x2)
-        end
-        return UncorrGaussianNoiseModel(distributions)
-
+        return parse_covariance_data(Val(COV_BLOCK_DIAGONAL), covariance_data, num_points)
     elseif covariance_type == COV_FULL_MATRIX
-        # Full covariance matrix - use CorrGaussianNoiseModel for correlated observations
-        matrix_size = 2 * num_points
-        data_length = matrix_size * matrix_size
-        cov_data = unsafe_wrap(Array, covariance_data, data_length)
-
-        # Reconstruct matrix from row-major storage, but since symmetric don't worry
-        cov_matrix = reshape(cov_data, matrix_size, matrix_size)
-
-        if !isposdef(cov_matrix) || !issymmetric(cov_matrix)
-            throw(ArgumentError("Full covariance matrix must be symmetric and positive definite"))
-        end
-
-        # Create a single MvNormal for all measurements (correlated case)
-        corr_noise = MvNormal(zeros(matrix_size), cov_matrix)
-        return CorrGaussianNoiseModel(corr_noise)
+        return parse_covariance_data(Val(COV_FULL_MATRIX), covariance_data, num_points)
     else
         throw(ArgumentError("Invalid covariance type: $covariance_type"))
     end
@@ -224,7 +235,8 @@ Base.@ccallable function estimate_pose_6dof(
         projections = unsafe_wrap(Array, projections_, num_points) .* 1px
 
         # Parse covariance specification
-        noise_model = parse_covariance_data(covariance_type, covariance_data, num_points)
+        noise_model_variant = parse_covariance_data(covariance_type, covariance_data, num_points)
+        noise_model = variant(noise_model_variant)
 
         # Validate camera matrix
         if camera_matrix == C_NULL
@@ -308,7 +320,8 @@ Base.@ccallable function estimate_pose_3dof(
         jl_rotation = RotZYX(known_rot_c[1], known_rot_c[2], known_rot_c[3])
 
         # Parse covariance specification
-        noise_model = parse_covariance_data(covariance_type, covariance_data, num_points)
+        noise_model_variant = parse_covariance_data(covariance_type, covariance_data, num_points)
+        noise_model = variant(noise_model_variant)
 
         # Validate camera matrix
         if camera_matrix == C_NULL
@@ -433,7 +446,8 @@ Base.@ccallable function compute_integrity(
         projections = unsafe_wrap(Array, projections_, num_points) .* 1px
 
         # Parse covariance specification
-        noise_cov = parse_covariance_data(covariance_type, covariance_data, num_points)
+        noise_cov_variant = parse_covariance_data(covariance_type, covariance_data, num_points)
+        noise_cov = variant(noise_cov_variant)
 
         # Validate camera matrix
         if camera_matrix == C_NULL
