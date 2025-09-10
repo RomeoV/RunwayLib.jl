@@ -11,6 +11,7 @@ DiffEqBase = "2b5f629d-d688-5b77-993f-72d75c75574e"
 DifferentiationInterface = "a0c0ee7d-e4b9-4e03-894e-1c5f64a51d63"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
+LightSumTypes = "f56206fc-af4c-5561-a72a-43fe2ca5a923"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 LinearSolve = "7ed4a6bd-45f5-4d41-b270-4a48e9bafcae"
 Moshi = "2e0e35c7-a2e4-4343-998d-7ef72827ed2d"
@@ -29,8 +30,8 @@ Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
 [sources]
 ForwardDiff = {rev = "rv/remove-quote-assert-string-interpolation", url = "https://github.com/RomeoV/ForwardDiff.jl.git"}
+NonlinearSolveFirstOrder = {subdir = "lib/NonlinearSolveFirstOrder", url = "https://github.com/SciML/NonlinearSolve.jl"}
 SciMLBase = {rev = "rv/fix-jet-opt", url = "https://github.com/RomeoV/SciMLBase.jl"}
-NonlinearSolveFirstOrder = {url="https://github.com/SciML/NonlinearSolve.jl", subdir="lib/NonlinearSolveFirstOrder"}
 
 [compat]
 ADTypes = "^1.16.0"
@@ -39,6 +40,7 @@ DiffEqBase = "^6.179.0"
 DifferentiationInterface = "0.7"
 Distributions = "0.25.120"
 ForwardDiff = "^1.0.1"
+LightSumTypes = "5.2.1"
 LinearAlgebra = "^1.11.0"
 LinearSolve = "^3.25.0"
 Moshi = "0.3.7"
