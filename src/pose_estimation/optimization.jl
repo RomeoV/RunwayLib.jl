@@ -6,22 +6,6 @@ using SimpleNonlinearSolve.jl and integrating with ProbabilisticParameterEstimat
 noise models.
 """
 
-using StaticArrays
-using Unitful, Unitful.DefaultSymbols
-using Rotations
-using LinearAlgebra: cholesky, inv
-using SimpleNonlinearSolve
-using ForwardDiff: AutoForwardDiff
-using LinearSolve: CholeskyFactorization
-using ProbabilisticParameterEstimators: UncorrGaussianNoiseModel, covmatrix, NoiseModel
-using Distributions: Normal
-using MLStyle: @match
-
-# Import from other modules in the package
-using ..RunwayLib: WorldPoint, ProjectionPoint, CameraMatrix, project, convertcamconf, 
-                   _ustrip, CAMERA_CONFIG_OFFSET, OptimizationFailedError, successful_retcode,
-                   DEFAULT_OPTIMIZATION_CONFIG
-
 
 abstract type AbstractPoseOptimizationParams end
 
@@ -104,12 +88,12 @@ function pose_optimization_objective(
         ps::AbstractPoseOptimizationParams
     ) where {T <: Real}
     # Extract camera position from optimization variables
-    cam_pos = WorldPoint(optvar[1:3] .* m)
+    cam_pos = WorldPoint(optvar[1:3]m)
 
     # Determine camera rotation via pattern matching
     cam_rot = @match ps begin
         ps::PoseOptimizationParams6DOF => RotZYX(
-            roll = optvar[4] * rad, pitch = optvar[5] * rad, yaw = optvar[6] * rad
+            roll = optvar[4]rad, pitch = optvar[5]rad, yaw = optvar[6]rad
         )
         ps::PoseOptimizationParams3DOF => ps.known_attitude
     end
@@ -204,8 +188,8 @@ function estimatepose6dof(
         observed_corners::AbstractVector{<:ProjectionPoint{T, :offset}},
         camconfig::CameraMatrix{:offset} = CameraMatrix(CAMERA_CONFIG_OFFSET),
         noise_model::N = _defaultnoisemodel(observed_corners);
-        initial_guess_pos::AbstractVector{<:Length} = SA[-1000.0, 0.0, 100.0] .* m,
-        initial_guess_rot::AbstractVector{<:DimensionlessQuantity} = SA[0.0, 0.0, 0.0] .* rad,
+        initial_guess_pos::AbstractVector{<:Length} = SA[-1000.0, 0.0, 100.0]m,
+        initial_guess_rot::AbstractVector{<:DimensionlessQuantity} = SA[0.0, 0.0, 0.0]rad,
         optimization_config = DEFAULT_OPTIMIZATION_CONFIG
     ) where {T, N}
     u₀ = [
@@ -229,8 +213,8 @@ function estimatepose6dof(
     sol = (; u = cache.u, retcode = cache.retcode)
 
     !successful_retcode(sol.retcode) && throw(OptimizationFailedError(sol.retcode, sol))
-    pos = WorldPoint(sol.u[1:3] .* m)
-    rot = RotZYX(roll = sol.u[4] * rad, pitch = sol.u[5] * rad, yaw = sol.u[6] * rad)
+    pos = WorldPoint(sol.u[1:3]m)
+    rot = RotZYX(roll = sol.u[4]rad, pitch = sol.u[5]rad, yaw = sol.u[6]rad)
     return (; pos, rot)
 end
 
@@ -240,7 +224,7 @@ function estimatepose3dof(
         known_attitude::RotZYX,
         camconfig::CameraMatrix{:offset} = CameraMatrix(CAMERA_CONFIG_OFFSET),
         noise_model::N = _defaultnoisemodel(observed_corners);
-        initial_guess_pos::AbstractVector{<:Length} = SA[-1000.0, 0.0, 100.0] .* m,
+        initial_guess_pos::AbstractVector{<:Length} = SA[-1000.0, 0.0, 100.0]m,
         optimization_config = DEFAULT_OPTIMIZATION_CONFIG
     ) where {T, N}
 
@@ -262,7 +246,7 @@ function estimatepose3dof(
     sol = (; u = cache.u, retcode = cache.retcode)
 
     !successful_retcode(sol.retcode) && throw(OptimizationFailedError(sol.retcode, sol))
-    pos = WorldPoint(sol.u[1:3] .* m)
+    pos = WorldPoint(sol.u[1:3]m)
     rot = known_attitude
     return (; pos, rot)
 end
