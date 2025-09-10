@@ -454,7 +454,7 @@ Base.@ccallable function compute_integrity(
         integrity_result = compute_integrity_statistic(
             jl_cam_pos, jl_cam_rot,
             runway_corners, projections,
-            noise_cov, cam_matrix
+            variant(noise_cov_variant), cam_matrix
         )
 
         # Convert result to C-compatible NamedTuple (cast dofs to Cint)
