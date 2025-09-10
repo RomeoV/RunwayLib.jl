@@ -152,4 +152,41 @@ using StaticArrays
             end
         end
     end
+
+    @testset "Non-Default Camera Matrix" begin
+        # Create a custom camera matrix different from CAMERA_CONFIG_OFFSET
+        custom_camera_matrix = CameraMatrix{:offset}(
+            SA[1100.0 0.0 2048.0; 0.0 1100.0 1536.0; 0.0 0.0 1.0] * px,
+            4096.0px, 3072.0px
+        )
+        
+        # Ground truth airplane pose
+        true_pos = WorldPoint(-800.0m, 5.0m, 120.0m)
+        true_rot = RotZYX(roll = 0.015, pitch = 0.08, yaw = -0.005)
+
+        # Generate perfect projections using the custom camera matrix
+        true_projections = [project(true_pos, true_rot, corner, custom_camera_matrix) for corner in runway_corners]
+
+        # Create significantly off initial guesses to test convergence
+        noisy_pos_guess = [true_pos.x + 200.0m, true_pos.y - 30.0m, true_pos.z + 50.0m]
+        noisy_rot_guess = [true_rot.theta1 + 0.1, true_rot.theta2 - 0.12, true_rot.theta3 + 0.08]rad
+
+        @testset "6DOF with Custom Camera Matrix" begin
+            result = estimatepose6dof(
+                runway_corners, true_projections, custom_camera_matrix;
+                initial_guess_pos = noisy_pos_guess,
+                initial_guess_rot = noisy_rot_guess
+            )
+            test_pose_accuracy(result, true_pos, true_rot; pos_tol=1e-5m, rot_tol=1e-7)
+        end
+
+        @testset "3DOF with Custom Camera Matrix" begin
+            result = estimatepose3dof(
+                runway_corners, true_projections, true_rot, custom_camera_matrix;
+                initial_guess_pos = noisy_pos_guess
+            )
+            @test norm(result.pos - true_pos) < 1e-5m
+            @test result.rot ≈ true_rot
+        end
+    end
 end

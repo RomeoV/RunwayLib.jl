@@ -204,7 +204,7 @@ function estimatepose6dof(
     ]
     ps = PoseOptimizationParams6DOF(
         runway_corners |> Vector, observed_corners_converted |> Vector,
-        CAMERA_MATRIX_OFFSET, noise_model
+        camconfig, noise_model
     )
     
     cache = CACHE_6DOF
@@ -237,7 +237,7 @@ function estimatepose3dof(
     ]
     ps = PoseOptimizationParams3DOF(
         runway_corners |> Vector, observed_corners_converted |> Vector,
-        CAMERA_MATRIX_OFFSET, noise_model, known_attitude
+        camconfig, noise_model, known_attitude
     )
     
     cache = CACHE_3DOF
