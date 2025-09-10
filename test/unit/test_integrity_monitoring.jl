@@ -96,10 +96,7 @@ function create_runway_scenario(;
 end
 
 const CAMERA_CONFIGS = [
-        ("CameraConfig :offset", CAMERA_CONFIG_OFFSET),
-        ("CameraConfig :centered", CAMERA_CONFIG_CENTERED),
-        ("CameraMatrix :offset", CameraMatrix(CAMERA_CONFIG_OFFSET)),
-        ("CameraMatrix :centered", CameraMatrix(CAMERA_CONFIG_CENTERED))
+        ("CameraMatrix :offset", CameraMatrix(CAMERA_CONFIG_OFFSET))
     ]
 
 """
@@ -142,7 +139,6 @@ end
             # Test with different camera configurations using offset coordinates
             # (Skipping coordinate conversion for now due to missing convert_projections function)
             offset_configs = [
-                ("CameraConfig :offset", CAMERA_CONFIG_OFFSET),
                 ("CameraMatrix :offset", CameraMatrix(CAMERA_CONFIG_OFFSET))
             ]
             

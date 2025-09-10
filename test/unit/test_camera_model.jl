@@ -169,17 +169,12 @@ using Rotations
             # Use the CameraMatrix constructor to create a proper matrix
             matrix = CameraMatrix(CAMERA_CONFIG_OFFSET).matrix
 
-            # Test both coordinate systems
+            # Test :offset coordinate system
             cam_offset = CameraMatrix{:offset}(matrix, 2048.0px, 1024.0px)
-            cam_centered = CameraMatrix{:centered}(matrix, 2048.0px, 1024.0px)
 
             @test cam_offset.matrix == matrix
             @test cam_offset.image_width == 2048.0px
             @test cam_offset.image_height == 1024.0px
-
-            @test cam_centered.matrix == matrix
-            @test cam_centered.image_width == 2048.0px
-            @test cam_centered.image_height == 1024.0px
 
             # Test convenience constructor
             cam_convenience = CameraMatrix(:offset, matrix, 2048.0px, 1024.0px)
@@ -246,7 +241,7 @@ using Rotations
 
             # Test that conversions maintain coordinate system
             @test matrix_config_offset isa CameraMatrix{:offset}
-            @test matrix_config_centered isa CameraMatrix{:centered}
+            # Only :offset coordinate system supported
 
             # Test that converted matrix produces same results
             cam_pos = WorldPoint(-1000.0m, 0.0m, 100.0m)

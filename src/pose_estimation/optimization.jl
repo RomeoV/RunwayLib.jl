@@ -15,10 +15,10 @@ abstract type AbstractPoseOptimizationParams end
 Parameters for 6-DOF pose optimization (position + attitude).
 """
 struct PoseOptimizationParams6DOF{
-        T, T′, T′′, S,
+        T, T′, T′′,
         RC <: AbstractVector{WorldPoint{T}},
-        OC <: AbstractVector{ProjectionPoint{T′, S}},
-        CC <: AbstractCameraConfig{S},
+        OC <: AbstractVector{ProjectionPoint{T′, :offset}},
+        CC <: CameraMatrix{:offset},
         M <: AbstractMatrix{T′′},
         M′<: AbstractMatrix{T′′}
     } <: AbstractPoseOptimizationParams
@@ -44,11 +44,11 @@ end
 Parameters for 3-DOF pose optimization (position only with known attitude).
 """
 struct PoseOptimizationParams3DOF{
-        T, T′, T′′, S,
+        T, T′, T′′,
         A <: Rotation{3},
         RC <: AbstractVector{WorldPoint{T}},
-        OC <: AbstractVector{ProjectionPoint{T′, S}},
-        CC <: AbstractCameraConfig{S},
+        OC <: AbstractVector{ProjectionPoint{T′, :offset}},
+        CC <: CameraMatrix{:offset},
         M <: AbstractMatrix{T′′},
         M′<: AbstractMatrix{T′′}
     } <: AbstractPoseOptimizationParams
@@ -121,7 +121,7 @@ function pose_optimization_objective(
     return ustrip.(NoUnits, weighted_errors)
 end
 
-function setup_for_precompile(camconfig::AbstractCameraConfig{S}) where {S}
+function setup_for_precompile(camconfig::CameraMatrix{:offset})
     runway_corners = [
         WorldPoint(1000.0m, -50.0m, 0.0m),
         WorldPoint(1000.0m, 50.0m, 0.0m),
@@ -145,9 +145,8 @@ const POSEOPTFN = NonlinearFunction{false,FullSpecialize}(pose_optimization_obje
 const ALG = LevenbergMarquardt(; autodiff=AD, linsolve=CholeskyFactorization(),
     disable_geodesic=Val(true))
 
-# Default CameraMatrix constants for cache creation
+# Default CameraMatrix constant for cache creation
 const CAMERA_MATRIX_OFFSET = CameraMatrix(CAMERA_CONFIG_OFFSET)
-const CAMERA_MATRIX_CENTERED = CameraMatrix(CAMERA_CONFIG_CENTERED)
 
 
 # Type-stable cache creation using OncePerTask (Julia 1.12+)
@@ -156,7 +155,7 @@ const CAMERA_MATRIX_CENTERED = CameraMatrix(CAMERA_CONFIG_CENTERED)
 """
 Create a cache for 6DOF optimization with the given camera configuration and numeric type
 """
-function _create_cache_6dof(camconfig::AbstractCameraConfig{S}, ::Type{T}) where {S, T}
+function _create_cache_6dof(camconfig::CameraMatrix{:offset}, ::Type{T}) where {T}
     (; runway_corners, projections, true_pos, true_rot) = setup_for_precompile(camconfig)
     noise_model = _defaultnoisemodel(projections)
     ps = PoseOptimizationParams6DOF(
@@ -171,7 +170,7 @@ end
 """
 Create a cache for 3DOF optimization with the given camera configuration and numeric type
 """
-function _create_cache_3dof(camconfig::AbstractCameraConfig{S}, ::Type{T}) where {S, T}
+function _create_cache_3dof(camconfig::CameraMatrix{:offset}, ::Type{T}) where {T}
     (; runway_corners, projections, true_pos, true_rot) = setup_for_precompile(camconfig)
     noise_model = _defaultnoisemodel(projections)
     ps = PoseOptimizationParams3DOF(
@@ -183,41 +182,23 @@ function _create_cache_3dof(camconfig::AbstractCameraConfig{S}, ::Type{T}) where
     init(prob, ALG; reltol, abstol)
 end
 
-# OncePerTask cache objects for each combination
-# CameraConfig-based caches
-const _CACHE_6DOF_OFFSET_FLOAT64 = OncePerTask(() -> _create_cache_6dof(CAMERA_CONFIG_OFFSET, Float64))
-const _CACHE_6DOF_CENTERED_FLOAT64 = OncePerTask(() -> _create_cache_6dof(CAMERA_CONFIG_CENTERED, Float64))
-const _CACHE_3DOF_OFFSET_FLOAT64 = OncePerTask(() -> _create_cache_3dof(CAMERA_CONFIG_OFFSET, Float64))
-const _CACHE_3DOF_CENTERED_FLOAT64 = OncePerTask(() -> _create_cache_3dof(CAMERA_CONFIG_CENTERED, Float64))
-
-# CameraMatrix-based caches
+# OncePerTask cache objects - CameraMatrix :offset only
 const _CACHE_6DOF_OFFSET_MATRIX_FLOAT64 = OncePerTask(() -> _create_cache_6dof(CAMERA_MATRIX_OFFSET, Float64))
-const _CACHE_6DOF_CENTERED_MATRIX_FLOAT64 = OncePerTask(() -> _create_cache_6dof(CAMERA_MATRIX_CENTERED, Float64))
 const _CACHE_3DOF_OFFSET_MATRIX_FLOAT64 = OncePerTask(() -> _create_cache_3dof(CAMERA_MATRIX_OFFSET, Float64))
-const _CACHE_3DOF_CENTERED_MATRIX_FLOAT64 = OncePerTask(() -> _create_cache_3dof(CAMERA_MATRIX_CENTERED, Float64))
 
-# Type-stable cache dispatcher functions
-# CameraConfig dispatchers
-_get_cache(::Val{Symbol("6dof")}, ::Type{Val{:offset}}, ::Type{Float64}) = _CACHE_6DOF_OFFSET_FLOAT64()
-_get_cache(::Val{Symbol("6dof")}, ::Type{Val{:centered}}, ::Type{Float64}) = _CACHE_6DOF_CENTERED_FLOAT64()
-_get_cache(::Val{Symbol("3dof")}, ::Type{Val{:offset}}, ::Type{Float64}) = _CACHE_3DOF_OFFSET_FLOAT64()
-_get_cache(::Val{Symbol("3dof")}, ::Type{Val{:centered}}, ::Type{Float64}) = _CACHE_3DOF_CENTERED_FLOAT64()
-
-# CameraMatrix dispatchers
-_get_cache_matrix(::Val{Symbol("6dof")}, ::Type{Val{:offset}}, ::Type{Float64}) = _CACHE_6DOF_OFFSET_MATRIX_FLOAT64()
-_get_cache_matrix(::Val{Symbol("6dof")}, ::Type{Val{:centered}}, ::Type{Float64}) = _CACHE_6DOF_CENTERED_MATRIX_FLOAT64()
-_get_cache_matrix(::Val{Symbol("3dof")}, ::Type{Val{:offset}}, ::Type{Float64}) = _CACHE_3DOF_OFFSET_MATRIX_FLOAT64()
-_get_cache_matrix(::Val{Symbol("3dof")}, ::Type{Val{:centered}}, ::Type{Float64}) = _CACHE_3DOF_CENTERED_MATRIX_FLOAT64()
+# Simplified cache dispatcher - CameraMatrix :offset only
+_get_cache(::Val{Symbol("6dof")}, ::Type{Float64}) = _CACHE_6DOF_OFFSET_MATRIX_FLOAT64()
+_get_cache(::Val{Symbol("3dof")}, ::Type{Float64}) = _CACHE_3DOF_OFFSET_MATRIX_FLOAT64()
 
 function estimatepose6dof(
         runway_corners::AbstractVector{<:WorldPoint},
-        observed_corners::AbstractVector{<:ProjectionPoint{T, S}},
-        camconfig::AbstractCameraConfig{S} = CAMERA_CONFIG_OFFSET,
+        observed_corners::AbstractVector{<:ProjectionPoint{T, :offset}},
+        camconfig::CameraMatrix{:offset} = CameraMatrix(CAMERA_CONFIG_OFFSET),
         noise_model::N = _defaultnoisemodel(observed_corners);
         initial_guess_pos::AbstractVector{<:Length} = SA[-1000.0, 0.0, 100.0]m,
         initial_guess_rot::AbstractVector{<:DimensionlessQuantity} = SA[0.0, 0.0, 0.0]rad,
         optimization_config = DEFAULT_OPTIMIZATION_CONFIG
-    ) where {T, S, N}
+    ) where {T, N}
     u₀ = [
         initial_guess_pos .|> _ustrip(m);
         initial_guess_rot .|> _ustrip(rad)
@@ -229,14 +210,10 @@ function estimatepose6dof(
         camconfig, noise_model
     )
 
-    # Get type-specific cache using runtime dispatch  
+    # Get type-specific cache
     # Extract the underlying numeric type from Unitful quantities
     T_inner = T <: Quantity ? typeof(ustrip(zero(T))) : T
-    cache = if camconfig isa CameraMatrix
-        _get_cache_matrix(Val(Symbol("6dof")), Val{S}, T_inner)
-    else
-        _get_cache(Val(Symbol("6dof")), Val{S}, T_inner)
-    end
+    cache = _get_cache(Val(Symbol("6dof")), T_inner)
     reinit!(cache, u₀; p=ps)
     solve!(cache)
     sol = (; u = cache.u, retcode = cache.retcode)
@@ -249,13 +226,13 @@ end
 
 function estimatepose3dof(
         runway_corners::AbstractVector{<:WorldPoint},
-        observed_corners::AbstractVector{<:ProjectionPoint{T, S}},
+        observed_corners::AbstractVector{<:ProjectionPoint{T, :offset}},
         known_attitude::RotZYX,
-        camconfig::AbstractCameraConfig{S} = CAMERA_CONFIG_OFFSET,
+        camconfig::CameraMatrix{:offset} = CameraMatrix(CAMERA_CONFIG_OFFSET),
         noise_model::N = _defaultnoisemodel(observed_corners);
         initial_guess_pos::AbstractVector{<:Length} = SA[-1000.0, 0.0, 100.0]m,
         optimization_config = DEFAULT_OPTIMIZATION_CONFIG
-    ) where {T, S, N}
+    ) where {T, N}
 
     u₀ = initial_guess_pos .|> _ustrip(m) |> Array
 
@@ -265,14 +242,10 @@ function estimatepose3dof(
         camconfig, noise_model, known_attitude
     )
 
-    # Get type-specific cache using runtime dispatch
+    # Get type-specific cache
     # Extract the underlying numeric type from Unitful quantities
     T_inner = T <: Quantity ? typeof(ustrip(zero(T))) : T
-    cache = if camconfig isa CameraMatrix
-        _get_cache_matrix(Val(Symbol("3dof")), Val{S}, T_inner)
-    else
-        _get_cache(Val(Symbol("3dof")), Val{S}, T_inner)
-    end
+    cache = _get_cache(Val(Symbol("3dof")), T_inner)
     reinit!(cache, u₀; p=ps)
     solve!(cache)
     sol = (; u = cache.u, retcode = cache.retcode)

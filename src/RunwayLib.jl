@@ -56,7 +56,7 @@ export get_runway_corners, validate_runway_spec
 export Table
 
 # Export configuration
-export CAMERA_CONFIG, CAMERA_CONFIG_CENTERED, CAMERA_CONFIG_OFFSET, CameraConfig, DEFAULT_OPTIMIZATION_CONFIG, convertcamconf, CameraMatrix
+export CAMERA_CONFIG, CAMERA_CONFIG_OFFSET, CameraConfig, DEFAULT_OPTIMIZATION_CONFIG, convertcamconf, CameraMatrix
 
 # Export WithDims for flexible typing
 export WithDims, WithUnits
