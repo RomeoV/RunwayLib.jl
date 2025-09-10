@@ -30,6 +30,7 @@ Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 [sources]
 ForwardDiff = {rev = "rv/remove-quote-assert-string-interpolation", url = "https://github.com/RomeoV/ForwardDiff.jl.git"}
 SciMLBase = {rev = "rv/fix-jet-opt", url = "https://github.com/RomeoV/SciMLBase.jl"}
+NonlinearSolveFirstOrder = {url="https://github.com/SciML/NonlinearSolve.jl", subdir="lib/NonlinearSolveFirstOrder"}
 
 [compat]
 ADTypes = "^1.16.0"
@@ -42,7 +43,7 @@ LinearAlgebra = "^1.11.0"
 LinearSolve = "^3.25.0"
 Moshi = "0.3.7"
 NonlinearSolveBase = "^1.13.0"
-NonlinearSolveFirstOrder = "^1.7.0"
+NonlinearSolveFirstOrder = "^1.8.0"
 Polyester = "0.7.18"
 PolyesterWeave = "0.2.2"
 PrecompileTools = "1"
