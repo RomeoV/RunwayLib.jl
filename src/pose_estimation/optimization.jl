@@ -152,43 +152,36 @@ const CAMERA_MATRIX_OFFSET = CameraMatrix(CAMERA_CONFIG_OFFSET)
 # Type-stable cache creation using OncePerTask (Julia 1.12+)
 # Parameterized cache creation functions
 
-"""
-Create a cache for 6DOF optimization with the given camera configuration and numeric type
-"""
-function _create_cache_6dof(camconfig::CameraMatrix{:offset}, ::Type{T}) where {T}
-    (; runway_corners, projections, true_pos, true_rot) = setup_for_precompile(camconfig)
+
+# Simple cache definitions - CameraMatrix :offset only
+const CACHE_6DOF = let
+    (; runway_corners, projections, true_pos, true_rot) = setup_for_precompile(CAMERA_MATRIX_OFFSET)
     noise_model = _defaultnoisemodel(projections)
     ps = PoseOptimizationParams6DOF(
-        runway_corners, projections, camconfig, noise_model
+        runway_corners, projections,
+        CAMERA_MATRIX_OFFSET, noise_model
     )
-    prob = NonlinearLeastSquaresProblem{false}(POSEOPTFN, rand(T, 6), ps)
+    prob = NonlinearLeastSquaresProblem{false}(POSEOPTFN, rand(6), ps)
+    T = Float64
     reltol = real(oneunit(T)) * (eps(real(one(T))))^(2 // 5)
     abstol = real(oneunit(T)) * (eps(real(one(T))))^(2 // 5)
     init(prob, ALG; reltol, abstol)
 end
 
-"""
-Create a cache for 3DOF optimization with the given camera configuration and numeric type
-"""
-function _create_cache_3dof(camconfig::CameraMatrix{:offset}, ::Type{T}) where {T}
-    (; runway_corners, projections, true_pos, true_rot) = setup_for_precompile(camconfig)
+const CACHE_3DOF = let
+    (; runway_corners, projections, true_pos, true_rot) = setup_for_precompile(CAMERA_MATRIX_OFFSET)
     noise_model = _defaultnoisemodel(projections)
     ps = PoseOptimizationParams3DOF(
-        runway_corners, projections, camconfig, noise_model, true_rot
+        runway_corners, projections,
+        CAMERA_MATRIX_OFFSET, noise_model,
+        true_rot
     )
-    prob = NonlinearLeastSquaresProblem{false}(POSEOPTFN, rand(T, 3), ps)
+    prob = NonlinearLeastSquaresProblem{false}(POSEOPTFN, rand(3), ps)
+    T = Float64
     reltol = real(oneunit(T)) * (eps(real(one(T))))^(2 // 5)
     abstol = real(oneunit(T)) * (eps(real(one(T))))^(2 // 5)
     init(prob, ALG; reltol, abstol)
 end
-
-# OncePerTask cache objects - CameraMatrix :offset only
-const _CACHE_6DOF_OFFSET_MATRIX_FLOAT64 = OncePerTask(() -> _create_cache_6dof(CAMERA_MATRIX_OFFSET, Float64))
-const _CACHE_3DOF_OFFSET_MATRIX_FLOAT64 = OncePerTask(() -> _create_cache_3dof(CAMERA_MATRIX_OFFSET, Float64))
-
-# Simplified cache dispatcher - CameraMatrix :offset only
-_get_cache(::Val{Symbol("6dof")}, ::Type{Float64}) = _CACHE_6DOF_OFFSET_MATRIX_FLOAT64()
-_get_cache(::Val{Symbol("3dof")}, ::Type{Float64}) = _CACHE_3DOF_OFFSET_MATRIX_FLOAT64()
 
 function estimatepose6dof(
         runway_corners::AbstractVector{<:WorldPoint},
@@ -204,16 +197,17 @@ function estimatepose6dof(
         initial_guess_rot .|> _ustrip(rad)
     ] |> Array
 
-    # Create parameters using actual input types (no conversions)
+    # Convert coordinates to match cache type and get cache
+    observed_corners_converted = [
+        convertcamconf(CAMERA_MATRIX_OFFSET, camconfig, proj)
+            for proj in observed_corners
+    ]
     ps = PoseOptimizationParams6DOF(
-        runway_corners |> Vector, observed_corners |> Vector,
-        camconfig, noise_model
+        runway_corners |> Vector, observed_corners_converted |> Vector,
+        CAMERA_MATRIX_OFFSET, noise_model
     )
-
-    # Get type-specific cache
-    # Extract the underlying numeric type from Unitful quantities
-    T_inner = T <: Quantity ? typeof(ustrip(zero(T))) : T
-    cache = _get_cache(Val(Symbol("6dof")), T_inner)
+    
+    cache = CACHE_6DOF
     reinit!(cache, u₀; p=ps)
     solve!(cache)
     sol = (; u = cache.u, retcode = cache.retcode)
@@ -236,16 +230,17 @@ function estimatepose3dof(
 
     u₀ = initial_guess_pos .|> _ustrip(m) |> Array
 
-    # Create parameters using actual input types (no conversions)
+    # Convert coordinates to match cache type and get cache
+    observed_corners_converted = [
+        convertcamconf(CAMERA_MATRIX_OFFSET, camconfig, proj)
+            for proj in observed_corners
+    ]
     ps = PoseOptimizationParams3DOF(
-        runway_corners |> Vector, observed_corners |> Vector,
-        camconfig, noise_model, known_attitude
+        runway_corners |> Vector, observed_corners_converted |> Vector,
+        CAMERA_MATRIX_OFFSET, noise_model, known_attitude
     )
-
-    # Get type-specific cache
-    # Extract the underlying numeric type from Unitful quantities
-    T_inner = T <: Quantity ? typeof(ustrip(zero(T))) : T
-    cache = _get_cache(Val(Symbol("3dof")), T_inner)
+    
+    cache = CACHE_3DOF
     reinit!(cache, u₀; p=ps)
     solve!(cache)
     sol = (; u = cache.u, retcode = cache.retcode)
