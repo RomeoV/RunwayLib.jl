@@ -25,20 +25,20 @@ PrecompileTools.@compile_workload begin
 
     # Define typical aircraft position and orientation
     aircraft_pos = WorldPoint(-3300.0m, 0.0m, 80.0m)
-    aircraft_rot = RotZYX(roll = 0.0, pitch = 0.0, yaw = 0.0)
+    aircraft_rot = RotZYX(roll=0.0, pitch=0.0, yaw=0.0)
 
     # Precompile projection and pose estimation functions
     for runway_corners in [runway_corners_vec, runway_corners_SA]
         # Generate typical projections
         projections = [
             project(aircraft_pos, aircraft_rot, corner, cam_config)
-                for corner in runway_corners
+            for corner in runway_corners
         ]
 
         # Skip 6DOF pose estimation precompilation for now
-        # pose6dof = estimatepose6dof(runway_corners, projections, cam_config)
+        pose6dof = estimatepose6dof(runway_corners, projections, cam_config)
 
         # Skip 3DOF pose estimation precompilation for now
-        # pose3dof = estimatepose3dof(runway_corners, projections, aircraft_rot, cam_config)
+        pose3dof = estimatepose3dof(runway_corners, projections, aircraft_rot, cam_config)
     end
 end
