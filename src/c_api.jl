@@ -86,85 +86,6 @@ function get_camera_matrix_from_c(camera_matrix_c::CameraMatrix_C)
     return CameraMatrix{:offset}(matrix_with_units, width_with_units, height_with_units)
 end
 
-# Dispatched parsing functions for each covariance type
-function parse_covariance_data_impl(::Val{COV_DEFAULT}, covariance_data::Ptr{Cdouble}, num_points::Integer)
-    # Return default noise model (pointer can be null in this case)
-    return _defaultnoisemodel(1:num_points)  #|> NoiseModelVariant
-end
-
-function parse_covariance_data_impl(::Val{COV_SCALAR}, covariance_data::Ptr{Cdouble}, num_points::Integer)
-    # Single noise standard deviation for all measurements
-    noise_std = unsafe_load(covariance_data, 1)
-    # if noise_std <= 0
-    #     throw(ArgumentError("Noise standard deviation must be positive"))
-    # end
-    distributions = [Normal(0.0, noise_std) for _ in 1:(2*num_points)]
-    return UncorrGaussianNoiseModel(distributions) #|> NoiseModelVariant
-end
-
-function parse_covariance_data_impl(::Val{COV_DIAGONAL_FULL}, covariance_data::Ptr{Cdouble}, num_points::Integer)
-    # Diagonal covariance matrix: variances for each measurement
-    variances = unsafe_wrap(Array, covariance_data, 2 * num_points)
-    if any(variances .<= 0)
-        throw(ArgumentError("All variances must be positive"))
-    end
-    distributions = [Normal(0.0, sqrt(var)) for var in variances]
-    return UncorrGaussianNoiseModel(distributions) #|> NoiseModelVariant
-end
-
-function parse_covariance_data_impl(::Val{COV_BLOCK_DIAGONAL}, covariance_data::Ptr{Cdouble}, num_points::Integer)
-    # 2x2 covariance matrix for each keypoint
-    data_length = 4 * num_points
-    cov_data = unsafe_wrap(Array, covariance_data, data_length)
-
-    # Create individual 2x2 covariance matrices for each keypoint
-    distributions = Vector{MVNORMAL_T}(undef, num_points)
-    for i in 1:num_points
-        idx = (1:4) .+ (i - 1) * 4
-        cov_2x2 = reshape(cov_data[idx], 2, 2)
-
-        if !isposdef(cov_2x2)
-            throw(ArgumentError("Covariance matrix for keypoint $i must be positive definite"))
-        end
-
-        distributions[i] = MvNormal(zeros(2), cov_2x2)
-    end
-    return UncorrGaussianNoiseModel(distributions) #|> NoiseModelVariant
-end
-
-function parse_covariance_data_impl(::Val{COV_FULL_MATRIX}, covariance_data::Ptr{Cdouble}, num_points::Integer)
-    # Full covariance matrix - use CorrGaussianNoiseModel for correlated observations
-    matrix_size = 2 * num_points
-    data_length = matrix_size * matrix_size
-    cov_data = unsafe_wrap(Array, covariance_data, data_length)
-
-    # Reconstruct matrix from row-major storage, but since symmetric don't worry
-    cov_matrix = reshape(cov_data, matrix_size, matrix_size)
-
-    if !isposdef(cov_matrix) || !issymmetric(cov_matrix)
-        throw(ArgumentError("Full covariance matrix must be symmetric and positive definite"))
-    end
-
-    # Create a single MvNormal for all measurements (correlated case)
-    corr_noise = MvNormal(zeros(matrix_size), cov_matrix)
-    return CorrGaussianNoiseModel(corr_noise) #|> NoiseModelVariant
-end
-
-# # Main parsing function that dispatches based on covariance type
-# function parse_covariance_data(covariance_type::COVARIANCE_TYPE_C, covariance_data::Ptr{Cdouble}, num_points::Integer)
-#     """
-#     Parse covariance data from C pointer based on covariance type enum.
-#     Returns a NoiseModelVariant sum type that can be used with the optimization infrastructure.
-#     """
-#     # For non-default types, we need valid covariance data
-# if covariance_type != COV_DEFAULT && covariance_data == C_NULL
-#     throw(ArgumentError("Covariance data pointer cannot be null for covariance type: $covariance_type"))
-# end
-
-#     # Dispatch to appropriate parsing function using Val for type stability
-#     return parse_covariance_data_impl(Val(covariance_type), covariance_data, num_points)::NoiseModelVariant
-# end
-
 function parse_covariance_data(covariance_type::COVARIANCE_TYPE_C, covariance_data::Ptr{Cdouble}, num_points::Integer)
     """
     Parse covariance data from C pointer based on covariance type enum.
@@ -206,20 +127,6 @@ function parse_covariance_data(covariance_type::COVARIANCE_TYPE_C, covariance_da
             data_length = 4 * num_points
             cov_data = unsafe_wrap(Array, covariance_data, data_length)
 
-            # this has JET issues somehow...
-            # distributions = [MvNormal{Float64}(zeros(2), I(2)) for _ in 1:num_points]
-            # map!(distribution, Iterators.partition(eachindex(cov_data), 4)) do idx
-            #     # Extract 2x2 covariance matrix for this keypoint (stored row-major)
-            #     cov_2x2 = reshape(cov_data[idx], 2, 2)
-
-            #     # Check positive definite
-            #     if !isposdef(cov_2x2)
-            #         throw(ArgumentError("Covariance matrix for keypoint $i must be positive definite"))
-            #     end
-
-            #     MvNormal(zeros(2), cov_2x2)
-            # end
-            # return covmatrix(UncorrGaussianNoiseModel(distributions))
             # Create individual 2x2 covariance matrices for each keypoint
             distributions = Vector{MVNORMAL_T}(undef, num_points)
             for i in 1:num_points
@@ -347,12 +254,6 @@ Base.@ccallable function estimate_pose_6dof(
         else
             initial_rot = SA[0.0, 0.0, 0.0]rad  # Default value
         end
-
-        # noise_model = RunwayLib._defaultnoisemodel(1:4)
-        # noise_model = RunwayLib.parse_covariance_data_impl(Val(RunwayLib.CovarianceType.COV_SCALAR), pointer(rand(8)), 4)
-        # noise_model = RunwayLib.parse_covariance_data_impl(Val(RunwayLib.CovarianceType.COV_DIAGONAL_FULL), pointer(rand(8)), 4)
-        # noise_model = RunwayLib.parse_covariance_data_impl(Val(RunwayLib.CovarianceType.COV_BLOCK_DIAGONAL), pointer(stack([Matrix(hermitianpart(rand(2, 2) + 2I)) for _ in 1:4])), 4)
-        # noise_model = RunwayLib.parse_covariance_data(RunwayLib.CovarianceType.COV_FULL_MATRIX, pointer(Matrix(hermitianpart(rand(8, 8) + 8I))), 4)
 
         # Perform pose estimation with custom noise model and initial guesses
         sol = estimatepose6dof(runway_corners, projections, cam_matrix, variant(noise_model_variant);
