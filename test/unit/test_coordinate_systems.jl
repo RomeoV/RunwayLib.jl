@@ -70,6 +70,6 @@ using Unitful
         # Test coordinate conversion (identity for same coordinate system)
         p = ProjectionPoint(:offset, rand(2)px...)
         p′ = convertcamconf(CAMERA_CONFIG_OFFSET, CAMERA_CONFIG_OFFSET, p)
-        @test p ≈ p′
+        @test p ≈ p′  # Should be identity since both are :offset
     end
 end

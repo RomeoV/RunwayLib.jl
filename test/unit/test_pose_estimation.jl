@@ -21,7 +21,7 @@ using StaticArrays
     end
 
     @testset "Pose Estimation - Offset" begin
-        config = CAMERA_CONFIG_OFFSET
+        config = CameraMatrix(CAMERA_CONFIG_OFFSET)
         # Ground truth airplane pose
         true_pos = WorldPoint(-500.0m, 10.0m, 100.0m)
         true_rot = RotZYX(roll = 0.02, pitch = 0.1, yaw = -0.01)
@@ -125,7 +125,8 @@ using StaticArrays
         for (corners, n_points) in [(runway_corners_8, 8), (runway_corners_16, 16)]
             @testset "$n_points keypoints" begin
                 # Generate projections
-                true_projections = [project(true_pos, true_rot, corner, CAMERA_CONFIG_OFFSET) for corner in corners]
+                camera_matrix = CameraMatrix(CAMERA_CONFIG_OFFSET)
+                true_projections = [project(true_pos, true_rot, corner, camera_matrix) for corner in corners]
                 
                 # Initial guesses
                 noisy_pos = [true_pos.x + 150.0m, true_pos.y - 30.0m, true_pos.z + 40.0m]
@@ -133,7 +134,7 @@ using StaticArrays
 
                 @testset "6DOF with $n_points points" begin
                     result = estimatepose6dof(
-                        corners, true_projections, CAMERA_CONFIG_OFFSET;
+                        corners, true_projections, camera_matrix;
                         initial_guess_pos = noisy_pos,
                         initial_guess_rot = noisy_rot
                     )
@@ -142,7 +143,7 @@ using StaticArrays
 
                 @testset "3DOF with $n_points points" begin
                     result = estimatepose3dof(
-                        corners, true_projections, true_rot, CAMERA_CONFIG_OFFSET;
+                        corners, true_projections, true_rot, camera_matrix;
                         initial_guess_pos = noisy_pos
                     )
                     @test norm(result.pos - true_pos) < 1e-5m

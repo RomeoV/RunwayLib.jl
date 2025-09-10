@@ -12,12 +12,10 @@ using Rotations
             cam_pos = WorldPoint(-1000.0u"m", 0.0u"m", 0.0u"m")
             cam_rot = RotZYX(0.0, 0.0, 0.0)
             world_pt = WorldPoint(0.0u"m", 0.0u"m", 0.0u"m")
-            #
-            # Test with both coordinate systems
-            proj_pt_centered = project(cam_pos, cam_rot, world_pt, CAMERA_CONFIG_CENTERED)
+            
+            # Test with :offset coordinate system only
             proj_pt_offset = project(cam_pos, cam_rot, world_pt, CAMERA_CONFIG_OFFSET)
-            #
-            @test proj_pt_centered ≈ ProjectionPoint(0px, 0px)
+            
             @test proj_pt_offset ≈ let conf = CAMERA_CONFIG_OFFSET
                 oc = getopticalcenter(conf)
                 ProjectionPoint(oc[1], oc[2])
@@ -27,17 +25,13 @@ using Rotations
         @testset "Check signs: rotated" begin
             # Test basic projection geometry with units
             cam_pos = WorldPoint(-1000.0m, 0.0m, 0.0m)
-            # slightly tilted nose up and right
+            # Camera pointing straight ahead
             cam_rot = RotZYX(roll = 0°, pitch = 0°, yaw = 0°)
             world_pt = WorldPoint(0.0m, 10.0m, 10.0m)
-            #
-            # Test with both coordinate systems
-            proj_pt_centered = project(cam_pos, cam_rot, world_pt, CAMERA_CONFIG_CENTERED)
+            
+            # Test with :offset coordinate system only
             proj_pt_offset = project(cam_pos, cam_rot, world_pt, CAMERA_CONFIG_OFFSET)
-            #
-            @test proj_pt_centered.x > 0px
-            @test proj_pt_centered.y > 0px
-            #
+            
             oc = getopticalcenter(CAMERA_CONFIG_OFFSET)
             @test proj_pt_offset.x < oc[1]
             @test proj_pt_offset.y < oc[2]
@@ -46,17 +40,13 @@ using Rotations
         @testset "Check signs: roll" begin
             # Test basic projection geometry with units
             cam_pos = WorldPoint(-1000.0m, 0.0m, 0.0m)
-            # slightly tilted nose up and right
+            # Camera rolled 90 degrees
             cam_rot = RotZYX(roll = 90°, pitch = 0°, yaw = 0°)
             world_pt = WorldPoint(0.0m, 10.0m, 10.0m)
-            #
-            # Test with both coordinate systems
-            proj_pt_centered = project(cam_pos, cam_rot, world_pt, CAMERA_CONFIG_CENTERED)
+            
+            # Test with :offset coordinate system only
             proj_pt_offset = project(cam_pos, cam_rot, world_pt, CAMERA_CONFIG_OFFSET)
-            #
-            @test proj_pt_centered.x > 0px
-            @test proj_pt_centered.y < 0px
-            #
+            
             oc = getopticalcenter(CAMERA_CONFIG_OFFSET)
             @test proj_pt_offset.x < oc[1]
             @test proj_pt_offset.y > oc[2]
@@ -65,29 +55,24 @@ using Rotations
         @testset "Check signs: pitch and yaw" begin
             # Test basic projection geometry with units
             cam_pos = WorldPoint(-1000.0m, 0.0m, 0.0m)
-            # slightly tilted nose up and right
+            # Camera tilted with pitch and yaw
             cam_rot = RotZYX(roll = 0°, pitch = -1°, yaw = -1°)
             world_pt = WorldPoint(0.0m, 0.0m, 0.0m)
-            #
-            # Test with both coordinate systems
-            proj_pt_centered = project(cam_pos, cam_rot, world_pt, CAMERA_CONFIG_CENTERED)
+            
+            # Test with :offset coordinate system only
             proj_pt_offset = project(cam_pos, cam_rot, world_pt, CAMERA_CONFIG_OFFSET)
-            #
-            @test proj_pt_centered.x > 0px
-            @test proj_pt_centered.y < 0px
-            #
+            
             oc = getopticalcenter(CAMERA_CONFIG_OFFSET)
             @test proj_pt_offset.x < oc[1]
             @test proj_pt_offset.y > oc[2]
         end
 
         @testset "Check throws behind camera" begin
-            # Test basic projection geometry with units
+            # Test exception when point is behind camera
             cam_pos = WorldPoint(0.0m, 0.0m, 0.0m)
-            # slightly tilted nose up and right
+            # Camera tilted with pitch and yaw
             cam_rot = RotZYX(roll = 0°, pitch = -1°, yaw = -1°)
             world_pt = WorldPoint(-1.0m, 0.0m, 0.0m)
-            @test_throws BehindCameraException project(cam_pos, cam_rot, world_pt, CAMERA_CONFIG_CENTERED)
             @test_throws BehindCameraException project(cam_pos, cam_rot, world_pt, CAMERA_CONFIG_OFFSET)
         end
     end
@@ -237,11 +222,9 @@ using Rotations
         @testset "CameraMatrix(CameraConfig) Conversion" begin
             # Test conversion from CameraConfig to CameraMatrix
             matrix_config_offset = CameraMatrix(CAMERA_CONFIG_OFFSET)
-            matrix_config_centered = CameraMatrix(CAMERA_CONFIG_CENTERED)
 
-            # Test that conversions maintain coordinate system
+            # Test that conversion maintains :offset coordinate system
             @test matrix_config_offset isa CameraMatrix{:offset}
-            # Only :offset coordinate system supported
 
             # Test that converted matrix produces same results
             cam_pos = WorldPoint(-1000.0m, 0.0m, 100.0m)
@@ -254,13 +237,6 @@ using Rotations
 
             @test abs(ustrip(proj_orig_offset.x) - ustrip(proj_conv_offset.x)) < 1.0e-6
             @test abs(ustrip(proj_orig_offset.y) - ustrip(proj_conv_offset.y)) < 1.0e-6
-
-            # Compare original vs converted for centered coordinates
-            proj_orig_centered = project(cam_pos, cam_rot, world_pt, CAMERA_CONFIG_CENTERED)
-            proj_conv_centered = project(cam_pos, cam_rot, world_pt, matrix_config_centered)
-
-            @test abs(ustrip(proj_orig_centered.x) - ustrip(proj_conv_centered.x)) < 1.0e-6
-            @test abs(ustrip(proj_orig_centered.y) - ustrip(proj_conv_centered.y)) < 1.0e-6
         end
 
         @testset "Camera Matrix Validation Function" begin
@@ -306,32 +282,32 @@ using Rotations
                 WorldPoint(1500.0m, 50.0m, 0.0m),
             ]
 
-            # Create projections using the original camera config
+            # Define ground truth pose
             true_pos = WorldPoint(-1300.0m, 0.0m, 80.0m)
             true_rot = RotZYX(yaw = 0.05, pitch = 0.04, roll = 0.03)
 
-            projections = [project(true_pos, true_rot, corner, CAMERA_CONFIG_OFFSET) for corner in runway_corners]
-
-            # Convert camera config to matrix
+            # Create camera matrix
             camera_matrix = CameraMatrix(CAMERA_CONFIG_OFFSET)
+            
+            # Generate projections using CameraMatrix
+            projections = [project(true_pos, true_rot, corner, camera_matrix) for corner in runway_corners]
 
             # Test 6DOF estimation with matrix
             pose_matrix = estimatepose6dof(runway_corners, projections, camera_matrix)
-            pose_config = estimatepose6dof(runway_corners, projections, CAMERA_CONFIG_OFFSET)
-
-            # Results should be very similar
-            @test abs(pose_matrix.pos.x - pose_config.pos.x) < 1.0m
-            @test abs(pose_matrix.pos.y - pose_config.pos.y) < 1.0m
-            @test abs(pose_matrix.pos.z - pose_config.pos.z) < 1.0m
+            
+            # Results should be close to ground truth
+            @test abs(pose_matrix.pos.x - true_pos.x) < 5.0m
+            @test abs(pose_matrix.pos.y - true_pos.y) < 5.0m
+            @test abs(pose_matrix.pos.z - true_pos.z) < 5.0m
 
             # Test 3DOF estimation with matrix
             pose3d_matrix = estimatepose3dof(runway_corners, projections, true_rot, camera_matrix)
-            pose3d_config = estimatepose3dof(runway_corners, projections, true_rot, CAMERA_CONFIG_OFFSET)
 
-            # Results should be very similar
-            @test abs(pose3d_matrix.pos.x - pose3d_config.pos.x) < 1.0m
-            @test abs(pose3d_matrix.pos.y - pose3d_config.pos.y) < 1.0m
-            @test abs(pose3d_matrix.pos.z - pose3d_config.pos.z) < 1.0m
+            # Results should be close to ground truth position
+            @test abs(pose3d_matrix.pos.x - true_pos.x) < 5.0m
+            @test abs(pose3d_matrix.pos.y - true_pos.y) < 5.0m
+            @test abs(pose3d_matrix.pos.z - true_pos.z) < 5.0m
+            @test pose3d_matrix.rot ≈ true_rot
         end
     end
 end

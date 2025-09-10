@@ -77,7 +77,7 @@ function CameraConfig{:offset}(camera_matrix::CameraMatrix{:offset})
     # Use average focal length if x and y are different (assuming square pixels)
     focal_length_px = (f_px_x + f_px_y) / 2
     
-    return CameraConfig{S′}(
+    return CameraConfig{:offset}(
         focal_length_px,
         camera_matrix.image_width,
         camera_matrix.image_height,
