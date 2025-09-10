@@ -9,9 +9,8 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
 [sources]
-NonlinearSolveFirstOrder = {rev = "rv/fix-extra-kwargs", subdir = "lib/NonlinearSolveFirstOrder", url = "https://github.com/RomeoV/NonlinearSolve.jl"}
 RunwayLib = {path = ".."}
-SciMLBase = {rev = "as/fix-jet-opt", url = "https://github.com/AayushSabharwal/SciMLBase.jl"}
+SciMLBase = {rev = "rv/fix-jet-opt", url = "https://github.com/RomeoV/SciMLBase.jl"}
 
 [compat]
 DataStructures = "0.18"

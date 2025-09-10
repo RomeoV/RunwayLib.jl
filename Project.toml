@@ -29,14 +29,13 @@ Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
 [sources]
 ForwardDiff = {rev = "rv/remove-quote-assert-string-interpolation", url = "https://github.com/RomeoV/ForwardDiff.jl.git"}
-NonlinearSolveFirstOrder = {rev = "rv/fix-extra-kwargs", subdir = "lib/NonlinearSolveFirstOrder", url = "https://github.com/RomeoV/NonlinearSolve.jl"}
-SciMLBase = {rev = "as/fix-jet-opt", url = "https://github.com/AayushSabharwal/SciMLBase.jl"}
+SciMLBase = {rev = "rv/fix-jet-opt", url = "https://github.com/RomeoV/SciMLBase.jl"}
 
 [compat]
 ADTypes = "^1.16.0"
 CEnum = "^0.5.0"
 DiffEqBase = "^6.179.0"
-DifferentiationInterface = "0.7.7"
+DifferentiationInterface = "0.7"
 Distributions = "0.25.120"
 ForwardDiff = "^1.0.1"
 LinearAlgebra = "^1.11.0"
