@@ -108,9 +108,8 @@ class IntegrityResult_C(ctypes.Structure):
 # ============================================================================
 
 class CameraConfig(IntEnum):
-    """Camera configuration options."""
-    CENTERED = 0  # Origin at image center, Y-axis up
-    OFFSET = 1    # Origin at top-left, Y-axis down
+    """Camera configuration options. Note: Only OFFSET is supported."""
+    OFFSET = 1    # Origin at top-left, Y-axis down (only supported option)
     MATRIX = 2    # Custom camera matrix
 
 
@@ -168,9 +167,8 @@ class ProjectionPoint:
         x: Horizontal image coordinate (pixels)
         y: Vertical image coordinate (pixels)
         
-    Note: Coordinate system depends on camera configuration:
+    Note: Only OFFSET coordinate system is supported:
     - OFFSET: Origin at top-left, Y-axis down
-    - CENTERED: Origin at center, Y-axis up
     """
     x: float
     y: float
@@ -222,7 +220,7 @@ class CameraMatrix:
         matrix: 3x3 camera matrix (list of lists, row-major order)
         image_width: Image width in pixels
         image_height: Image height in pixels
-        coordinate_system: Either 'centered' or 'offset'
+        coordinate_system: Must be 'offset' (only supported option)
     """
     matrix: List[List[float]]  # 3x3 matrix
     image_width: float
@@ -249,8 +247,8 @@ class CameraMatrix:
             raise ValueError("Image height must be positive")
         
         # Check coordinate system
-        if self.coordinate_system not in ('centered', 'offset'):
-            raise ValueError("Coordinate system must be 'centered' or 'offset'")
+        if self.coordinate_system != 'offset':
+            raise ValueError("Coordinate system must be 'offset' (only supported option)")
         
         # Basic validation of camera matrix structure
         # Bottom row should be [0, 0, 1]
@@ -283,7 +281,7 @@ class CameraMatrix:
         
         c_struct.image_width = self.image_width
         c_struct.image_height = self.image_height
-        c_struct.coordinate_system = 0 if self.coordinate_system == 'centered' else 1
+        c_struct.coordinate_system = 1  # Always offset (only supported option)
         
         return c_struct
     
@@ -296,7 +294,7 @@ class CameraMatrix:
         matrix_np = flat_array.reshape((3, 3), order='F')
         matrix = matrix_np.tolist()
         
-        coord_system = 'centered' if c_struct.coordinate_system == 0 else 'offset'
+        coord_system = 'offset'  # Only offset supported
         
         return cls(
             matrix=matrix,

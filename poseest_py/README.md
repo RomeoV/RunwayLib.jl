@@ -7,7 +7,7 @@ PoseEst is a Python package that provides a clean, pythonic interface to a high-
 - **High Performance**: Built on a Julia backend for optimal computational performance
 - **Relocatable**: Self-contained with no external Julia installation required  
 - **Simple API**: Clean Python interface that hides the complexity of the underlying C/Julia code
-- **Multiple Camera Models**: Support for centered and offset camera coordinate systems
+- **Camera Matrix Support**: Flexible camera matrix specification with offset coordinate system
 - **Robust Error Handling**: Comprehensive error checking and informative error messages
 
 ## Installation
@@ -50,11 +50,23 @@ projections = [
     poseest.ProjectionPoint(395.8, 196.9),
 ]
 
+# Create camera matrix for offset coordinate system
+camera_matrix = poseest.CameraMatrix(
+    matrix=[
+        [7246.4, 0.0, 2048.5],  # fx, 0, cx
+        [0.0, 7246.4, 1500.5], # 0, fy, cy  
+        [0.0, 0.0, 1.0]         # 0, 0, 1
+    ],
+    image_width=4096.0,
+    image_height=3000.0,
+    coordinate_system='offset'
+)
+
 # Estimate 6DOF pose (position + orientation)
 pose = poseest.estimate_pose_6dof(
     runway_corners, 
     projections, 
-    poseest.CameraConfig.OFFSET
+    camera_matrix
 )
 
 print(f"Aircraft Position: ({pose.position.x:.1f}, {pose.position.y:.1f}, {pose.position.z:.1f}) meters")
@@ -100,7 +112,7 @@ Estimates both position and orientation from runway corner projections.
 pose = poseest.estimate_pose_6dof(
     runway_corners,    # List[WorldPoint]: 4+ runway corners in world coords
     projections,       # List[ProjectionPoint]: corresponding image projections
-    camera_config      # CameraConfig: camera configuration
+    camera_matrix      # CameraMatrix: camera matrix configuration
 )
 ```
 
@@ -111,7 +123,7 @@ pose = poseest.estimate_pose_3dof(
     runway_corners,    # List[WorldPoint]: 3+ runway corners
     projections,       # List[ProjectionPoint]: corresponding projections  
     known_rotation,    # Rotation: known aircraft attitude
-    camera_config      # CameraConfig: camera configuration
+    camera_matrix      # CameraMatrix: camera matrix configuration
 )
 ```
 
@@ -122,16 +134,29 @@ projection = poseest.project_point(
     camera_position,   # WorldPoint: camera position in world coords
     camera_rotation,   # Rotation: camera attitude  
     world_point,       # WorldPoint: 3D point to project
-    camera_config      # CameraConfig: camera configuration
+    camera_matrix      # CameraMatrix: camera matrix configuration
 )
 ```
 
-### Camera Configurations
+### Camera Matrix Configuration
 
-The package supports two camera coordinate system conventions:
+The package uses camera matrix specifications with the offset coordinate system:
 
-- `CameraConfig.CENTERED`: Origin at image center, Y-axis pointing up
-- `CameraConfig.OFFSET`: Origin at top-left corner, Y-axis pointing down
+- **CameraMatrix**: 3x3 camera matrix with intrinsic parameters
+- **Coordinate System**: Only 'offset' is supported (origin at top-left corner, Y-axis pointing down)
+
+```python
+camera_matrix = poseest.CameraMatrix(
+    matrix=[
+        [fx, 0.0, cx],  # Focal length x, principal point x
+        [0.0, fy, cy],  # Focal length y, principal point y  
+        [0.0, 0.0, 1.0] # Homogeneous coordinate
+    ],
+    image_width=4096.0,
+    image_height=3000.0,
+    coordinate_system='offset'
+)
+```
 
 ## Error Handling
 
