@@ -290,7 +290,7 @@ end
             pose_result = estimatepose6dof(
                 runway_corners, 
                 noisy_projections,
-                CAMERA_CONFIG_OFFSET
+                CameraMatrix(CAMERA_CONFIG_OFFSET)
             )
             
             # Test integrity using estimated pose
@@ -317,7 +317,7 @@ end
                 runway_corners,
                 noisy_projections, 
                 true_rot,  # Use true rotation
-                CAMERA_CONFIG_OFFSET
+                CameraMatrix(CAMERA_CONFIG_OFFSET)
             )
             
             # Test integrity using estimated pose
