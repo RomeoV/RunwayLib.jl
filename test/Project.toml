@@ -2,6 +2,7 @@
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
+LightSumTypes = "f56206fc-af4c-5561-a72a-43fe2ca5a923"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 NonlinearSolveFirstOrder = "5959db7a-ea39-4486-b5fe-2dd0bf03d60d"
 ProbabilisticParameterEstimators = "0098cf3f-3e1e-4f11-b01c-dd9dec1b3374"
@@ -16,6 +17,6 @@ Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
 [sources]
 ForwardDiff = {rev = "rv/remove-quote-assert-string-interpolation", url = "https://github.com/RomeoV/ForwardDiff.jl.git"}
+NonlinearSolveFirstOrder = {subdir = "lib/NonlinearSolveFirstOrder", url = "https://github.com/SciML/NonlinearSolve.jl"}
 RunwayLib = {path = ".."}
 SciMLBase = {rev = "rv/fix-jet-opt", url = "https://github.com/RomeoV/SciMLBase.jl"}
-NonlinearSolveFirstOrder = {url="https://github.com/SciML/NonlinearSolve.jl", subdir="lib/NonlinearSolveFirstOrder"}
