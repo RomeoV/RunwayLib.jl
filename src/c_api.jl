@@ -79,7 +79,7 @@ function parse_covariance_data(covariance_type::COVARIANCE_TYPE_C, covariance_da
     """
     if covariance_type == COV_DEFAULT
         # Return default noise model (pointer can be null in this case)
-        return covmatrix(_defaultnoisemodel(1:num_points))
+        return _defaultnoisemodel(1:num_points)
     end
 
     # For all other types, we need valid covariance data
@@ -94,7 +94,7 @@ function parse_covariance_data(covariance_type::COVARIANCE_TYPE_C, covariance_da
             throw(ArgumentError("Noise standard deviation must be positive"))
         end
         distributions = [Normal(0.0, noise_std) for _ in 1:(2*num_points)]
-        return covmatrix(UncorrGaussianNoiseModel(distributions))
+        return UncorrGaussianNoiseModel(distributions)
 
     elseif covariance_type == COV_DIAGONAL_FULL
         # Diagonal covariance matrix: variances for each measurement
@@ -103,7 +103,7 @@ function parse_covariance_data(covariance_type::COVARIANCE_TYPE_C, covariance_da
             throw(ArgumentError("All variances must be positive"))
         end
         distributions = [Normal(0.0, sqrt(var)) for var in variances]
-        return covmatrix(UncorrGaussianNoiseModel(distributions))
+        return UncorrGaussianNoiseModel(distributions)
 
     elseif covariance_type == COV_BLOCK_DIAGONAL
         # 2x2 covariance matrix for each keypoint
@@ -124,16 +124,19 @@ function parse_covariance_data(covariance_type::COVARIANCE_TYPE_C, covariance_da
         #     MvNormal(zeros(2), cov_2x2)
         # end
         # return covmatrix(UncorrGaussianNoiseModel(distributions))
-        covmat = zeros(2 * num_points, 2 * num_points)
+        # Create individual 2x2 covariance matrices for each keypoint
+        distributions = Vector{MvNormal}(undef, num_points)
         for i in 1:num_points
             idx = (1:4) .+ (i - 1) * 4
-            idx_ = (1:2) .+ (i - 1) * 2
-            covmat[idx_, idx_] .= reshape(cov_data[idx], 2, 2)
-            if !isposdef(@view covmat[idx_, idx_])
-                throw(ArgumentError("Covariance matrices for all keypoints must be positive definite"))
+            cov_2x2 = reshape(cov_data[idx], 2, 2)
+            
+            if !isposdef(cov_2x2)
+                throw(ArgumentError("Covariance matrix for keypoint $i must be positive definite"))
             end
+            
+            distributions[i] = MvNormal(zeros(2), cov_2x2)
         end
-        return covmat
+        return UncorrGaussianNoiseModel(distributions)
 
     elseif covariance_type == COV_FULL_MATRIX
         # Full covariance matrix - use CorrGaussianNoiseModel for correlated observations
@@ -150,7 +153,7 @@ function parse_covariance_data(covariance_type::COVARIANCE_TYPE_C, covariance_da
 
         # Create a single MvNormal for all measurements (correlated case)
         corr_noise = MvNormal(zeros(matrix_size), cov_matrix)
-        return covmatrix(CorrGaussianNoiseModel(corr_noise))
+        return CorrGaussianNoiseModel(corr_noise)
     else
         throw(ArgumentError("Invalid covariance type: $covariance_type"))
     end
