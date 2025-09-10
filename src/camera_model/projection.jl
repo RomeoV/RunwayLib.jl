@@ -8,23 +8,17 @@ import Moshi.Match: @match
 # Abstract camera configuration interface
 abstract type AbstractCameraConfig{S} end
 
-# Camera configuration with type parameter for coordinate system
+# CameraConfig has been removed - use CameraMatrix instead
+# Temporary backward compatibility for CAMERA_CONFIG_OFFSET
 struct CameraConfig{S} <: AbstractCameraConfig{S}
     focal_length_px::typeof(1.0px)
     image_width::typeof(1.0px)
     image_height::typeof(1.0px)
 end
 
-# Default camera configurations
+# Only :offset configuration supported
 # 25.0mm ÷ 3.45μm = 7246.4 pixels
-const CAMERA_CONFIG_CENTERED = CameraConfig{:centered}(7246.4px, 4096px, 3000px)
 const CAMERA_CONFIG_OFFSET = CameraConfig{:offset}(7246.4px, 4096px, 3000px)
-
-# Backward compatibility constructor for existing code
-function CameraConfig{S}(focal_length::typeof(1.0mm), pixel_size::typeof(1.0μm/px), image_width::typeof(1.0px), image_height::typeof(1.0px)) where {S}
-    focal_length_px = focal_length / pixel_size |> _uconvert(px)
-    return CameraConfig{S}(focal_length_px, image_width, image_height)
-end
 
 "Camera model using 3x3 projection matrix with uniform pixel units."
 struct CameraMatrix{S, T <: WithDims(px)} <: AbstractCameraConfig{S}
@@ -40,7 +34,7 @@ struct CameraMatrix{S, T <: WithDims(px)} <: AbstractCameraConfig{S}
     # Inner constructor with validation
     function CameraMatrix{S, T}(matrix::SMatrix{3, 3, T}, width::WithDims(px), height::WithDims(px)) where {S, T}
         Base.isconcretetype(T) || throw(ArgumentError("CameraMatrix eltype must be concrete."))
-        S ∈ (:centered, :offset) || throw(ArgumentError("Coordinate system S must be :centered or :offset, got $S"))
+        S == :offset || throw(ArgumentError("Only :offset coordinate system is supported, got $S"))
         validate_camera_matrix(matrix) || throw(ArgumentError("Invalid camera matrix"))
         ustrip(width) > 0 || throw(ArgumentError("Image width must be positive"))
         ustrip(height) > 0 || throw(ArgumentError("Image height must be positive"))
@@ -52,15 +46,14 @@ end
 CameraMatrix(S::Symbol, matrix::SMatrix{3, 3, T}, width::WithDims(px), height::WithDims(px)) where {T} = CameraMatrix{S}(matrix, width, height)
 
 # Get optical center based on coordinate system
-getopticalcenter(cam::AbstractCameraConfig{:centered}) = SA[0.0px, 0.0px]
 getopticalcenter(cam::AbstractCameraConfig{:offset}) = SA[(cam.image_width + 1px) / 2, (cam.image_height + 1px) / 2]
 getopticalcenter(cam::CameraMatrix) = SA[cam.matrix[1, 3], cam.matrix[2, 3]]
 
-# Constructor from CameraConfig
-function CameraMatrix(config::CameraConfig{S}) where {S}
+# Constructor from CameraConfig - only :offset supported
+function CameraMatrix(config::CameraConfig{:offset})
     f_px = config.focal_length_px
     cx, cy = getopticalcenter(config)
-    sgn = S == :centered ? +1 : -1
+    sgn = -1  # Only :offset supported
     # Build uniform camera matrix with [px] units for normalized coordinates
     # K_norm projects unitless normalized coordinates [X/Z, Y/Z, 1] to pixels
     # For centered coordinates: u = f * (Y/X), v = f * (Z/X) - no sign flip needed
@@ -71,12 +64,12 @@ function CameraMatrix(config::CameraConfig{S}) where {S}
         0px        (sgn*f_px) cy
         0px        0px        1px
     ]
-    return CameraMatrix{S}(matrix, config.image_width, config.image_height)
+    return CameraMatrix{:offset}(matrix, config.image_width, config.image_height)
 end
 
-# Constructor from CameraMatrix - inverse conversion
-CameraConfig(camera_matrix::CameraMatrix{S}) where {S} = CameraConfig{S}(camera_matrix)
-function CameraConfig{S′}(camera_matrix::CameraMatrix{S}) where {S, S′}
+# Constructor from CameraMatrix - inverse conversion, only :offset supported
+CameraConfig(camera_matrix::CameraMatrix{:offset}) = CameraConfig{:offset}(camera_matrix)
+function CameraConfig{:offset}(camera_matrix::CameraMatrix{:offset})
     # Extract focal length in pixels from diagonal elements (ignore off-diagonal terms)
     f_px_x = abs(camera_matrix.matrix[1, 1])  # Take absolute value to handle sign differences
     f_px_y = abs(camera_matrix.matrix[2, 2])
@@ -111,15 +104,11 @@ function project(
     u_centered = f_pixels * (cam_pt.y / cam_pt.x) |> _uconvert(pixel)  # Left positive
     v_centered = f_pixels * (cam_pt.z / cam_pt.x) |> _uconvert(pixel)  # Up positive
 
+    # Convert to :offset coordinates
+    cx, cy = getopticalcenter(camconfig)
+    u, v = -u_centered + cx, -v_centered + cy
     T′′ = typeof(u_centered)
-    return @match camconfig begin
-        ::CameraConfig{:centered} => ProjectionPoint{T′′, :centered}(u_centered, v_centered)
-        ::CameraConfig{:offset} => let
-            cx, cy = getopticalcenter(camconfig)
-            u, v = -u_centered + cx, -v_centered + cy
-            ProjectionPoint{T′′, :offset}(u, v)
-        end
-    end
+    return ProjectionPoint{T′′, :offset}(u, v)
 end
 
 function project(
@@ -142,23 +131,8 @@ function project(
     return ProjectionPoint{T′′, S}(u, v)
 end
 
-# Clean dispatch-based coordinate conversion using AbstractCameraConfig
-function convertcamconf(to::AbstractCameraConfig{:centered}, from::AbstractCameraConfig{:offset}, proj::ProjectionPoint{T, :offset}) where {T}
-    u, v = proj.x, proj.y
-    cx, cy = getopticalcenter(from)
-    u_centered, v_centered = -(u - cx), -(v - cy)
-    return ProjectionPoint{T, :centered}(u_centered, v_centered)
-end
-
-function convertcamconf(to::AbstractCameraConfig{:offset}, from::AbstractCameraConfig{:centered}, proj::ProjectionPoint{T, :centered}) where {T}
-    u_centered, v_centered = proj.x, proj.y
-    cx, cy = getopticalcenter(to)
-    u, v = -u_centered + cx, -v_centered + cy
-    return ProjectionPoint{T, :offset}(u, v)
-end
-
-# Same coordinate system - no conversion needed
-convertcamconf(to::AbstractCameraConfig{S}, from::AbstractCameraConfig{S}, proj::ProjectionPoint{T, S}) where {T, S} = proj
+# Coordinate conversion - only :offset supported
+convertcamconf(to::AbstractCameraConfig{:offset}, from::AbstractCameraConfig{:offset}, proj::ProjectionPoint{T, :offset}) where {T} = proj
 
 
 "Validate 3x3 matrix for camera projection."

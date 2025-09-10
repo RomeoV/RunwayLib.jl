@@ -60,20 +60,16 @@ const LIBRARY_INITIALIZED = Ref(false)
 end
 
 function get_camera_config_from_matrix(camera_matrix_c::CameraMatrix_C)
-    # Convert coordinate system
-    coord_system = camera_matrix_c.coordinate_system == 0 ? :centered : :offset
+    # Only :offset coordinate system supported
+    # Note: coordinate_system field ignored - always use :offset
     
     # Create CameraMatrix with proper units
     matrix_with_units = camera_matrix_c.matrix * px
     width_with_units = camera_matrix_c.image_width * px
     height_with_units = camera_matrix_c.image_height * px
     
-    # Create CameraMatrix
-    if coord_system == :centered
-        camera_matrix = CameraMatrix{:centered}(matrix_with_units, width_with_units, height_with_units)
-    else
-        camera_matrix = CameraMatrix{:offset}(matrix_with_units, width_with_units, height_with_units)
-    end
+    # Create CameraMatrix with :offset coordinates
+    camera_matrix = CameraMatrix{:offset}(matrix_with_units, width_with_units, height_with_units)
     
     # Convert to CameraConfig using our new function
     return CameraConfig(camera_matrix)

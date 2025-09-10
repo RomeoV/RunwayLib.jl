@@ -49,14 +49,12 @@ using Unitful
         # Test with default (offset) coordinates
         proj_pt = project(cam_pos, cam_rot, world_pt)
 
-        # Test with explicit coordinate systems
+        # Test with :offset coordinate system
         proj_pt_offset = project(cam_pos, cam_rot, world_pt, CAMERA_CONFIG_OFFSET)
-        proj_pt_centered = project(cam_pos, cam_rot, world_pt, CAMERA_CONFIG_CENTERED)
 
         # Test that points at camera position cannot be projected (division by zero)
         world_pt_at_camera = WorldPoint(0.0u"m", 0.0u"m", 0.0u"m")
         @test_throws BehindCameraException project(cam_pos, cam_rot, world_pt_at_camera, CAMERA_CONFIG_OFFSET)
-        @test_throws BehindCameraException project(cam_pos, cam_rot, world_pt_at_camera, CAMERA_CONFIG_CENTERED)
 
         # Test projection consistency - points further away should project closer to center
         world_pt_near = WorldPoint(1.0u"m", 0.1u"m", 0.0u"m")
@@ -69,11 +67,9 @@ using Unitful
         @test proj_near.x ≈ proj_far.x atol = 1.0e-6 * 1pixel
         @test proj_near.y ≈ proj_far.y atol = 1.0e-6 * 1pixel
 
+        # Test coordinate conversion (identity for same coordinate system)
         p = ProjectionPoint(:offset, rand(2)px...)
-        p′ = convertcamconf(CAMERA_CONFIG_CENTERED, CAMERA_CONFIG_OFFSET, p)
-        p′′ = convertcamconf(CAMERA_CONFIG_OFFSET, CAMERA_CONFIG_CENTERED, p′)
-        p′′′ = convertcamconf(CAMERA_CONFIG_CENTERED, CAMERA_CONFIG_OFFSET, p′′)
-        @test p ≈ p′′
-        @test p′ ≈ p′′′
+        p′ = convertcamconf(CAMERA_CONFIG_OFFSET, CAMERA_CONFIG_OFFSET, p)
+        @test p ≈ p′
     end
 end

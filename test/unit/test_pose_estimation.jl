@@ -20,10 +20,8 @@ using StaticArrays
         @test result.rot ≈ true_rot atol=rot_tol
     end
 
-    @testset "Pose Estimation - $config_name" for (config, config_name) in [
-        (CAMERA_CONFIG_CENTERED, "Centered"),
-        (CAMERA_CONFIG_OFFSET, "Offset")
-    ]
+    @testset "Pose Estimation - Offset" begin
+        config = CAMERA_CONFIG_OFFSET
         # Ground truth airplane pose
         true_pos = WorldPoint(-500.0m, 10.0m, 100.0m)
         true_rot = RotZYX(roll = 0.02, pitch = 0.1, yaw = -0.01)
