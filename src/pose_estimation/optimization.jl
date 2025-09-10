@@ -145,6 +145,10 @@ const POSEOPTFN = NonlinearFunction{false,FullSpecialize}(pose_optimization_obje
 const ALG = LevenbergMarquardt(; autodiff=AD, linsolve=CholeskyFactorization(),
     disable_geodesic=Val(true))
 
+# Default CameraMatrix constants for cache creation
+const CAMERA_MATRIX_OFFSET = CameraMatrix(CAMERA_CONFIG_OFFSET)
+const CAMERA_MATRIX_CENTERED = CameraMatrix(CAMERA_CONFIG_CENTERED)
+
 
 # Type-stable cache creation using OncePerTask (Julia 1.12+)
 # Parameterized cache creation functions
@@ -180,16 +184,30 @@ function _create_cache_3dof(camconfig::AbstractCameraConfig{S}, ::Type{T}) where
 end
 
 # OncePerTask cache objects for each combination
+# CameraConfig-based caches
 const _CACHE_6DOF_OFFSET_FLOAT64 = OncePerTask(() -> _create_cache_6dof(CAMERA_CONFIG_OFFSET, Float64))
 const _CACHE_6DOF_CENTERED_FLOAT64 = OncePerTask(() -> _create_cache_6dof(CAMERA_CONFIG_CENTERED, Float64))
 const _CACHE_3DOF_OFFSET_FLOAT64 = OncePerTask(() -> _create_cache_3dof(CAMERA_CONFIG_OFFSET, Float64))
 const _CACHE_3DOF_CENTERED_FLOAT64 = OncePerTask(() -> _create_cache_3dof(CAMERA_CONFIG_CENTERED, Float64))
 
+# CameraMatrix-based caches
+const _CACHE_6DOF_OFFSET_MATRIX_FLOAT64 = OncePerTask(() -> _create_cache_6dof(CAMERA_MATRIX_OFFSET, Float64))
+const _CACHE_6DOF_CENTERED_MATRIX_FLOAT64 = OncePerTask(() -> _create_cache_6dof(CAMERA_MATRIX_CENTERED, Float64))
+const _CACHE_3DOF_OFFSET_MATRIX_FLOAT64 = OncePerTask(() -> _create_cache_3dof(CAMERA_MATRIX_OFFSET, Float64))
+const _CACHE_3DOF_CENTERED_MATRIX_FLOAT64 = OncePerTask(() -> _create_cache_3dof(CAMERA_MATRIX_CENTERED, Float64))
+
 # Type-stable cache dispatcher functions
+# CameraConfig dispatchers
 _get_cache(::Val{Symbol("6dof")}, ::Type{Val{:offset}}, ::Type{Float64}) = _CACHE_6DOF_OFFSET_FLOAT64()
 _get_cache(::Val{Symbol("6dof")}, ::Type{Val{:centered}}, ::Type{Float64}) = _CACHE_6DOF_CENTERED_FLOAT64()
 _get_cache(::Val{Symbol("3dof")}, ::Type{Val{:offset}}, ::Type{Float64}) = _CACHE_3DOF_OFFSET_FLOAT64()
 _get_cache(::Val{Symbol("3dof")}, ::Type{Val{:centered}}, ::Type{Float64}) = _CACHE_3DOF_CENTERED_FLOAT64()
+
+# CameraMatrix dispatchers
+_get_cache_matrix(::Val{Symbol("6dof")}, ::Type{Val{:offset}}, ::Type{Float64}) = _CACHE_6DOF_OFFSET_MATRIX_FLOAT64()
+_get_cache_matrix(::Val{Symbol("6dof")}, ::Type{Val{:centered}}, ::Type{Float64}) = _CACHE_6DOF_CENTERED_MATRIX_FLOAT64()
+_get_cache_matrix(::Val{Symbol("3dof")}, ::Type{Val{:offset}}, ::Type{Float64}) = _CACHE_3DOF_OFFSET_MATRIX_FLOAT64()
+_get_cache_matrix(::Val{Symbol("3dof")}, ::Type{Val{:centered}}, ::Type{Float64}) = _CACHE_3DOF_CENTERED_MATRIX_FLOAT64()
 
 function estimatepose6dof(
         runway_corners::AbstractVector{<:WorldPoint},
@@ -214,7 +232,11 @@ function estimatepose6dof(
     # Get type-specific cache using runtime dispatch  
     # Extract the underlying numeric type from Unitful quantities
     T_inner = T <: Quantity ? typeof(ustrip(zero(T))) : T
-    cache = _get_cache(Val(Symbol("6dof")), Val{S}, T_inner)
+    cache = if camconfig isa CameraMatrix
+        _get_cache_matrix(Val(Symbol("6dof")), Val{S}, T_inner)
+    else
+        _get_cache(Val(Symbol("6dof")), Val{S}, T_inner)
+    end
     reinit!(cache, u₀; p=ps)
     solve!(cache)
     sol = (; u = cache.u, retcode = cache.retcode)
@@ -246,7 +268,11 @@ function estimatepose3dof(
     # Get type-specific cache using runtime dispatch
     # Extract the underlying numeric type from Unitful quantities
     T_inner = T <: Quantity ? typeof(ustrip(zero(T))) : T
-    cache = _get_cache(Val(Symbol("3dof")), Val{S}, T_inner)
+    cache = if camconfig isa CameraMatrix
+        _get_cache_matrix(Val(Symbol("3dof")), Val{S}, T_inner)
+    else
+        _get_cache(Val(Symbol("3dof")), Val{S}, T_inner)
+    end
     reinit!(cache, u₀; p=ps)
     solve!(cache)
     sol = (; u = cache.u, retcode = cache.retcode)
