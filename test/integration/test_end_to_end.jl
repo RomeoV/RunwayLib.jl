@@ -72,7 +72,7 @@ using Distributions
             runway_spec=runway_spec,
             runway_corners=runway_corners,
             observed_corners=noisy_corners,
-            noise_model;
+            noise_model=noise_model,
             initial_guess=initial_guess
         )
 
