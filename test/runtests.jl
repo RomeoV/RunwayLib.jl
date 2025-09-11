@@ -11,7 +11,7 @@ using StaticArrays
     include("unit/test_jet.jl")
     include("unit/test_covariance_specification.jl")
     # include("unit/test_uncertainty_quantification.jl")
-    # include("unit/test_integrity_monitoring.jl")
+    include("unit/test_integrity_monitoring.jl")
     # include("unit/test_visualization.jl")
 
     # include("integration/test_end_to_end.jl")

@@ -4,7 +4,7 @@ using Distributions: Distributions, Normal, Chisq, ccdf
 using LinearAlgebra: LinearAlgebra, /, cholesky
 using LinearSolve: CholeskyFactorization, LinearSolve, NonlinearFunction,
     NonlinearLeastSquaresProblem, init
-using Rotations: Rotations, RotZYX, Rotation
+using Rotations: Rotations, RotZYX, Rotation, RodriguesParam
 using ADTypes: AutoForwardDiff
 using DifferentiationInterface: DifferentiationInterface, jacobian
 using NonlinearSolveFirstOrder: LevenbergMarquardt, NonlinearLeastSquaresProblem, NonlinearFunction,
@@ -14,11 +14,12 @@ using StaticArrays: StaticArrays, FieldVector, SA, Size, SVector
 using TypedTables: TypedTables, Table
 using Unitful: Unitful, @u_str, @unit, NoUnits, Quantity, dimension, uconvert,
     ustrip, Length
-using Unitful.DefaultSymbols: DefaultSymbols, A, S, T, m, ps, rad, s
+using Unitful.DefaultSymbols: m, °, rad
 using ProbabilisticParameterEstimators: UncorrGaussianNoiseModel, CorrGaussianNoiseModel,
     NoiseModel, covmatrix
 using SciMLBase: successful_retcode, FullSpecialize
 import SciMLBase
+import Base: OncePerTask
 
 _uconvert(u) = Base.Fix1(uconvert, u)
 _ustrip(u) = Base.Fix1(ustrip, u)
@@ -55,7 +56,7 @@ export get_runway_corners, validate_runway_spec
 export Table
 
 # Export configuration
-export CAMERA_CONFIG, CAMERA_CONFIG_CENTERED, CAMERA_CONFIG_OFFSET, CameraConfig, DEFAULT_OPTIMIZATION_CONFIG, convertcamconf, CameraMatrix
+export CAMERA_MATRIX_OFFSET, CAMERA_CONFIG_OFFSET, CameraConfig, DEFAULT_OPTIMIZATION_CONFIG, convertcamconf, CameraMatrix
 
 # Export WithDims for flexible typing
 export WithDims, WithUnits

@@ -75,8 +75,8 @@ class TestCameraConfig:
     
     def test_enum_values(self):
         """Test CameraConfig enum values."""
-        assert poseest.CameraConfig.CENTERED == 0
         assert poseest.CameraConfig.OFFSET == 1
+        assert poseest.CameraConfig.MATRIX == 2
 
 
 class TestLibraryIntegration:
@@ -399,7 +399,7 @@ class TestCameraMatrix:
                 matrix=[[1.0, 0.0], [0.0, 1.0]],  # 2x2 instead of 3x3
                 image_width=1000.0,
                 image_height=1000.0,
-                coordinate_system='centered'
+                coordinate_system='offset'
             )
         
         # Test invalid bottom row
@@ -412,7 +412,7 @@ class TestCameraMatrix:
                 ],
                 image_width=1000.0,
                 image_height=1000.0,
-                coordinate_system='centered'
+                coordinate_system='offset'
             )
         
         # Test zero focal length
@@ -425,7 +425,7 @@ class TestCameraMatrix:
                 ],
                 image_width=1000.0,
                 image_height=1000.0,
-                coordinate_system='centered'
+                coordinate_system='offset'
             )
         
         # Test invalid coordinate system
@@ -438,7 +438,7 @@ class TestCameraMatrix:
                 ],
                 image_width=1000.0,
                 image_height=1000.0,
-                coordinate_system='invalid'
+                coordinate_system='centered'  # centered is no longer supported
             )
         
         # Test negative image dimensions
@@ -451,7 +451,7 @@ class TestCameraMatrix:
                 ],
                 image_width=-100.0,
                 image_height=1000.0,
-                coordinate_system='centered'
+                coordinate_system='offset'
             )
     
     def test_camera_matrix_c_struct_conversion(self):

@@ -87,7 +87,7 @@ Point in image projection coordinate system.
 
 # Type Parameters
 - `T`: Numeric type for coordinates
-- `S`: Coordinate system type (`:centered` or `:offset`)
+- `S`: Coordinate system type (only `:offset` supported)
 
 # Fields
 - `x::T`: Image x-coordinate (horizontal pixel position)
@@ -96,12 +96,7 @@ Point in image projection coordinate system.
 # Units
 Typically uses pixels (1pixel) for coordinates.
 
-# Coordinate System Conventions
-For `:centered` coordinates:
-- Origin at image center
-- X-axis: Horizontal (positive to the left, following cross-track convention)
-- Y-axis: Vertical (positive upward, following height convention)
-
+# Coordinate System Convention
 For `:offset` coordinates:
 - Origin at top-left corner of image
 - X-axis: Horizontal (positive to the right)
@@ -109,15 +104,12 @@ For `:offset` coordinates:
 
 # Examples
 ```julia
-# Centered coordinates (origin at image center)
-pp_centered = ProjectionPoint{Float64, :centered}(-100.0*1pixel, 50.0*1pixel)
-
 # Offset coordinates (origin at top-left)
 pp_offset = ProjectionPoint{Float64, :offset}(1024.0*1pixel, 768.0*1pixel)
 
 # Access coordinates
-println("X: ", pp_centered.x)
-println("Y: ", pp_centered.y)
+println("X: ", pp_offset.x)
+println("Y: ", pp_offset.y)
 ```
 """
 struct ProjectionPoint{T, S} <: FieldVector{2, T}
@@ -141,7 +133,6 @@ ProjectionPoint{T}(x, y) where {T} = ProjectionPoint{T, :offset}(x, y)
 #     WorldPoint{T}(undef, undef, undef)
 
 
-similar_type(::Type{<:ProjectionPoint{T, :centered}}, ::Type{T′}, s::Size{S}) where {T, T′, S} = ProjectionPoint{T′, :centered}
 similar_type(::Type{<:ProjectionPoint{T, :offset}}, ::Type{T′}, s::Size{S}) where {T, T′, S} = ProjectionPoint{T′, :offset}
 similar_type(::Type{<:WorldPoint}, ::Type{T}, s::Size{S}) where {T, S} = WorldPoint{T}
 similar_type(::Type{<:CameraPoint}, ::Type{T}, s::Size{S}) where {T, S} = CameraPoint{T}

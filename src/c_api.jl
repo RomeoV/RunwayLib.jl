@@ -7,7 +7,8 @@ using Unitful, Unitful.DefaultSymbols
 using CEnum
 using Distributions: Normal, MvNormal
 using LinearAlgebra: isposdef
-using ProbabilisticParameterEstimators: CorrGaussianNoiseModel
+using ProbabilisticParameterEstimators: CorrGaussianNoiseModel, UncorrGaussianNoiseModel, NoiseModel
+using LightSumTypes: @sumtype, variant
 
 # Type aliases for C interop
 # These use the same memory layout as the existing parametric structs
@@ -21,18 +22,18 @@ const ProjectionPointF64 = ProjectionPoint{Float64,:offset}
 # end
 const RotYPRF64 = SVector{3,Float64}
 
-struct PoseEstimate_C
-    position::WorldPointF64
-    rotation::RotYPRF64
-    residual_norm::Float64
-    converged::Cint
+@kwdef struct PoseEstimate_C
+    position::WorldPointF64 = WorldPointF64(0.0, 0.0, 0.0)
+    rotation::RotYPRF64 = RotYPRF64(0.0, 0.0, 0.0)
+    residual_norm::Float64 = 0.0
+    converged::Cint = 0
 end
 
 # Type alias for integrity monitoring results - matches NamedTuple layout with C-compatible types
 const IntegrityResult_C = @NamedTuple{stat::Float64, p_value::Float64, dofs::Cint, residual_norm::Float64}
 
 struct CameraMatrix_C
-    matrix::SMatrix{3, 3, Float64, 9}  # 3x3 camera matrix (unitless)
+    matrix::SMatrix{3,3,Float64,9}  # 3x3 camera matrix (unitless)
     image_width::Float64           # Image width in pixels (unitless)
     image_height::Float64          # Image height in pixels (unitless)
     coordinate_system::Cint        # 0 for centered, 1 for offset
@@ -51,32 +52,38 @@ const LIBRARY_INITIALIZED = Ref(false)
 
 # Remove CAMERA_CONFIG_C enum - now using CameraMatrix_C directly
 
+module CovarianceType
+using CEnum
 @cenum COVARIANCE_TYPE_C::Cint begin
     COV_DEFAULT = 0         # Use default noise model (pointer can be null)
     COV_SCALAR = 1          # Single noise value for all keypoints/directions
-    COV_DIAGONAL_FULL = 2   # Diagonal matrix (length = 2*n_keypoints)  
+    COV_DIAGONAL_FULL = 2   # Diagonal matrix (length = 2*n_keypoints)
     COV_BLOCK_DIAGONAL = 3  # 2x2 matrix per keypoint (length = 4*n_keypoints)
     COV_FULL_MATRIX = 4     # Full covariance matrix (length = 4*n_keypoints^2)
 end
+end
+using .CovarianceType: COVARIANCE_TYPE_C, COV_DEFAULT, COV_SCALAR, COV_DIAGONAL_FULL, COV_BLOCK_DIAGONAL, COV_FULL_MATRIX
 
-function get_camera_config_from_matrix(camera_matrix_c::CameraMatrix_C)
-    # Convert coordinate system
-    coord_system = camera_matrix_c.coordinate_system == 0 ? :centered : :offset
-    
+const NORMAL_T = Normal{Float64}
+const MVNORMAL_T = typeof(MvNormal(rand(2), Matrix(1.0 * I(2))))
+# Define sum type for all possible noise models
+@sumtype NoiseModelVariant(
+    UncorrGaussianNoiseModel{NORMAL_T,Vector{NORMAL_T}},
+    UncorrGaussianNoiseModel{MVNORMAL_T,Vector{MVNORMAL_T}},
+    CorrGaussianNoiseModel{MVNORMAL_T}
+)
+
+function get_camera_matrix_from_c(camera_matrix_c::CameraMatrix_C)
+    # Only :offset coordinate system supported
+    # Note: coordinate_system field ignored - always use :offset
+
     # Create CameraMatrix with proper units
     matrix_with_units = camera_matrix_c.matrix * px
     width_with_units = camera_matrix_c.image_width * px
     height_with_units = camera_matrix_c.image_height * px
-    
-    # Create CameraMatrix
-    if coord_system == :centered
-        camera_matrix = CameraMatrix{:centered}(matrix_with_units, width_with_units, height_with_units)
-    else
-        camera_matrix = CameraMatrix{:offset}(matrix_with_units, width_with_units, height_with_units)
-    end
-    
-    # Convert to CameraConfig using our new function
-    return CameraConfig(camera_matrix)
+
+    # Create CameraMatrix with :offset coordinates
+    return CameraMatrix{:offset}(matrix_with_units, width_with_units, height_with_units)
 end
 
 function parse_covariance_data(covariance_type::COVARIANCE_TYPE_C, covariance_data::Ptr{Cdouble}, num_points::Integer)
@@ -86,78 +93,72 @@ function parse_covariance_data(covariance_type::COVARIANCE_TYPE_C, covariance_da
     """
     if covariance_type == COV_DEFAULT
         # Return default noise model (pointer can be null in this case)
-        return covmatrix(_defaultnoisemodel(1:num_points))
+        return _defaultnoisemodel(1:num_points) |> NoiseModelVariant
     end
-    
+
     # For all other types, we need valid covariance data
     if covariance_data == C_NULL
         throw(ArgumentError("Covariance data pointer cannot be null for covariance type: $covariance_type"))
     end
-    
+
     if covariance_type == COV_SCALAR
-        # Single noise standard deviation for all measurements
-        noise_std = unsafe_load(covariance_data, 1)
-        if noise_std <= 0
-            throw(ArgumentError("Noise standard deviation must be positive"))
-        end
-        distributions = [Normal(0.0, noise_std) for _ in 1:(2*num_points)]
-        return covmatrix(UncorrGaussianNoiseModel(distributions))
-        
-    elseif covariance_type == COV_DIAGONAL_FULL
-        # Diagonal covariance matrix: variances for each measurement
-        variances = unsafe_wrap(Array, covariance_data, 2*num_points)
-        if any(variances .<= 0)
-            throw(ArgumentError("All variances must be positive"))
-        end
-        distributions = [Normal(0.0, sqrt(var)) for var in variances]
-        return covmatrix(UncorrGaussianNoiseModel(distributions))
-        
-    elseif covariance_type == COV_BLOCK_DIAGONAL
-        # 2x2 covariance matrix for each keypoint
-        data_length = 4 * num_points
-        cov_data = unsafe_wrap(Array, covariance_data, data_length)
-
-        # this has JET issues somehow...
-        # distributions = [MvNormal{Float64}(zeros(2), I(2)) for _ in 1:num_points]
-        # map!(distribution, Iterators.partition(eachindex(cov_data), 4)) do idx
-        #     # Extract 2x2 covariance matrix for this keypoint (stored row-major)
-        #     cov_2x2 = reshape(cov_data[idx], 2, 2)
-
-        #     # Check positive definite
-        #     if !isposdef(cov_2x2)
-        #         throw(ArgumentError("Covariance matrix for keypoint $i must be positive definite"))
-        #     end
-
-        #     MvNormal(zeros(2), cov_2x2)
-        # end
-        # return covmatrix(UncorrGaussianNoiseModel(distributions))
-        covmat = zeros(2*num_points, 2*num_points)
-        for i in 1:num_points
-            idx = (1:4) .+ (i-1)*4
-            idx_ = (1:2) .+ (i-1)*2
-            covmat[idx_, idx_] .= reshape(cov_data[idx], 2, 2)
-            if !isposdef(@view covmat[idx_, idx_])
-                throw(ArgumentError("Covariance matrices for all keypoints must be positive definite"))
+        let
+            # Single noise standard deviation for all measurements
+            noise_std = unsafe_load(covariance_data, 1)
+            if noise_std <= 0
+                throw(ArgumentError("Noise standard deviation must be positive"))
             end
+            distributions = [Normal(0.0, noise_std) for _ in 1:(2*num_points)]
+            return UncorrGaussianNoiseModel(distributions) |> NoiseModelVariant
         end
-        return covmat
+    elseif covariance_type == COV_DIAGONAL_FULL
+        let
+            # Diagonal covariance matrix: variances for each measurement
+            variances = unsafe_wrap(Array, covariance_data, 2 * num_points)
+            if any(variances .<= 0)
+                throw(ArgumentError("All variances must be positive"))
+            end
+            distributions = [Normal(0.0, sqrt(var)) for var in variances]
+            return UncorrGaussianNoiseModel(distributions) |> NoiseModelVariant
+        end
+    elseif covariance_type == COV_BLOCK_DIAGONAL
+        let
+            # 2x2 covariance matrix for each keypoint
+            data_length = 4 * num_points
+            cov_data = unsafe_wrap(Array, covariance_data, data_length)
 
+            # Create individual 2x2 covariance matrices for each keypoint
+            distributions = Vector{MVNORMAL_T}(undef, num_points)
+            for i in 1:num_points
+                idx = (1:4) .+ (i - 1) * 4
+                cov_2x2 = reshape(cov_data[idx], 2, 2)
+
+                if !isposdef(cov_2x2)
+                    throw(ArgumentError("Covariance matrix for keypoint $i must be positive definite"))
+                end
+
+                distributions[i] = MvNormal(zeros(2), cov_2x2)
+            end
+            return UncorrGaussianNoiseModel(distributions) |> NoiseModelVariant
+        end
     elseif covariance_type == COV_FULL_MATRIX
-        # Full covariance matrix - use CorrGaussianNoiseModel for correlated observations
-        matrix_size = 2 * num_points
-        data_length = matrix_size * matrix_size
-        cov_data = unsafe_wrap(Array, covariance_data, data_length)
-        
-        # Reconstruct matrix from row-major storage, but since symmetric don't worry
-        cov_matrix = reshape(cov_data, matrix_size, matrix_size)
+        let
+            # Full covariance matrix - use CorrGaussianNoiseModel for correlated observations
+            matrix_size = 2 * num_points
+            data_length = matrix_size * matrix_size
+            cov_data = unsafe_wrap(Array, covariance_data, data_length)
 
-        if !isposdef(cov_matrix) || !issymmetric(cov_matrix)
-            throw(ArgumentError("Full covariance matrix must be symmetric and positive definite"))
+            # Reconstruct matrix from row-major storage, but since symmetric don't worry
+            cov_matrix = reshape(cov_data, matrix_size, matrix_size)
+
+            if !isposdef(cov_matrix) || !issymmetric(cov_matrix)
+                throw(ArgumentError("Full covariance matrix must be symmetric and positive definite"))
+            end
+
+            # Create a single MvNormal for all measurements (correlated case)
+            corr_noise = MvNormal(zeros(matrix_size), cov_matrix)
+            return CorrGaussianNoiseModel(corr_noise) |> NoiseModelVariant
         end
-        
-        # Create a single MvNormal for all measurements (correlated case)
-        corr_noise = MvNormal(zeros(matrix_size), cov_matrix)
-        return covmatrix(CorrGaussianNoiseModel(corr_noise))
     else
         throw(ArgumentError("Invalid covariance type: $covariance_type"))
     end
@@ -228,16 +229,16 @@ Base.@ccallable function estimate_pose_6dof(
         projections = unsafe_wrap(Array, projections_, num_points) .* 1px
 
         # Parse covariance specification
-        noise_model = parse_covariance_data(covariance_type, covariance_data, num_points) |> Matrix
+        noise_model_variant = parse_covariance_data(covariance_type, covariance_data, num_points)
 
         # Validate camera matrix
         if camera_matrix == C_NULL
             return POSEEST_ERROR_INVALID_INPUT
         end
-        
-        # Load camera matrix and convert to CameraConfig
+
+        # Load camera matrix and convert to CameraMatrix
         camera_matrix_c = unsafe_load(camera_matrix)
-        camconfig = get_camera_config_from_matrix(camera_matrix_c)
+        cam_matrix = get_camera_matrix_from_c(camera_matrix_c)
 
         # Handle initial guess parameters
         if initial_guess_pos != C_NULL
@@ -255,8 +256,9 @@ Base.@ccallable function estimate_pose_6dof(
         end
 
         # Perform pose estimation with custom noise model and initial guesses
-        sol = estimatepose6dof(runway_corners, projections, camconfig, noise_model; 
-                              initial_guess_pos=initial_pos, initial_guess_rot=initial_rot)
+        sol = estimatepose6dof(runway_corners, projections, cam_matrix, variant(noise_model_variant);
+            # sol = estimatepose6dof(runway_corners, projections, cam_matrix, noise_model;
+            initial_guess_pos=initial_pos, initial_guess_rot=initial_rot)
 
         # Convert result back to C struct
         result_c = PoseEstimate_C(
@@ -275,6 +277,7 @@ Base.@ccallable function estimate_pose_6dof(
         if isa(e, BoundsError) || isa(e, ArgumentError)
             return POSEEST_ERROR_INVALID_INPUT
         else
+            rethrow(e)
             return POSEEST_ERROR_NO_CONVERGENCE
         end
     end
@@ -308,19 +311,19 @@ Base.@ccallable function estimate_pose_3dof(
         known_rot_c = unsafe_load(known_rotation)
 
         # Convert rotation to Julia type
-        jl_rotation = RotZYX(known_rot_c[1], known_rot_c[2], known_rot_c[3])
+        jl_rotation = RotZYX(known_rot_c...)
 
         # Parse covariance specification
-        noise_model = parse_covariance_data(covariance_type, covariance_data, num_points) |> Matrix
+        noise_model_variant = parse_covariance_data(covariance_type, covariance_data, num_points)
 
         # Validate camera matrix
         if camera_matrix == C_NULL
             return POSEEST_ERROR_INVALID_INPUT
         end
-        
-        # Load camera matrix and convert to CameraConfig
+
+        # Load camera matrix and convert to CameraMatrix
         camera_matrix_c = unsafe_load(camera_matrix)
-        camconfig = get_camera_config_from_matrix(camera_matrix_c)
+        cam_matrix = get_camera_matrix_from_c(camera_matrix_c)
 
         # Handle initial guess for position
         if initial_guess_pos != C_NULL
@@ -331,8 +334,8 @@ Base.@ccallable function estimate_pose_3dof(
         end
 
         # Perform pose estimation with custom noise model and initial guess
-        sol = estimatepose3dof(runway_corners, projections, jl_rotation, camconfig, noise_model; 
-                              initial_guess_pos=initial_pos)
+        sol = estimatepose3dof(runway_corners, projections, jl_rotation, cam_matrix, variant(noise_model_variant);
+            initial_guess_pos=initial_pos)
 
         # Convert result back to C struct
         result_c = PoseEstimate_C(
@@ -346,7 +349,7 @@ Base.@ccallable function estimate_pose_3dof(
         unsafe_store!(result, result_c)
 
         return POSEEST_SUCCESS
-        
+
     catch e
         if isa(e, BoundsError) || isa(e, ArgumentError)
             return POSEEST_ERROR_INVALID_INPUT
@@ -385,13 +388,13 @@ Base.@ccallable function project_point(
     if camera_matrix == C_NULL
         return POSEEST_ERROR_INVALID_INPUT
     end
-    
-    # Load camera matrix and convert to CameraConfig
+
+    # Load camera matrix and convert to CameraMatrix
     camera_matrix_c = unsafe_load(camera_matrix)
-    camconfig = get_camera_config_from_matrix(camera_matrix_c)
+    cam_matrix = get_camera_matrix_from_c(camera_matrix_c)
 
     # Project point
-    jl_projection = project(jl_cam_pos, jl_cam_rot, jl_world_pt, camconfig)
+    jl_projection = project(jl_cam_pos, jl_cam_rot, jl_world_pt, cam_matrix)
 
     # Convert result back to C struct
     result_c = jl_projection .|> _ustrip(px)
@@ -405,7 +408,7 @@ end
 # Integrity monitoring function
 Base.@ccallable function compute_integrity(
     camera_position::Ptr{WorldPointF64},
-    camera_rotation::Ptr{RotYPRF64}, 
+    camera_rotation::Ptr{RotYPRF64},
     runway_corners_::Ptr{WorldPointF64},
     projections_::Ptr{ProjectionPointF64},
     num_points::Cint,
@@ -416,7 +419,7 @@ Base.@ccallable function compute_integrity(
 )::Cint
     try
         # Validate inputs
-        if camera_position == C_NULL || camera_rotation == C_NULL || 
+        if camera_position == C_NULL || camera_rotation == C_NULL ||
            runway_corners_ == C_NULL || projections_ == C_NULL || result == C_NULL
             return POSEEST_ERROR_INVALID_INPUT
         end
@@ -436,28 +439,28 @@ Base.@ccallable function compute_integrity(
         projections = unsafe_wrap(Array, projections_, num_points) .* 1px
 
         # Parse covariance specification
-        noise_cov = parse_covariance_data(covariance_type, covariance_data, num_points)
+        noise_cov_variant = parse_covariance_data(covariance_type, covariance_data, num_points)
 
         # Validate camera matrix
         if camera_matrix == C_NULL
             return POSEEST_ERROR_INVALID_INPUT
         end
-        
-        # Load camera matrix and convert to CameraConfig
+
+        # Load camera matrix and convert to CameraMatrix
         camera_matrix_c = unsafe_load(camera_matrix)
-        camconfig = get_camera_config_from_matrix(camera_matrix_c)
+        cam_matrix = get_camera_matrix_from_c(camera_matrix_c)
 
         # Compute integrity statistics
         integrity_result = compute_integrity_statistic(
             jl_cam_pos, jl_cam_rot,
             runway_corners, projections,
-            noise_cov, camconfig
+            variant(noise_cov_variant), cam_matrix
         )
 
         # Convert result to C-compatible NamedTuple (cast dofs to Cint)
         result_c = IntegrityResult_C((
             integrity_result.stat,
-            integrity_result.p_value, 
+            integrity_result.p_value,
             Cint(integrity_result.dofs),
             integrity_result.residual_norm |> _ustrip(px)
         ))

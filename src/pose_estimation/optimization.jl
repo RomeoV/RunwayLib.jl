@@ -15,10 +15,10 @@ abstract type AbstractPoseOptimizationParams end
 Parameters for 6-DOF pose optimization (position + attitude).
 """
 struct PoseOptimizationParams6DOF{
-        T, T′, T′′, S,
+        T, T′, T′′,
         RC <: AbstractVector{WorldPoint{T}},
-        OC <: AbstractVector{ProjectionPoint{T′, S}},
-        CC <: AbstractCameraConfig{S},
+        OC <: AbstractVector{ProjectionPoint{T′, :offset}},
+        CC <: CameraMatrix{:offset},
         M <: AbstractMatrix{T′′},
         M′<: AbstractMatrix{T′′}
     } <: AbstractPoseOptimizationParams
@@ -44,11 +44,11 @@ end
 Parameters for 3-DOF pose optimization (position only with known attitude).
 """
 struct PoseOptimizationParams3DOF{
-        T, T′, T′′, S,
+        T, T′, T′′,
         A <: Rotation{3},
         RC <: AbstractVector{WorldPoint{T}},
-        OC <: AbstractVector{ProjectionPoint{T′, S}},
-        CC <: AbstractCameraConfig{S},
+        OC <: AbstractVector{ProjectionPoint{T′, :offset}},
+        CC <: CameraMatrix{:offset},
         M <: AbstractMatrix{T′′},
         M′<: AbstractMatrix{T′′}
     } <: AbstractPoseOptimizationParams
@@ -69,6 +69,20 @@ function PoseOptimizationParams3DOF(runway_corners, observed_corners, camconfig,
     return PoseOptimizationParams3DOF(runway_corners, observed_corners, camconfig, cov, Linv, known_attitude)
 end
 
+"From optimization space into regular space."
+optvar2nominal(x, ps::PoseOptimizationParams3DOF) = [-exp(x[1]); x[2]; exp(x[3])]
+# we need `reduce(vcat, ...)` here instead of [... ; ...] for type inference...
+optvar2nominal(x, ps::PoseOptimizationParams6DOF) = reduce(vcat, [
+    SA[-exp(x[1]); x[2]; exp(x[3])],
+    RotZYX(RodriguesParam(x[4], x[5], x[6])) |> Rotations.params
+])
+"From regular space into optimization space."
+nominal2optvar(x, ps::PoseOptimizationParams3DOF) = [log(-x[1]); x[2]; log(x[3])]
+nominal2optvar(x, ps::PoseOptimizationParams6DOF) = reduce(vcat, [
+    SA[log(-x[1]); x[2]; log(x[3])],
+    RodriguesParam(RotZYX(x[4], x[5], x[6])) |> Rotations.params
+])
+
 """
     pose_optimization_objective(pose_params, ps)
 
@@ -87,6 +101,7 @@ function pose_optimization_objective(
         optvar::AbstractVector{T},
         ps::AbstractPoseOptimizationParams
     ) where {T <: Real}
+    optvar = optvar2nominal(optvar, ps)
     # Extract camera position from optimization variables
     cam_pos = WorldPoint(optvar[1:3]m)
 
@@ -121,7 +136,9 @@ function pose_optimization_objective(
     return ustrip.(NoUnits, weighted_errors)
 end
 
-function setup_for_precompile()
+function setup_for_precompile(camconfig::CameraMatrix{:offset})
+    # crucially this is not an SArray, which will allow us to vary the number of
+    # corners at runtime later (rather then everything being compiled for sarrays)
     runway_corners = [
         WorldPoint(1000.0m, -50.0m, 0.0m),
         WorldPoint(1000.0m, 50.0m, 0.0m),
@@ -130,7 +147,7 @@ function setup_for_precompile()
     ]
     true_pos = WorldPoint(-1300.0m, 0.0m, 80.0m)
     true_rot = RotZYX(roll = 0.03, pitch = 0.04, yaw = 0.05)
-    projections = [project(true_pos, true_rot, corner, CAMERA_CONFIG_OFFSET) for corner in runway_corners]
+    projections = [project(true_pos, true_rot, corner, camconfig) for corner in runway_corners]
     return (; runway_corners, projections, true_pos, true_rot)
 end
 
@@ -145,36 +162,41 @@ const POSEOPTFN = NonlinearFunction{false,FullSpecialize}(pose_optimization_obje
 const ALG = LevenbergMarquardt(; autodiff=AD, linsolve=CholeskyFactorization(),
     disable_geodesic=Val(true))
 
-"Camera configuration type for precompilation"
-const CAMCONF4COMP = CAMERA_CONFIG_OFFSET
-const S4COMP = :offset
+# Default CameraMatrix constant for cache creation
+const CAMERA_MATRIX_OFFSET = CameraMatrix(CAMERA_CONFIG_OFFSET)
 
+
+# Type-stable cache creation using OncePerTask (Julia 1.12+)
+# Parameterized cache creation functions
+
+
+# Simple cache definitions - CameraMatrix :offset only
 const CACHE_6DOF = let
-    (; runway_corners, projections, true_pos, true_rot) = setup_for_precompile()
+    (; runway_corners, projections, true_pos, true_rot) = setup_for_precompile(CAMERA_MATRIX_OFFSET)
     noise_model = _defaultnoisemodel(projections)
     ps = PoseOptimizationParams6DOF(
         runway_corners, projections,
-        CAMERA_CONFIG_OFFSET, noise_model
+        CAMERA_MATRIX_OFFSET, noise_model
     )
-    prob = NonlinearLeastSquaresProblem{false}(POSEOPTFN, rand(6), ps)
+    u = nominal2optvar([-2000.0; 0; 100; 0; 0; 0], ps)
+    prob = NonlinearLeastSquaresProblem{false}(POSEOPTFN, u, ps)
     T = Float64
-    # sqrt of the default
     reltol = real(oneunit(T)) * (eps(real(one(T))))^(2 // 5)
     abstol = real(oneunit(T)) * (eps(real(one(T))))^(2 // 5)
     init(prob, ALG; reltol, abstol)
 end
 
 const CACHE_3DOF = let
-    (; runway_corners, projections, true_pos, true_rot) = setup_for_precompile()
+    (; runway_corners, projections, true_pos, true_rot) = setup_for_precompile(CAMERA_MATRIX_OFFSET)
     noise_model = _defaultnoisemodel(projections)
     ps = PoseOptimizationParams3DOF(
         runway_corners, projections,
-        CAMERA_CONFIG_OFFSET, noise_model,
+        CAMERA_MATRIX_OFFSET, noise_model,
         true_rot
     )
-    prob = NonlinearLeastSquaresProblem{false}(POSEOPTFN, rand(3), ps)
+    u = nominal2optvar([-2000.0; 0; 100], ps)
+    prob = NonlinearLeastSquaresProblem{false}(POSEOPTFN, u, ps)
     T = Float64
-    # sqrt of the default
     reltol = real(oneunit(T)) * (eps(real(one(T))))^(2 // 5)
     abstol = real(oneunit(T)) * (eps(real(one(T))))^(2 // 5)
     init(prob, ALG; reltol, abstol)
@@ -182,33 +204,27 @@ end
 
 function estimatepose6dof(
         runway_corners::AbstractVector{<:WorldPoint},
-        observed_corners::AbstractVector{<:ProjectionPoint{T, S}},
-        camconfig::AbstractCameraConfig{S} = CAMERA_CONFIG_OFFSET,
+        observed_corners::AbstractVector{<:ProjectionPoint{T, :offset}},
+        camconfig::CameraMatrix{:offset} = CameraMatrix(CAMERA_CONFIG_OFFSET),
         noise_model::N = _defaultnoisemodel(observed_corners);
         initial_guess_pos::AbstractVector{<:Length} = SA[-1000.0, 0.0, 100.0]m,
         initial_guess_rot::AbstractVector{<:DimensionlessQuantity} = SA[0.0, 0.0, 0.0]rad,
         optimization_config = DEFAULT_OPTIMIZATION_CONFIG
-    ) where {T, S, N}
+    ) where {T, N}
     u₀ = [
-        initial_guess_pos .|> _ustrip(m);
-        initial_guess_rot .|> _ustrip(rad)
-    ] |> Array
-
-    # for precompile we need the correct types
-    observed_corners = [
-        convertcamconf(CAMCONF4COMP, camconfig, proj)
-            for proj in observed_corners
+        # convert to SVector here in case we still have a WorldPoint
+        initial_guess_pos |> SVector{3} .|> _ustrip(m);
+        initial_guess_rot |> SVector{3} .|> _ustrip(rad)
     ]
+
     ps = PoseOptimizationParams6DOF(
         runway_corners |> Vector, observed_corners |> Vector,
-        CameraConfig{S4COMP}(camconfig), noise_model
+        camconfig, noise_model
     )
-
-    # Get or create cache for this problem size
     cache = CACHE_6DOF
-    reinit!(cache, u₀; p=ps)
+    reinit!(cache, nominal2optvar(u₀, ps); p=ps)
     solve!(cache)
-    sol = (; u = cache.u, retcode = cache.retcode)
+    sol = (; u=optvar2nominal(cache.u, ps), retcode=cache.retcode)
 
     !successful_retcode(sol.retcode) && throw(OptimizationFailedError(sol.retcode, sol))
     pos = WorldPoint(sol.u[1:3]m)
@@ -218,31 +234,30 @@ end
 
 function estimatepose3dof(
         runway_corners::AbstractVector{<:WorldPoint},
-        observed_corners::AbstractVector{<:ProjectionPoint{T, S}},
+        observed_corners::AbstractVector{<:ProjectionPoint{T, :offset}},
         known_attitude::RotZYX,
-        camconfig::AbstractCameraConfig{S} = CAMERA_CONFIG_OFFSET,
+        camconfig::CameraMatrix{:offset} = CameraMatrix(CAMERA_CONFIG_OFFSET),
         noise_model::N = _defaultnoisemodel(observed_corners);
         initial_guess_pos::AbstractVector{<:Length} = SA[-1000.0, 0.0, 100.0]m,
         optimization_config = DEFAULT_OPTIMIZATION_CONFIG
-    ) where {T, S, N}
+    ) where {T, N}
 
-    u₀ = initial_guess_pos .|> _ustrip(m) |> Array
+    u₀ = initial_guess_pos .|> _ustrip(m)
 
-    # for precompile we need the correct types
-    observed_corners = [
-        convertcamconf(CAMCONF4COMP, camconfig, proj)
+    # Convert coordinates to match cache type and get cache
+    observed_corners_converted = [
+        convertcamconf(CAMERA_MATRIX_OFFSET, camconfig, proj)
             for proj in observed_corners
     ]
     ps = PoseOptimizationParams3DOF(
-        runway_corners |> Vector, observed_corners |> Vector,
-        CameraConfig{S4COMP}(camconfig), noise_model, known_attitude
+        runway_corners |> Vector, observed_corners_converted |> Vector,
+        camconfig, noise_model, known_attitude
     )
-
-    # Get or create cache for this problem size
+    
     cache = CACHE_3DOF
-    reinit!(cache, u₀; p=ps)
+    reinit!(cache, nominal2optvar(u₀, ps); p=ps)
     solve!(cache)
-    sol = (; u = cache.u, retcode = cache.retcode)
+    sol = (; u=optvar2nominal(cache.u, ps), retcode=cache.retcode)
 
     !successful_retcode(sol.retcode) && throw(OptimizationFailedError(sol.retcode, sol))
     pos = WorldPoint(sol.u[1:3]m)
