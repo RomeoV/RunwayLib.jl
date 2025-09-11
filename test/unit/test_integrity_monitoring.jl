@@ -341,4 +341,50 @@ end
         end
     end
     
+    @testset "Non-Default Camera Matrix Integration" begin
+        # Test integrity monitoring with a custom camera matrix (like Python tests use)
+        custom_camera_matrix = CameraMatrix{:offset}(
+            SA[-7246.4 0.0 2048.5; 0.0 -7246.4 1500.5; 0.0 0.0 1.0] * px,  # Note negative focal lengths like Python test
+            4096.0px, 3000.0px
+        )
+
+        # Standard runway corners from create_runway_scenario
+        runway_corners = [
+            WorldPoint(0.0m, -25.0m, 0.0m),
+            WorldPoint(0.0m, 25.0m, 0.0m),
+            WorldPoint(1500.0m, -25.0m, 0.0m),
+            WorldPoint(1500.0m, 25.0m, 0.0m)
+        ]
+
+        # True aircraft pose
+        true_pos = WorldPoint(-1300.0m, 0.0m, 80.0m)
+        true_rot = RotZYX(0.03, 0.04, 0.05)  # roll, pitch, yaw like Python test
+
+        # Generate projections with custom camera matrix
+        projections = [project(true_pos, true_rot, corner, custom_camera_matrix) for corner in runway_corners]
+
+        # Add small amount of noise like Python test
+        Random.seed!(123)
+        noisy_projections = projections .+ [ProjectionPoint(0.1 * randn(2)px) for _ in projections]
+
+        # Create diagonal noise covariance
+        noise_level = 2.0
+        sigmas = noise_level * ones(length(runway_corners))
+        noise_cov = Diagonal(repeat(sigmas .^ 2, inner=2))
+
+        @testset "Integrity with Custom Camera Matrix" begin
+            # This should work with custom camera matrix
+            stats = compute_integrity_statistic(
+                true_pos, true_rot,
+                runway_corners, noisy_projections,
+                noise_cov, custom_camera_matrix
+            )
+
+            @test stats.p_value > 0.01  # Should have reasonable integrity
+            @test stats.dofs == 2  # 4 points * 2 coords - 6 DOF = 2
+            @test stats.stat >= 0
+            @test isfinite(stats.stat)
+        end
+    end
+
 end
