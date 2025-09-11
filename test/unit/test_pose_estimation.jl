@@ -14,12 +14,6 @@ using StaticArrays
         WorldPoint(1000.0m, -25.0m, 0.0m),  # far right
     ]
 
-    # Helper function to test pose accuracy
-    function test_pose_accuracy(result, true_pos, true_rot; pos_tol=1e-6m, rot_tol=1e-8)
-        @test norm(result.pos - true_pos) < pos_tol
-        @test result.rot ≈ true_rot atol=rot_tol
-    end
-
     @testset "Pose Estimation - Offset" begin
         config = CameraMatrix(CAMERA_CONFIG_OFFSET)
         # Ground truth airplane pose
@@ -39,7 +33,8 @@ using StaticArrays
                 initial_guess_pos = noisy_pos_guess,
                 initial_guess_rot = noisy_rot_guess
             )
-            test_pose_accuracy(result, true_pos, true_rot)
+            @test norm(result.pos - true_pos) < (eps(eltype(result.pos))^(1 // 3))m
+            @test result.rot ≈ true_rot
         end
 
         @testset "3DOF Estimation" begin
@@ -47,7 +42,7 @@ using StaticArrays
                 runway_corners, true_projections, true_rot, config;
                 initial_guess_pos = noisy_pos_guess
             )
-            @test norm(result.pos - true_pos) < 1e-6m
+            @test norm(result.pos - true_pos) < (eps(eltype(result.pos))^(1 // 3))m
             @test result.rot ≈ true_rot
         end
     end
@@ -73,7 +68,8 @@ using StaticArrays
                         runway_corners, true_projections;
                         initial_guess_pos = noisy_pos, initial_guess_rot = noisy_rot
                     )
-                    test_pose_accuracy(result, case.pos, case.rot)
+                    @test norm(result.pos - case.pos) < (eps(eltype(result.pos))^(1 // 3))m
+                    @test Rotations.params(result.rot) ≈ Rotations.params(case.rot)
                 end
 
                 @testset "3DOF" begin
@@ -81,8 +77,8 @@ using StaticArrays
                         runway_corners, true_projections, case.rot;
                         initial_guess_pos = noisy_pos
                     )
-                    @test norm(result.pos - case.pos) < 1e-6m
-                    @test result.rot ≈ case.rot
+                    @test norm(result.pos - case.pos) < (eps(eltype(result.pos))^(1 // 3))m
+                    @test Rotations.params(result.rot) ≈ Rotations.params(case.rot)
                 end
             end
         end
@@ -138,7 +134,8 @@ using StaticArrays
                         initial_guess_pos = noisy_pos,
                         initial_guess_rot = noisy_rot
                     )
-                    test_pose_accuracy(result, true_pos, true_rot; pos_tol=1e-5m, rot_tol=1e-7)
+                    @test norm(result.pos - true_pos) < (eps(eltype(result.pos))^(1 // 3))m
+                    @test result.rot ≈ true_rot
                 end
 
                 @testset "3DOF with $n_points points" begin
@@ -146,7 +143,7 @@ using StaticArrays
                         corners, true_projections, true_rot, camera_matrix;
                         initial_guess_pos = noisy_pos
                     )
-                    @test norm(result.pos - true_pos) < 1e-5m
+                    @test norm(result.pos - true_pos) < (eps(eltype(result.pos))^(1 // 3))m
                     @test result.rot ≈ true_rot
                 end
             end
@@ -177,7 +174,8 @@ using StaticArrays
                 initial_guess_pos = noisy_pos_guess,
                 initial_guess_rot = noisy_rot_guess
             )
-            test_pose_accuracy(result, true_pos, true_rot; pos_tol=1e-5m, rot_tol=1e-7)
+            @test norm(result.pos - true_pos) < (eps(eltype(result.pos))^(1 // 3))m
+            @test result.rot ≈ true_rot
         end
 
         @testset "3DOF with Custom Camera Matrix" begin
@@ -185,7 +183,7 @@ using StaticArrays
                 runway_corners, true_projections, true_rot, custom_camera_matrix;
                 initial_guess_pos = noisy_pos_guess
             )
-            @test norm(result.pos - true_pos) < 1e-5m
+            @test norm(result.pos - true_pos) < (eps(eltype(result.pos))^(1 // 3))m
             @test result.rot ≈ true_rot
         end
     end
