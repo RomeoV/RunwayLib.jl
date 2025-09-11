@@ -69,6 +69,11 @@ function PoseOptimizationParams3DOF(runway_corners, observed_corners, camconfig,
     return PoseOptimizationParams3DOF(runway_corners, observed_corners, camconfig, cov, Linv, known_attitude)
 end
 
+optvartransformation(x, ps::PoseOptimizationParams3DOF) = [-exp(x[1]); x[2]; exp(x[3])]
+optvartransformation(x, ps::PoseOptimizationParams6DOF) = [-exp(x[1]); x[2]; exp(x[3]); x[4:6]]
+revoptvartransformation(x, ps::PoseOptimizationParams3DOF) = [log(-x[1]); x[2]; log(x[3])]
+revoptvartransformation(x, ps::PoseOptimizationParams6DOF) = [log(-x[1]); x[2]; log(x[3]); x[4:6]]
+
 """
     pose_optimization_objective(pose_params, ps)
 
@@ -87,6 +92,7 @@ function pose_optimization_objective(
         optvar::AbstractVector{T},
         ps::AbstractPoseOptimizationParams
     ) where {T <: Real}
+    optvar = optvartransformation(optvar, ps)
     # Extract camera position from optimization variables
     cam_pos = WorldPoint(optvar[1:3]m)
 
@@ -208,9 +214,9 @@ function estimatepose6dof(
     )
     
     cache = CACHE_6DOF
-    reinit!(cache, u₀; p=ps)
+    reinit!(cache, revoptvartransformation(u₀, ps); p=ps)
     solve!(cache)
-    sol = (; u = cache.u, retcode = cache.retcode)
+    sol = (; u=optvartransformation(cache.u, ps), retcode=cache.retcode)
 
     !successful_retcode(sol.retcode) && throw(OptimizationFailedError(sol.retcode, sol))
     pos = WorldPoint(sol.u[1:3]m)
@@ -241,9 +247,9 @@ function estimatepose3dof(
     )
     
     cache = CACHE_3DOF
-    reinit!(cache, u₀; p=ps)
+    reinit!(cache, revoptvartransformation(u₀, ps); p=ps)
     solve!(cache)
-    sol = (; u = cache.u, retcode = cache.retcode)
+    sol = (; u=optvartransformation(cache.u, ps), retcode=cache.retcode)
 
     !successful_retcode(sol.retcode) && throw(OptimizationFailedError(sol.retcode, sol))
     pos = WorldPoint(sol.u[1:3]m)
