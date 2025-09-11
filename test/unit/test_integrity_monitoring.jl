@@ -52,34 +52,32 @@ using Unitful.DefaultSymbols
 """
 Create a standard test scenario with runway corners, true pose, and observations.
 """
-function create_runway_scenario(; 
-    n_corners::Int = 4,
+function create_runway_scenario(;
+    n_corners::Int=4,
+    true_pos=WorldPoint(-800.0m, 5.0m, 120.0m),
+    true_rot=RotZYX(0.02, 0.05, 0.01),  # Small attitude angles
 )
 
     # Standard runway corners - well-conditioned geometry
     if n_corners == 4
         runway_corners = [
             WorldPoint(0.0m, -25.0m, 0.0m),
-            WorldPoint(0.0m, 25.0m, 0.0m), 
+            WorldPoint(0.0m, 25.0m, 0.0m),
             WorldPoint(1500.0m, -25.0m, 0.0m),
             WorldPoint(1500.0m, 25.0m, 0.0m)
         ]
     else
         # Generate more corners if needed
         runway_corners = [
-            WorldPoint(x*m, y*m, 0.0m)
-            for x in range(0, 1500, length=div(n_corners,2))
+            WorldPoint(x * m, y * m, 0.0m)
+            for x in range(0, 1500, length=div(n_corners, 2))
             for y in [-25.0, 25.0]
         ][1:n_corners]
     end
-    
-    # True aircraft pose - reasonable approach geometry
-    true_pos = WorldPoint(-800.0m, 5.0m, 120.0m)
-    true_rot = RotZYX(0.02, 0.05, 0.01)  # Small attitude angles
-    
+
     # Generate clean projections
-    clean_projections = [project(true_pos, true_rot, corner, CAMERA_CONFIG_OFFSET) 
-                        for corner in runway_corners]
+    clean_projections = [project(true_pos, true_rot, corner, CAMERA_CONFIG_OFFSET)
+                         for corner in runway_corners]
 
     make_noisy_projections(σ=1.0) = clean_projections .+ [
         ProjectionPoint(σ * randn(2)px)
@@ -87,39 +85,48 @@ function create_runway_scenario(;
     ]
 
     return (;
-        runway_corners = runway_corners,
-        true_pos = true_pos,
-        true_rot = true_rot,
-        clean_projections = clean_projections,
+        runway_corners,
+        true_pos,
+        true_rot,
+        clean_projections,
         make_noisy_projections,
     )
 end
+sample_aircraft_pos() =
+    let
+        pos = rand(
+            MvNormal([-3000.0, 0, 300], Diagonal([1000.0, 200, 100] .^ 2))
+        )
+        pos = clamp.(pos, [-Inf, -Inf, 100], [-1000, Inf, Inf])
+        WorldPoint(pos) * m
+    end
+sample_aircraft_rot() = RotZYX((deg2rad(5) * randn(3))...)
 
 const CAMERA_CONFIGS = [
-        ("CameraMatrix :offset", CameraMatrix(CAMERA_CONFIG_OFFSET))
-    ]
+    ("CameraMatrix :offset", CameraMatrix(CAMERA_CONFIG_OFFSET))
+]
 
 """
 Validate p-value distribution against uniform distribution.
 """
-function validate_p_value_distribution(p_values; n_bins::Int = 20, α::Float64 = 0.01)
-    # Bin p-values  
-    bin_edges = range(0, 1, length=n_bins+1)
+function validate_p_value_distribution(p_values; n_bins::Int=20, α::Float64=0.01)
+    # Bin p-values
+    bin_edges = range(0, 1, length=n_bins + 1)
     bin_counts = fit(Histogram, p_values, bin_edges).weights
-    
+
     # Expected count per bin for uniform distribution
     expected_count = length(p_values) / n_bins
-    
+
     # Chi-squared goodness of fit test
-    chi_sq_stat = sum((bin_counts .- expected_count).^2 ./ expected_count)
+    chi_sq_stat = sum((bin_counts .- expected_count) .^ 2 ./ expected_count)
     p_value_test = ccdf(Chisq(n_bins - 1), chi_sq_stat)
-    
+
     return (
-        bin_counts = bin_counts,
-        expected_count = expected_count,
-        chi_squared = chi_sq_stat,
-        p_value = p_value_test,
-        uniform_distribution = p_value_test > α
+        bin_counts=bin_counts,
+        expected_count=expected_count,
+        chi_squared=chi_sq_stat,
+        p_value=p_value_test,
+        uniform_distribution=p_value_test > α
     )
 end
 
@@ -211,52 +218,55 @@ end
             noise_level = 2.0
             p_values = map(1:n_trials) do i
                 (; true_pos, true_rot, runway_corners, make_noisy_projections
-                ) = create_runway_scenario()
-                sigmas = noise_level*ones(length(runway_corners))
-                noise_cov = Diagonal(repeat(sigmas.^2, inner=2))
-                
+                ) = create_runway_scenario(;
+                    true_pos=sample_aircraft_pos(),
+                    true_rot=sample_aircraft_rot()
+                )
+                sigmas = noise_level * ones(length(runway_corners))
+                noise_cov = Diagonal(repeat(sigmas .^ 2, inner=2))
+
                 stats = compute_integrity_statistic(
                     true_pos, true_rot,
                     runway_corners, make_noisy_projections(noise_level),
                     noise_cov
                 )
-               stats.p_value
+                stats.p_value
             end
-            
+
             # Validate p-value distribution
             validation = validate_p_value_distribution(p_values, n_bins=10)
-            
+
             @test validation.uniform_distribution
             @test 0.0 <= minimum(p_values)
             @test maximum(p_values) <= 1.0
-            
+
             # Check that approximately 5% of trials fail at α=0.05
             failure_rate = mean(p_values .< 0.05)
             @test 0.02 < failure_rate < 0.08
         end
     end
-    
+
     @testset "4. Noise Model Integration" begin
         (; true_pos, true_rot, runway_corners, make_noisy_projections) = create_runway_scenario()
         noise_level = 2.0
-        
+
         @testset "Diagonal Noise Model" begin
             # Create vector of Normal distributions for UncorrGaussianNoiseModel
             normal_dists = [Normal(0.0, noise_level) for _ in 1:8]
             noise_model = UncorrGaussianNoiseModel(normal_dists)
             cov_matrix = covmatrix(noise_model)
-            
+
             stats = compute_integrity_statistic(
                 true_pos, true_rot,
                 runway_corners, make_noisy_projections(noise_level),
                 cov_matrix
             )
-            
+
             @test stats.p_value > 0.01
             @test size(cov_matrix) == (8, 8)
             @test isdiag(cov_matrix)
         end
-        
+
         @testset "Full Covariance Noise Model" begin
             # Create correlated noise model using MvNormal
             base_var = noise_level^2
