@@ -42,8 +42,6 @@ using LinearAlgebra: I
             @test abs(julia_result.pos.x - true_pos.x) < 30.0m  # Allow reasonable tolerance
             @test abs(julia_result.pos.y - true_pos.y) < 10.0m
             @test abs(julia_result.pos.z - true_pos.z) < 10.0m
-
-            println("Julia 6DOF result: pos = $(julia_result.pos), expected = $(true_pos)")
         end
 
         # Create C structs for testing
@@ -68,8 +66,6 @@ using LinearAlgebra: I
                 Ptr{RunwayLib.WorldPointF64}(0), Ptr{RunwayLib.RotYPRF64}(0),
                 Base.unsafe_convert(Ptr{RunwayLib.PoseEstimate_C}, result)
             )
-
-            println("C API 6DOF result: error_code = $(error_code), pos = $(result[].position * m), expected = $(true_pos)")
 
             # Now we can see if the C API matches the Julia function
             if error_code == RunwayLib.POSEEST_SUCCESS
@@ -105,7 +101,6 @@ using LinearAlgebra: I
             @test abs(julia_result.pos.z - true_pos.z) < 10.0m
             @test julia_result.rot ≈ true_rot
 
-            println("Julia 3DOF result: pos = $(julia_result.pos), expected = $(true_pos)")
         end
 
         # Create C structs for testing
@@ -134,7 +129,6 @@ using LinearAlgebra: I
                 Base.unsafe_convert(Ptr{RunwayLib.PoseEstimate_C}, result)
             )
 
-            println("C API 3DOF result: error_code = $(error_code), pos = $(result[].position * m), expected = $(true_pos)")
 
             # Now we can see if the C API matches the Julia function
             if error_code == RunwayLib.POSEEST_SUCCESS
