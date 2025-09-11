@@ -31,6 +31,11 @@ struct PoseOptimizationParams3DOF{
     known_attitude::A
 end
 
+optvartransformation(x, ps::PoseOptimizationParams3DOF) = [-exp(x[1]); x[2]; exp(x[3])]
+optvartransformation(x, ps::PoseOptimizationParams6DOF) = [-exp(x[1]); x[2]; exp(x[3]); x[4:6]]
+revoptvartransformation(x, ps::PoseOptimizationParams3DOF) = [log(-x[1]); x[2]; log(x[3])]
+revoptvartransformation(x, ps::PoseOptimizationParams6DOF) = [log(-x[1]); x[2]; log(x[3]); x[4:6]]
+
 """
     pose_optimization_objective(pose_params, ps)
 
@@ -49,6 +54,7 @@ function pose_optimization_objective(
     optvar::AbstractVector{T},
     ps::AbstractPoseOptimizationParams
 ) where {T<:Real}
+    optvar = optvar2nominal(optvar, ps)
     # Extract camera position from optimization variables
     cam_pos = WorldPoint(optvar[1:3]m)
 
@@ -223,4 +229,3 @@ const CACHE_3DOF = let
     abstol = real(oneunit(T)) * (eps(real(one(T))))^(2 // 5)
     init(prob, ALG; reltol, abstol)
 end
-
