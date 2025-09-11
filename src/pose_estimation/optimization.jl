@@ -73,14 +73,14 @@ end
 optvar2nominal(x, ps::PoseOptimizationParams3DOF) = [-exp(x[1]); x[2]; exp(x[3])]
 # we need `reduce(vcat, ...)` here instead of [... ; ...] for type inference...
 optvar2nominal(x, ps::PoseOptimizationParams6DOF) = reduce(vcat, [
-    [-exp(x[1]); x[2]; exp(x[3])],
-    RotZYX(RodriguesParam(x[4], x[5], x[6])) |> Rotations.params |> Array
+    SA[-exp(x[1]); x[2]; exp(x[3])],
+    RotZYX(RodriguesParam(x[4], x[5], x[6])) |> Rotations.params
 ])
 "From regular space into optimization space."
 nominal2optvar(x, ps::PoseOptimizationParams3DOF) = [log(-x[1]); x[2]; log(x[3])]
 nominal2optvar(x, ps::PoseOptimizationParams6DOF) = reduce(vcat, [
-    [log(-x[1]); x[2]; log(x[3])],
-    RodriguesParam(RotZYX(x[4], x[5], x[6])) |> Rotations.params |> Array
+    SA[log(-x[1]); x[2]; log(x[3])],
+    RodriguesParam(RotZYX(x[4], x[5], x[6])) |> Rotations.params
 ])
 
 """
@@ -213,7 +213,7 @@ function estimatepose6dof(
         # convert to SVector here in case we still have a WorldPoint
         initial_guess_pos |> SVector{3} .|> _ustrip(m);
         initial_guess_rot |> SVector{3} .|> _ustrip(rad)
-    ] |> Array
+    ]
 
     ps = PoseOptimizationParams6DOF(
         runway_corners |> Vector, observed_corners |> Vector,
@@ -240,7 +240,7 @@ function estimatepose3dof(
         optimization_config = DEFAULT_OPTIMIZATION_CONFIG
     ) where {T, N}
 
-    u₀ = initial_guess_pos .|> _ustrip(m) |> Array
+    u₀ = initial_guess_pos .|> _ustrip(m)
 
     # Convert coordinates to match cache type and get cache
     observed_corners_converted = [
