@@ -1,8 +1,6 @@
 name: juliac
 
 on:
-  push:
-    branches: ['**']
   pull_request:
     branches: [master]
   workflow_dispatch:
