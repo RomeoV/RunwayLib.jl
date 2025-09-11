@@ -137,6 +137,8 @@ function pose_optimization_objective(
 end
 
 function setup_for_precompile(camconfig::CameraMatrix{:offset})
+    # crucially this is not an SArray, which will allow us to vary the number of
+    # corners at runtime later (rather then everything being compiled for sarrays)
     runway_corners = [
         WorldPoint(1000.0m, -50.0m, 0.0m),
         WorldPoint(1000.0m, 50.0m, 0.0m),
