@@ -175,7 +175,8 @@ const CACHE_6DOF = let
         runway_corners, projections,
         CAMERA_MATRIX_OFFSET, noise_model
     )
-    prob = NonlinearLeastSquaresProblem{false}(POSEOPTFN, rand(6), ps)
+    u = nominal2optvar([-2000.0; 0; 100; 0; 0; 0], ps)
+    prob = NonlinearLeastSquaresProblem{false}(POSEOPTFN, u, ps)
     T = Float64
     reltol = real(oneunit(T)) * (eps(real(one(T))))^(2 // 5)
     abstol = real(oneunit(T)) * (eps(real(one(T))))^(2 // 5)
@@ -190,7 +191,8 @@ const CACHE_3DOF = let
         CAMERA_MATRIX_OFFSET, noise_model,
         true_rot
     )
-    prob = NonlinearLeastSquaresProblem{false}(POSEOPTFN, rand(3), ps)
+    u = nominal2optvar([-2000.0; 0; 100], ps)
+    prob = NonlinearLeastSquaresProblem{false}(POSEOPTFN, u, ps)
     T = Float64
     reltol = real(oneunit(T)) * (eps(real(one(T))))^(2 // 5)
     abstol = real(oneunit(T)) * (eps(real(one(T))))^(2 // 5)
