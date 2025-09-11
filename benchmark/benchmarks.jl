@@ -24,7 +24,6 @@ const TRUE_ROT = RotZYX(roll = 0.0, pitch = 0.0, yaw = -0.0)
 
 # Camera configurations to test
 const CAMERA_CONFIGS = [
-    (CAMERA_CONFIG_CENTERED, "Centered"),
     (CAMERA_CONFIG_OFFSET, "Offset"),
 ]
 
