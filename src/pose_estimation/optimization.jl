@@ -213,7 +213,7 @@ function estimatepose6dof(
         # convert to SVector here in case we still have a WorldPoint
         initial_guess_pos |> SVector{3} .|> _ustrip(m);
         initial_guess_rot |> SVector{3} .|> _ustrip(rad)
-    ]
+    ] |> Array
 
     ps = PoseOptimizationParams6DOF(
         runway_corners |> Vector, observed_corners |> Vector,
