@@ -35,7 +35,7 @@ PrecompileTools.@compile_workload begin
             for corner in runway_corners
         ]
 
-        # Skip 6DOF pose estimation precompilation for now
+        # Precompile 6DOF pose estimation
         pose6dof = estimatepose6dof(runway_corners, projections, cam_config)
 
         # Skip 3DOF pose estimation precompilation for now
