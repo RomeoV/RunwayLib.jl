@@ -100,7 +100,7 @@ function pose_optimization_objective(
         optvar::AbstractVector{T},
         ps::AbstractPoseOptimizationParams
     ) where {T <: Real}
-    optvar = optvartransformation(optvar, ps)
+    optvar = optvar2nominal(optvar, ps)
     # Extract camera position from optimization variables
     cam_pos = WorldPoint(optvar[1:3]m)
 
@@ -222,9 +222,9 @@ function estimatepose6dof(
     )
     
     cache = CACHE_6DOF
-    reinit!(cache, revoptvartransformation(u₀, ps); p=ps)
+    reinit!(cache, nominal2optvar(u₀, ps); p=ps)
     solve!(cache)
-    sol = (; u=optvartransformation(cache.u, ps), retcode=cache.retcode)
+    sol = (; u=optvar2nominal(cache.u, ps), retcode=cache.retcode)
 
     !successful_retcode(sol.retcode) && throw(OptimizationFailedError(sol.retcode, sol))
     pos = WorldPoint(sol.u[1:3]m)
@@ -255,9 +255,9 @@ function estimatepose3dof(
     )
     
     cache = CACHE_3DOF
-    reinit!(cache, revoptvartransformation(u₀, ps); p=ps)
+    reinit!(cache, nominal2optvar(u₀, ps); p=ps)
     solve!(cache)
-    sol = (; u=optvartransformation(cache.u, ps), retcode=cache.retcode)
+    sol = (; u=optvar2nominal(cache.u, ps), retcode=cache.retcode)
 
     !successful_retcode(sol.retcode) && throw(OptimizationFailedError(sol.retcode, sol))
     pos = WorldPoint(sol.u[1:3]m)
