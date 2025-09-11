@@ -207,20 +207,15 @@ function estimatepose6dof(
         optimization_config = DEFAULT_OPTIMIZATION_CONFIG
     ) where {T, N}
     u₀ = [
-        initial_guess_pos .|> _ustrip(m);
-        initial_guess_rot .|> _ustrip(rad)
-    ] |> Array
-
-    # Convert coordinates to match cache type and get cache
-    observed_corners_converted = [
-        convertcamconf(CAMERA_MATRIX_OFFSET, camconfig, proj)
-            for proj in observed_corners
+        # convert to SVector here in case we still have a WorldPoint
+        initial_guess_pos |> SVector{3} .|> _ustrip(m);
+        initial_guess_rot |> SVector{3} .|> _ustrip(rad)
     ]
+
     ps = PoseOptimizationParams6DOF(
-        runway_corners |> Vector, observed_corners_converted |> Vector,
+        runway_corners |> Vector, observed_corners |> Vector,
         camconfig, noise_model
     )
-    
     cache = CACHE_6DOF
     reinit!(cache, nominal2optvar(u₀, ps); p=ps)
     solve!(cache)
