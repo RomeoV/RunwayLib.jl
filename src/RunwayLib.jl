@@ -4,7 +4,7 @@ using Distributions: Distributions, Normal, Chisq, ccdf
 using LinearAlgebra: LinearAlgebra, /, cholesky
 using LinearSolve: CholeskyFactorization, LinearSolve, NonlinearFunction,
     NonlinearLeastSquaresProblem, init
-using Rotations: Rotations, RotZYX, Rotation
+using Rotations: Rotations, RotZYX, Rotation, RodriguesParam
 using ADTypes: AutoForwardDiff
 using DifferentiationInterface: DifferentiationInterface, jacobian
 using NonlinearSolveFirstOrder: LevenbergMarquardt, NonlinearLeastSquaresProblem, NonlinearFunction,
