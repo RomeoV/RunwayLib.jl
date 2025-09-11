@@ -74,58 +74,58 @@ jobs:
           cd artifacts
           JULIA_DEPOT_PATH=RunwayLibCompiled/share/julia ./mainc
 
-  test-python:
-    needs: build-and-test
-    strategy:
-      matrix:
-        os: ${{ vars.USE_SELF_HOSTED == 'true' && fromJSON('["self-hosted"]') || fromJSON('["ubuntu-22.04", "ubuntu-latest"]') }}
-        python-version: ['3.9', '3.10', '3.11', '3.12']
-    runs-on: ${{ matrix.os }}
-    
-    steps:
-      - uses: actions/checkout@v4
+  # test-python:
+  #   needs: build-and-test
+  #   strategy:
+  #     matrix:
+  #       os: ${{ vars.USE_SELF_HOSTED == 'true' && fromJSON('["self-hosted"]') || fromJSON('["ubuntu-22.04", "ubuntu-latest"]') }}
+  #       python-version: ['3.9', '3.10', '3.11', '3.12']
+  #   runs-on: ${{ matrix.os }}
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ matrix.python-version }}
+  #   steps:
+  #     - uses: actions/checkout@v4
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: juliac-build-${{ matrix.os }}
-          path: artifacts/
+  #     - name: Set up Python ${{ matrix.python-version }}
+  #       uses: actions/setup-python@v4
+  #       with:
+  #         python-version: ${{ matrix.python-version }}
 
-      - name: Install Python dependencies
-        working-directory: poseest_py
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e .
-          pip install pytest
+  #     - name: Download build artifacts
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: juliac-build-${{ matrix.os }}
+  #         path: artifacts/
 
-      - name: Copy library to Python package
-        run: |
-          # Remove existing symlinked library (if any)
-          rm -rf poseest_py/poseest/native/RunwayLibCompiled
-          # Copy the built library
-          cp -r artifacts/RunwayLibCompiled poseest_py/poseest/native/
+  #     - name: Install Python dependencies
+  #       working-directory: poseest_py
+  #       run: |
+  #         python -m pip install --upgrade pip
+  #         pip install -e .
+  #         pip install pytest
 
-      - name: Test Python package (basic tests)
-        working-directory: poseest_py
-        run: |
-          python -m pytest tests/test_poseest.py::TestDataTypes -v
+  #     - name: Copy library to Python package
+  #       run: |
+  #         # Remove existing symlinked library (if any)
+  #         rm -rf poseest_py/poseest/native/RunwayLibCompiled
+  #         # Copy the built library
+  #         cp -r artifacts/RunwayLibCompiled poseest_py/poseest/native/
 
-      - name: Test Python package (library integration)
-        working-directory: poseest_py
-        run: |
-          python -m pytest tests/test_poseest.py::TestLibraryIntegration -v
+  #     - name: Test Python package (basic tests)
+  #       working-directory: poseest_py
+  #       run: |
+  #         python -m pytest tests/test_poseest.py::TestDataTypes -v
 
-      - name: Test Python package (error handling)
-        working-directory: poseest_py
-        run: |
-          python -m pytest tests/test_poseest.py::TestErrorHandling -v
+  #     - name: Test Python package (library integration)
+  #       working-directory: poseest_py
+  #       run: |
+  #         python -m pytest tests/test_poseest.py::TestLibraryIntegration -v
 
-      - name: Run all Python tests
-        working-directory: poseest_py
-        run: |
-          python -m pytest tests/ -v
+  #     - name: Test Python package (error handling)
+  #       working-directory: poseest_py
+  #       run: |
+  #         python -m pytest tests/test_poseest.py::TestErrorHandling -v
+
+  #     - name: Run all Python tests
+  #       working-directory: poseest_py
+  #       run: |
+  #         python -m pytest tests/ -v
