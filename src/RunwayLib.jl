@@ -14,7 +14,7 @@ using StaticArrays: StaticArrays, FieldVector, SA, Size, SVector
 using TypedTables: TypedTables, Table
 using Unitful: Unitful, @u_str, @unit, NoUnits, Quantity, dimension, uconvert,
     ustrip, Length
-using Unitful.DefaultSymbols: DefaultSymbols, A, S, T, m, ps, rad, s
+using Unitful.DefaultSymbols: m, °, rad
 using ProbabilisticParameterEstimators: UncorrGaussianNoiseModel, CorrGaussianNoiseModel,
     NoiseModel, covmatrix
 using SciMLBase: successful_retcode, FullSpecialize
