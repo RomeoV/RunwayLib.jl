@@ -31,10 +31,18 @@ struct PoseOptimizationParams3DOF{
     known_attitude::A
 end
 
-optvartransformation(x, ps::PoseOptimizationParams3DOF) = [-exp(x[1]); x[2]; exp(x[3])]
-optvartransformation(x, ps::PoseOptimizationParams6DOF) = [-exp(x[1]); x[2]; exp(x[3]); x[4:6]]
-revoptvartransformation(x, ps::PoseOptimizationParams3DOF) = [log(-x[1]); x[2]; log(x[3])]
-revoptvartransformation(x, ps::PoseOptimizationParams6DOF) = [log(-x[1]); x[2]; log(x[3]); x[4:6]]
+"From optimization space into regular space."
+optvar2nominal(x, ps::PoseOptimizationParams3DOF) = [-exp(x[1]); x[2]; exp(x[3])]
+optvar2nominal(x, ps::PoseOptimizationParams6DOF) = [
+    -exp(x[1]); x[2]; exp(x[3]);
+    RotZYX(RodriguesParam(x[4], x[5], x[6])) |> Rotations.params
+]
+"From regular space into optimization space."
+nominal2optvar(x, ps::PoseOptimizationParams3DOF) = [log(-x[1]); x[2]; log(x[3])]
+nominal2optvar(x, ps::PoseOptimizationParams6DOF) = [
+    log(-x[1]); x[2]; log(x[3]);
+    RodriguesParam(RotZYX(x[4], x[5], x[6])) |> Rotations.params
+]
 
 """
     pose_optimization_objective(pose_params, ps)
