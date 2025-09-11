@@ -8,7 +8,7 @@ using CEnum
 using Distributions: Normal, MvNormal
 using LinearAlgebra: isposdef
 using ProbabilisticParameterEstimators: CorrGaussianNoiseModel, UncorrGaussianNoiseModel, NoiseModel
-using LightSumTypes
+using LightSumTypes: @sumtype, variant
 
 # Type aliases for C interop
 # These use the same memory layout as the existing parametric structs
