@@ -28,8 +28,16 @@ _reduce(f::F) where F = Base.Fix1(reduce, f)
 @unit pixel "pixel" Pixel 1 false
 const px = pixel
 
-# Register the pixel unit with Unitful
-Unitful.register(RunwayLib)
+# Capture basefactors at compile time (includes our custom pixel unit)
+const localunits = copy(Unitful.basefactors)
+
+# Runtime initialization to properly register units
+function __init__()
+    # Restore basefactors captured at compile time
+    merge!(Unitful.basefactors, localunits)
+    # Register the pixel unit with Unitful
+    Unitful.register(RunwayLib)
+end
 
 # Export coordinate system types
 export WorldPoint, CameraPoint, ProjectionPoint
