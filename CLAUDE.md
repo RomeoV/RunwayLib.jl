@@ -7,3 +7,8 @@
 ## Testing Tips
 
 - Note that often times you're better off running tests directly with something like `julia --project=test test/...` rather than `Pkg.test()` as it can take a long time.
+- I have the fish aliases ```
+alias juliaserver 'julia --startup-file=no -e "using DaemonMode; serve()"'
+alias juliaclient 'julia --startup-file=no -e "using DaemonMode; runargs()"'
+alias juliaclientexpr 'julia --startup-file=no -e "using DaemonMode; runexpr(\"begin; \$(ARGS[1]); end\")" -- '
+```. Since you use bash, you'll have to "type this out" explicitly. But you can assume a server is running, and directly interact this way to run simple scripts or tests.
