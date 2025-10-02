@@ -1,7 +1,7 @@
 module RunwayLib
 
 using Distributions: Distributions, Normal, Chisq, ccdf
-using LinearAlgebra: LinearAlgebra, /, cholesky
+using LinearAlgebra: LinearAlgebra, /, cholesky, UpperTriangular, LowerTriangular
 using LinearSolve: CholeskyFactorization, LinearSolve, NonlinearFunction,
     NonlinearLeastSquaresProblem, init
 using Rotations: Rotations, RotZYX, Rotation, RodriguesParam
@@ -10,7 +10,7 @@ using DifferentiationInterface: DifferentiationInterface, jacobian
 using NonlinearSolveFirstOrder: LevenbergMarquardt, NonlinearLeastSquaresProblem, NonlinearFunction,
     reinit!, solve!
 import StaticArrays: similar_type
-using StaticArrays: StaticArrays, FieldVector, SA, Size, SVector
+using StaticArrays: StaticArrays, FieldVector, SA, Size, SVector, SMatrix, MVector, setindex
 using TypedTables: TypedTables, Table
 using Unitful: Unitful, @u_str, @unit, NoUnits, Quantity, dimension, uconvert,
     ustrip, Length
@@ -67,10 +67,10 @@ export pixel, px
 export BehindCameraException
 
 # Include submodules
+include("camera_model/withdims.jl")
 include("coordinate_systems/types.jl")
 include("coordinate_systems/transformations.jl")
 include("pose_estimation/types.jl")
-include("camera_model/withdims.jl")
 include("camera_model/projection.jl")
 include("camera_model/errors.jl")
 # include("data_management/runway_database.jl")
