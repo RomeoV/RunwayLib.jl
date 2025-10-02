@@ -37,7 +37,7 @@ wp_sum = wp + wp2  # Element-wise addition
 wp_scaled = 2.0 * wp  # Scalar multiplication
 ```
 """
-struct WorldPoint{T} <: FieldVector{3, T}
+struct WorldPoint{T} <: FieldVector{3,T}
     x::T  # Along-track distance
     y::T  # Cross-track distance
     z::T  # Height above runway
@@ -74,7 +74,7 @@ println("Right: ", cp.y)
 println("Down: ", cp.z)
 ```
 """
-struct CameraPoint{T} <: FieldVector{3, T}
+struct CameraPoint{T} <: FieldVector{3,T}
     x::T  # Camera forward direction
     y::T  # Camera right direction
     z::T  # Camera down direction
@@ -120,7 +120,7 @@ println("X: ", pp_centered.x)
 println("Y: ", pp_centered.y)
 ```
 """
-struct ProjectionPoint{T, S} <: FieldVector{2, T}
+struct ProjectionPoint{T,S} <: FieldVector{2,T}
     x::T  # Image x-coordinate (pixels)
     y::T  # Image y-coordinate (pixels)
 end
@@ -131,9 +131,9 @@ end
 # CameraPoint(x, y, z) = CameraPoint{typeof(x)}(x, y, z)
 # CameraPoint(xs::AbstractVector{T}) = CameraPoint{T}(xs)
 # ProjectionPoint(x, y) = ProjectionPoint{typeof(x), :offset}(x, y)  # Default to offset coordinates
-ProjectionPoint(xy::AbstractVector{T}) where {T} = ProjectionPoint{T, :offset}(xy)
-ProjectionPoint(type::Symbol, x::T, y::T) where {T} = ProjectionPoint{T, type}(x, y)  # Default to offset coordinates
-ProjectionPoint{T}(x, y) where {T} = ProjectionPoint{T, :offset}(x, y)
+ProjectionPoint(xy::AbstractVector{T}) where {T} = ProjectionPoint{T,:offset}(xy)
+ProjectionPoint(type::Symbol, x::T, y::T) where {T} = ProjectionPoint{T,type}(x, y)  # Default to offset coordinates
+ProjectionPoint{T}(x, y) where {T} = ProjectionPoint{T,:offset}(x, y)
 
 # Base.BroadcastStyle(::Type{<:WorldPoint}) = Broadcast.ArrayStyle{WorldPoint}()
 # Base.similar(::Broadcast.Broadcasted{Broadcast.ArrayStyle{WorldPoint}}, ::Type{T}) where {T} = WorldPoint{T}(undef)
@@ -141,7 +141,13 @@ ProjectionPoint{T}(x, y) where {T} = ProjectionPoint{T, :offset}(x, y)
 #     WorldPoint{T}(undef, undef, undef)
 
 
-similar_type(::Type{<:ProjectionPoint{T, :centered}}, ::Type{T′}, s::Size{S}) where {T, T′, S} = ProjectionPoint{T′, :centered}
-similar_type(::Type{<:ProjectionPoint{T, :offset}}, ::Type{T′}, s::Size{S}) where {T, T′, S} = ProjectionPoint{T′, :offset}
-similar_type(::Type{<:WorldPoint}, ::Type{T}, s::Size{S}) where {T, S} = WorldPoint{T}
-similar_type(::Type{<:CameraPoint}, ::Type{T}, s::Size{S}) where {T, S} = CameraPoint{T}
+similar_type(::Type{<:ProjectionPoint{T,:centered}}, ::Type{T′}, s::Size{S}) where {T,T′,S} = ProjectionPoint{T′,:centered}
+similar_type(::Type{<:ProjectionPoint{T,:offset}}, ::Type{T′}, s::Size{S}) where {T,T′,S} = ProjectionPoint{T′,:offset}
+similar_type(::Type{<:WorldPoint}, ::Type{T}, s::Size{S}) where {T,S} = WorldPoint{T}
+similar_type(::Type{<:CameraPoint}, ::Type{T}, s::Size{S}) where {T,S} = CameraPoint{T}
+
+
+struct Line{RT<:WithDims(px),TT<:WithDims(rad)}
+    r::RT
+    theta::TT
+end
