@@ -46,7 +46,7 @@ end
 CameraMatrix(S::Symbol, matrix::SMatrix{3,3,T}, width::WithDims(px), height::WithDims(px)) where {T} = CameraMatrix{S}(matrix, width, height)
 
 # Get optical center based on coordinate system
-getopticalcenter(cam::AbstractCameraConfig{:offset}) = SA[(cam.image_width + 1px) / 2, (cam.image_height + 1px) / 2]
+getopticalcenter(cam::AbstractCameraConfig{:offset}) = SA[(cam.image_width+1px)/2, (cam.image_height+1px)/2]
 getopticalcenter(cam::CameraMatrix) = SA[cam.matrix[1, 3], cam.matrix[2, 3]]
 
 # Constructor from CameraConfig - only :offset supported
@@ -104,11 +104,15 @@ function project(
     u_centered = f_pixels * (cam_pt.y / cam_pt.x) |> _uconvert(pixel)  # Left positive
     v_centered = f_pixels * (cam_pt.z / cam_pt.x) |> _uconvert(pixel)  # Up positive
 
-    # Convert to :offset coordinates
-    cx, cy = getopticalcenter(camconfig)
-    u, v = -u_centered + cx, -v_centered + cy
     T′′ = typeof(u_centered)
-    return ProjectionPoint{T′′, :offset}(u, v)
+    return @match camconfig begin
+        ::CameraConfig{:centered} => ProjectionPoint{T′′,:centered}(u_centered, v_centered)
+        ::CameraConfig{:offset} => let
+            cx, cy = getopticalcenter(camconfig)
+            u, v = -u_centered + cx, -v_centered + cy
+            ProjectionPoint{T′′,:offset}(u, v)
+        end
+    end
 end
 
 function project(
@@ -132,7 +136,7 @@ function project(
 end
 
 # Coordinate conversion - only :offset supported
-convertcamconf(to::AbstractCameraConfig{:offset}, from::AbstractCameraConfig{:offset}, proj::ProjectionPoint{T, :offset}) where {T} = proj
+convertcamconf(to::AbstractCameraConfig{:offset}, from::AbstractCameraConfig{:offset}, proj::ProjectionPoint{T,:offset}) where {T} = proj
 
 
 "Validate 3x3 matrix for camera projection."

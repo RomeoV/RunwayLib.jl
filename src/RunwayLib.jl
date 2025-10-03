@@ -23,7 +23,7 @@ import Base: OncePerTask
 
 _uconvert(u) = Base.Fix1(uconvert, u)
 _ustrip(u) = Base.Fix1(ustrip, u)
-_reduce(f::F) where F = Base.Fix1(reduce, f)
+_reduce(f::F) where {F} = Base.Fix1(reduce, f)
 
 # Define custom pixel unit
 @unit pixel "pixel" Pixel 1 false
@@ -82,6 +82,7 @@ include("pose_estimation/types.jl")
 include("camera_model/projection.jl")
 include("camera_model/errors.jl")
 # include("data_management/runway_database.jl")
+include("pose_estimation/staticinv.jl")
 include("pose_estimation/optimization.jl")
 include("pose_estimation/errors.jl")
 include("integrity/integrity.jl")
@@ -91,6 +92,7 @@ include("c_api.jl")
 # Export pose estimation entrypoints and types
 export estimatepose6dof, estimatepose3dof, pose_optimization
 export PoseOptimizationParams6DOF, PoseOptimizationParams3DOF
+export PointFeatures, LineFeatures, NO_LINES
 
 # Export integrity monitoring functions
 export compute_integrity_statistic, check_integrity, compute_jacobian, compute_residual

@@ -31,6 +31,7 @@ Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 [sources]
 ForwardDiff = {rev = "rv/remove-quote-assert-string-interpolation", url = "https://github.com/RomeoV/ForwardDiff.jl.git"}
 NonlinearSolveFirstOrder = {subdir = "lib/NonlinearSolveFirstOrder", url = "https://github.com/SciML/NonlinearSolve.jl"}
+ProbabilisticParameterEstimators = {url = "https://github.com/RomeoV/ProbabilisticParameterEstimators.jl"}
 SciMLBase = {rev = "rv/fix-jet-opt", url = "https://github.com/RomeoV/SciMLBase.jl"}
 
 [compat]

@@ -10,7 +10,8 @@ This module tests:
 
 using Test
 using RunwayLib
-using RunwayLib: px  # Import the pixel unit from RunwayLib
+import RunwayLib: px  # Import the pixel unit from RunwayLib
+import RunwayLib: NO_LINES
 import Distributions: Normal, MvNormal
 import LinearAlgebra: Diagonal, isposdef, diag
 import StatsBase: std, cov  # Import std and cov functions
@@ -171,22 +172,6 @@ import LightSumTypes: variant
 
     @testset "Integration with Optimization" begin
 
-        @testset "Dense Matrix Conversion" begin
-            # Test that optimization parameters use dense matrices
-            noise_std = 2.0
-            noise_dists = [Normal(0.0, noise_std) for _ in 1:8]
-            noise_model = UncorrGaussianNoiseModel(noise_dists)
-
-            ps = PoseOptimizationParams6DOF(
-                runway_corners, projections,
-                CameraMatrix(CAMERA_CONFIG_OFFSET), noise_model
-            )
-
-            # Check that Linv is a dense Matrix
-            @test isa(ps.Linv, Matrix)
-            @test size(ps.Linv) == (8, 8)
-        end
-
         @testset "Scalar Covariance Integration" begin
             # Test that scalar covariance works with optimization
             noise_std = 1.5
@@ -197,8 +182,11 @@ import LightSumTypes: variant
             ) |> variant
 
             ps = PoseOptimizationParams6DOF(
-                runway_corners, projections,
-                CameraMatrix(CAMERA_CONFIG_OFFSET), noise_model
+                PointFeatures(
+                    runway_corners, projections,
+                    CameraMatrix(CAMERA_CONFIG_OFFSET), noise_model
+                ),
+                NO_LINES
             )
 
             # Test that we can call the objective function
@@ -223,8 +211,11 @@ import LightSumTypes: variant
             ) |> variant
 
             ps = PoseOptimizationParams6DOF(
-                runway_corners, projections,
-                CameraMatrix(CAMERA_CONFIG_OFFSET), noise_model
+                PointFeatures(
+                    runway_corners, projections,
+                    CameraMatrix(CAMERA_CONFIG_OFFSET), noise_model
+                ),
+                NO_LINES
             )
 
             # Test objective function call
@@ -233,28 +224,6 @@ import LightSumTypes: variant
 
             @test length(residuals) == 8
             @test all(isfinite.(residuals))
-        end
-    end
-
-    @testset "Performance and Memory" begin
-
-        @testset "Dense Matrix Performance" begin
-            # Test that dense matrices don't cause performance issues
-            large_noise_model = UncorrGaussianNoiseModel([Normal(0.0, 1.0) for _ in 1:8])  # 4 points * 2 coords
-
-            ps = PoseOptimizationParams6DOF(
-                runway_corners, projections,  # Use all 4 corners
-                CameraMatrix(CAMERA_CONFIG_OFFSET), large_noise_model
-            )
-
-            @test isa(ps.Linv, Matrix)
-            # Simple performance test - should complete quickly
-            test_params = zeros(6)
-            @time begin
-                for _ in 1:100
-                    RunwayLib.pose_optimization_objective(test_params, ps)
-                end
-            end
         end
     end
 end

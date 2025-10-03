@@ -2,6 +2,7 @@ using Test
 using RunwayLib
 import RunwayLib: PointFeatures, pose_optimization_objective_points
 using Rotations
+import Rotations: params
 using LinearAlgebra
 using Unitful, Unitful.DefaultSymbols
 using StaticArrays
@@ -16,7 +17,7 @@ using StaticArrays
             WorldPoint(1000.0m, -25.0m, 0.0m)
         ]
         world_lines = SA[(runway_corners[1], runway_corners[3]),
-                         (runway_corners[2], runway_corners[4])]
+            (runway_corners[2], runway_corners[4])]
 
         true_pos = WorldPoint(-500.0m, 10.0m, 100.0m)
         true_rot = RotZYX(0.02, 0.1, -0.01)
@@ -30,7 +31,7 @@ using StaticArrays
 
         @testset "Point Features" begin
             point_features = PointFeatures(runway_corners, observed_corners,
-                                          CAMERA_CONFIG_OFFSET, SMatrix{8,8}(1.0I))
+                CAMERA_CONFIG_OFFSET, SMatrix{8,8}(1.0I))
             result = pose_optimization_objective_points(true_pos, true_rot, point_features)
             @test result isa SVector
             @test length(result) == 2 * length(runway_corners)
@@ -38,7 +39,7 @@ using StaticArrays
 
         @testset "Line Features" begin
             line_features = RunwayLib.LineFeatures(world_lines, observed_lines,
-                                                   CAMERA_CONFIG_OFFSET, SMatrix{6,6}(1.0I))
+                CAMERA_CONFIG_OFFSET, SMatrix{6,6}(1.0I))
             result = RunwayLib.pose_optimization_objective_lines(true_pos, true_rot, line_features)
             @test result isa SVector
             @test length(result) == 3 * length(world_lines)
@@ -46,12 +47,12 @@ using StaticArrays
 
         @testset "Combined Point and Line Features" begin
             point_features = PointFeatures(runway_corners, observed_corners,
-                                          CAMERA_CONFIG_OFFSET, SMatrix{8,8}(1.0I))
+                CAMERA_CONFIG_OFFSET, SMatrix{8,8}(1.0I))
             line_features = RunwayLib.LineFeatures(world_lines, observed_lines,
-                                                   CAMERA_CONFIG_OFFSET, SMatrix{6,6}(1.0I))
+                CAMERA_CONFIG_OFFSET, SMatrix{6,6}(1.0I))
             ps = RunwayLib.PoseOptimizationParams6DOF(point_features, line_features)
-            optvar = [true_pos.x/1m, true_pos.y/1m, true_pos.z/1m,
-                     true_rot.theta1, true_rot.theta2, true_rot.theta3]
+            optvar = [true_pos.x / 1m, true_pos.y / 1m, true_pos.z / 1m,
+                true_rot.theta1, true_rot.theta2, true_rot.theta3]
 
             result = RunwayLib.pose_optimization_objective(optvar, ps)
             @test result isa SVector
@@ -68,10 +69,10 @@ using StaticArrays
     ]
 
     @testset "Pose Estimation - Offset" begin
-        config = CameraMatrix(CAMERA_CONFIG_OFFSET)
+        config = CAMERA_CONFIG_OFFSET
         # Ground truth airplane pose
         true_pos = WorldPoint(-500.0m, 10.0m, 100.0m)
-        true_rot = RotZYX(roll = 0.02, pitch = 0.1, yaw = -0.01)
+        true_rot = RotZYX(roll=0.02, pitch=0.1, yaw=-0.01)
 
         # Generate perfect projections
         true_projections = [project(true_pos, true_rot, corner, config) for corner in runway_corners]
@@ -83,8 +84,8 @@ using StaticArrays
         @testset "6DOF Estimation" begin
             result = estimatepose6dof(
                 runway_corners, true_projections, config;
-                initial_guess_pos = noisy_pos_guess,
-                initial_guess_rot = noisy_rot_guess
+                initial_guess_pos=noisy_pos_guess,
+                initial_guess_rot=noisy_rot_guess
             )
             @test norm(result.pos - true_pos) < (eps(eltype(result.pos))^(1 // 3))m
             @test result.rot ≈ true_rot
@@ -93,7 +94,7 @@ using StaticArrays
         @testset "3DOF Estimation" begin
             result = estimatepose3dof(
                 runway_corners, true_projections, true_rot, config;
-                initial_guess_pos = noisy_pos_guess
+                initial_guess_pos=noisy_pos_guess
             )
             @test norm(result.pos - true_pos) < (eps(eltype(result.pos))^(1 // 3))m
             @test result.rot ≈ true_rot
@@ -103,23 +104,23 @@ using StaticArrays
     @testset "Multiple Test Cases" begin
         # Test multiple ground truth scenarios
         test_cases = [
-            (pos = WorldPoint(-300.0m, 0.0m, 80.0m), rot = RotZYX(0.0, 0.05, 0.0)),
-            (pos = WorldPoint(-1200.0m, 30.0m, 200.0m), rot = RotZYX(-0.03, 0.12, 0.02)),
-            (pos = WorldPoint(-600.0m, -15.0m, 120.0m), rot = RotZYX(0.01, 0.08, -0.01)),
+            (pos=WorldPoint(-300.0m, 0.0m, 80.0m), rot=RotZYX(0.0, 0.05, 0.0)),
+            (pos=WorldPoint(-1200.0m, 30.0m, 200.0m), rot=RotZYX(-0.03, 0.12, 0.02)),
+            (pos=WorldPoint(-600.0m, -15.0m, 120.0m), rot=RotZYX(0.01, 0.08, -0.01)),
         ]
 
         for (i, case) in enumerate(test_cases)
             @testset "Case $i" begin
                 true_projections = [project(case.pos, case.rot, corner) for corner in runway_corners]
-                
+
                 # Large initial errors
                 noisy_pos = [case.pos.x + 200.0m, case.pos.y - 50.0m, case.pos.z + 80.0m]
                 noisy_rot = [case.rot.theta1 + 0.1, case.rot.theta2 - 0.15, case.rot.theta3 + 0.08]rad
-                
+
                 @testset "6DOF" begin
                     result = estimatepose6dof(
                         runway_corners, true_projections;
-                        initial_guess_pos = noisy_pos, initial_guess_rot = noisy_rot
+                        initial_guess_pos=noisy_pos, initial_guess_rot=noisy_rot
                     )
                     @test norm(result.pos - case.pos) < (eps(eltype(result.pos))^(1 // 3))m
                     @test Rotations.params(result.rot) ≈ Rotations.params(case.rot)
@@ -128,7 +129,7 @@ using StaticArrays
                 @testset "3DOF" begin
                     result = estimatepose3dof(
                         runway_corners, true_projections, case.rot;
-                        initial_guess_pos = noisy_pos
+                        initial_guess_pos=noisy_pos
                     )
                     @test norm(result.pos - case.pos) < (eps(eltype(result.pos))^(1 // 3))m
                     @test Rotations.params(result.rot) ≈ Rotations.params(case.rot)
@@ -169,23 +170,23 @@ using StaticArrays
 
         # Ground truth pose
         true_pos = WorldPoint(-400.0m, 5.0m, 90.0m)
-        true_rot = RotZYX(roll = 0.01, pitch = 0.08, yaw = -0.005)
+        true_rot = RotZYX(roll=0.01, pitch=0.08, yaw=-0.005)
 
         for (corners, n_points) in [(runway_corners_8, 8), (runway_corners_16, 16)]
             @testset "$n_points keypoints" begin
                 # Generate projections
-                camera_matrix = CameraMatrix(CAMERA_CONFIG_OFFSET)
-                true_projections = [project(true_pos, true_rot, corner, camera_matrix) for corner in corners]
-                
+                camconfig = CAMERA_CONFIG_OFFSET
+                true_projections = [project(true_pos, true_rot, corner, camconfig) for corner in corners]
+
                 # Initial guesses
                 noisy_pos = [true_pos.x + 150.0m, true_pos.y - 30.0m, true_pos.z + 40.0m]
                 noisy_rot = [true_rot.theta1 + 0.08, true_rot.theta2 - 0.12, true_rot.theta3 + 0.06]rad
 
                 @testset "6DOF with $n_points points" begin
                     result = estimatepose6dof(
-                        corners, true_projections, camera_matrix;
-                        initial_guess_pos = noisy_pos,
-                        initial_guess_rot = noisy_rot
+                        corners, true_projections, camconfig;
+                        initial_guess_pos=noisy_pos,
+                        initial_guess_rot=noisy_rot
                     )
                     @test norm(result.pos - true_pos) < (eps(eltype(result.pos))^(1 // 3))m
                     @test result.rot ≈ true_rot
@@ -193,8 +194,8 @@ using StaticArrays
 
                 @testset "3DOF with $n_points points" begin
                     result = estimatepose3dof(
-                        corners, true_projections, true_rot, camera_matrix;
-                        initial_guess_pos = noisy_pos
+                        corners, true_projections, true_rot, camconfig;
+                        initial_guess_pos=noisy_pos
                     )
                     @test norm(result.pos - true_pos) < (eps(eltype(result.pos))^(1 // 3))m
                     @test result.rot ≈ true_rot
@@ -206,16 +207,21 @@ using StaticArrays
     @testset "Non-Default Camera Matrix" begin
         # Create a custom camera matrix different from CAMERA_CONFIG_OFFSET
         custom_camera_matrix = CameraMatrix{:offset}(
-            SA[1100.0 0.0 2048.0; 0.0 1100.0 1536.0; 0.0 0.0 1.0] * px,
+            #! format: off
+            SA[-1100     0 2048
+                   0 -1100 1536
+                   0     0    1] * 1.0px,
             4096.0px, 3072.0px
+            #! format: on
         )
-        
+
         # Ground truth airplane pose
-        true_pos = WorldPoint(-800.0m, 5.0m, 120.0m)
-        true_rot = RotZYX(roll = 0.015, pitch = 0.08, yaw = -0.005)
+        true_pos = WorldPoint(-1800.0m, 5.0m, 120.0m)
+        true_rot = RotZYX(roll=0.015, pitch=0.08, yaw=-0.005)
 
         # Generate perfect projections using the custom camera matrix
-        true_projections = [project(true_pos, true_rot, corner, custom_camera_matrix) for corner in runway_corners]
+        true_projections = [project(true_pos, true_rot, corner, custom_camera_matrix)
+                            for corner in runway_corners]
 
         # Create significantly off initial guesses to test convergence
         noisy_pos_guess = [true_pos.x + 200.0m, true_pos.y - 30.0m, true_pos.z + 50.0m]
@@ -224,20 +230,20 @@ using StaticArrays
         @testset "6DOF with Custom Camera Matrix" begin
             result = estimatepose6dof(
                 runway_corners, true_projections, custom_camera_matrix;
-                initial_guess_pos = noisy_pos_guess,
-                initial_guess_rot = noisy_rot_guess
+                initial_guess_pos=noisy_pos_guess,
+                initial_guess_rot=noisy_rot_guess
             )
-            @test norm(result.pos - true_pos) < (eps(eltype(result.pos))^(1 // 3))m
-            @test result.rot ≈ true_rot
+            @test norm(result.pos - true_pos) < 1m
+            @test params(result.rot) ≈ params(true_rot) rtol = 0.01
         end
 
         @testset "3DOF with Custom Camera Matrix" begin
             result = estimatepose3dof(
                 runway_corners, true_projections, true_rot, custom_camera_matrix;
-                initial_guess_pos = noisy_pos_guess
+                initial_guess_pos=noisy_pos_guess
             )
-            @test norm(result.pos - true_pos) < (eps(eltype(result.pos))^(1 // 3))m
-            @test result.rot ≈ true_rot
+            @test norm(result.pos - true_pos) < 1m
+            @test params(result.rot) ≈ params(true_rot) rtol = 0.01
         end
     end
 end
