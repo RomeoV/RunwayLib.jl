@@ -8,25 +8,55 @@ using StaticArrays
 
 @testset "Pose Estimation" begin
     @testset "Static Array Support" begin
-        # Smoke test: verify objective function returns SVector for SVector inputs with SMatrix cov
+        # Shared setup for static array tests
         runway_corners = SA[
             WorldPoint(0.0m, 25.0m, 0.0m),
             WorldPoint(0.0m, -25.0m, 0.0m),
             WorldPoint(1000.0m, 25.0m, 0.0m),
             WorldPoint(1000.0m, -25.0m, 0.0m)
         ]
+        world_lines = SA[(runway_corners[1], runway_corners[3]),
+                         (runway_corners[2], runway_corners[4])]
 
         true_pos = WorldPoint(-500.0m, 10.0m, 100.0m)
         true_rot = RotZYX(0.02, 0.1, -0.01)
-        observed_corners = map(c -> project(true_pos, true_rot, c), runway_corners)
 
-        # With SMatrix covariance, result should be static
-        # Covariance matrix should be unitless (units handled via Linv / 1px in objective)
-        point_features = PointFeatures(runway_corners, observed_corners,
-                                      CAMERA_CONFIG_OFFSET, SMatrix{8,8}(1.0I))
-        result = pose_optimization_objective_points(true_pos, true_rot, point_features)
-        @test result isa SVector  # Result is static with SMatrix Linv
-        @test length(result) == 8  # 4 corners × 2 dimensions
+        observed_corners = map(c -> project(true_pos, true_rot, c), runway_corners)
+        observed_lines = map(world_lines) do (p1, p2)
+            proj1 = project(true_pos, true_rot, p1)
+            proj2 = project(true_pos, true_rot, p2)
+            getline(proj1, proj2)
+        end
+
+        @testset "Point Features" begin
+            point_features = PointFeatures(runway_corners, observed_corners,
+                                          CAMERA_CONFIG_OFFSET, SMatrix{8,8}(1.0I))
+            result = pose_optimization_objective_points(true_pos, true_rot, point_features)
+            @test result isa SVector
+            @test length(result) == 2 * length(runway_corners)
+        end
+
+        @testset "Line Features" begin
+            line_features = RunwayLib.LineFeatures(world_lines, observed_lines,
+                                                   CAMERA_CONFIG_OFFSET, SMatrix{6,6}(1.0I))
+            result = RunwayLib.pose_optimization_objective_lines(true_pos, true_rot, line_features)
+            @test result isa SVector
+            @test length(result) == 3 * length(world_lines)
+        end
+
+        @testset "Combined Point and Line Features" begin
+            point_features = PointFeatures(runway_corners, observed_corners,
+                                          CAMERA_CONFIG_OFFSET, SMatrix{8,8}(1.0I))
+            line_features = RunwayLib.LineFeatures(world_lines, observed_lines,
+                                                   CAMERA_CONFIG_OFFSET, SMatrix{6,6}(1.0I))
+            ps = RunwayLib.PoseOptimizationParams6DOF(point_features, line_features)
+            optvar = [true_pos.x/1m, true_pos.y/1m, true_pos.z/1m,
+                     true_rot.theta1, true_rot.theta2, true_rot.theta3]
+
+            result = RunwayLib.pose_optimization_objective(optvar, ps)
+            @test result isa SVector
+            @test length(result) == 2 * length(runway_corners) + 3 * length(world_lines)
+        end
     end
 
     # Define standard runway corners (4 points forming a rectangle)

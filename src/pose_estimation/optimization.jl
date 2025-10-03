@@ -12,7 +12,7 @@ noise models.
 Custom inverse for upper triangular static matrices using back-substitution.
 Preserves SMatrix type instead of converting to Matrix.
 """
-function LinearAlgebra.inv(U::UpperTriangular{T, <:SMatrix{N,N}}) where {T,N}
+function LinearAlgebra.inv(U::UpperTriangular{T,<:SMatrix{N,N}}) where {T,N}
     A = parent(U)
 
     # Build columns as SVectors, then construct SMatrix from tuple
@@ -25,9 +25,9 @@ function LinearAlgebra.inv(U::UpperTriangular{T, <:SMatrix{N,N}}) where {T,N}
         for i in N:-1:1
             s = b[i]
             for k in i+1:N
-                s -= A[i,k] * x[k]
+                s -= A[i, k] * x[k]
             end
-            x[i] = s / A[i,i]
+            x[i] = s / A[i, i]
         end
 
         SVector{N}(x)
@@ -43,7 +43,7 @@ end
 Custom inverse for lower triangular static matrices using forward-substitution.
 Preserves SMatrix type instead of converting to Matrix.
 """
-function LinearAlgebra.inv(L::LowerTriangular{T, <:SMatrix{N,N}}) where {T,N}
+function LinearAlgebra.inv(L::LowerTriangular{T,<:SMatrix{N,N}}) where {T,N}
     A = parent(L)
 
     # Build columns as SVectors, then construct SMatrix from tuple
@@ -56,9 +56,9 @@ function LinearAlgebra.inv(L::LowerTriangular{T, <:SMatrix{N,N}}) where {T,N}
         for i in 1:N
             s = b[i]
             for k in 1:i-1
-                s -= A[i,k] * x[k]
+                s -= A[i, k] * x[k]
             end
-            x[i] = s / A[i,i]
+            x[i] = s / A[i, i]
         end
 
         SVector{N}(x)
