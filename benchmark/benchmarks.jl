@@ -1,6 +1,6 @@
 using BenchmarkTools
 using RunwayLib
-import RunwayLib: PointFeatures, LineFeatures, makecache
+import RunwayLib: PointFeatures, LineFeatures, makecache, Line
 using Rotations
 using Unitful, Unitful.DefaultSymbols
 using StaticArrays
@@ -35,7 +35,7 @@ const TRUE_ROT = RotZYX(roll=0.0, pitch=0.0, yaw=-0.0)
 # Camera configurations to test
 const CAMERA_CONFIGS = [
     (CAMERA_CONFIG_OFFSET, "CameraConfig :offset"),
-    (CameraMatrix(CAMERA_CONFIG_OFFSET), "Offset"),
+    (CameraMatrix(CAMERA_CONFIG_OFFSET), "CameraMatrix: Offset"),
 ]
 
 # Noise levels (in pixels)
@@ -52,12 +52,13 @@ function generate_projections_with_noise(noise_px::Float64, camera_config)
     return noisy_projections
 end
 
-function generate_observed_lines(camera_config)
+function generate_observed_lines(noise_r, noise_theta, camera_config)
     # Generate perfect line observations
     observed_lines = map(RUNWAY_LINES) do (p1, p2)
         proj1 = project(TRUE_POS, TRUE_ROT, p1, camera_config)
         proj2 = project(TRUE_POS, TRUE_ROT, p2, camera_config)
-        getline(proj1, proj2)
+        line = getline(proj1, proj2)
+        Line(line.r + noise_r * randn(), line.theta + noise_theta * randn())
     end
     return observed_lines
 end
@@ -94,7 +95,7 @@ function generate_smaller_initial_guess()
     ]
 
     # Rotation errors: (0.1rad, 0.1rad, 0.1rad) Gaussian noise
-    rot_noise = 0.1  # rad
+    rot_noise = 0.01  # rad
     rot_guess = SA[
         TRUE_ROT.theta1+rot_noise*randn(),
         TRUE_ROT.theta2+rot_noise*randn(),
@@ -147,16 +148,17 @@ end
 # 6DOF with Lines and Preallocated Cache Benchmarks
 SUITE["6DOF+Lines"] = BenchmarkGroup()
 for (camera_config, config_name) in CAMERA_CONFIGS
-    SUITE["6DOF+Lines (cached)"][config_name] = BenchmarkGroup()
+    SUITE["6DOF+Lines"][config_name] = BenchmarkGroup()
     for noise_level in NOISE_LEVELS
         noise_name = "$(Int(noise_level))px"
 
         # Preallocate features and cache
         projections_const = [project(TRUE_POS, TRUE_ROT, corner, camera_config) for corner in RUNWAY_CORNERS]
-        observed_lines_const = generate_observed_lines(camera_config)
 
-        point_noise = SMatrix{8,8}(diagm(fill(noise_level^2, 8)))
-        line_noise = SMatrix{12,12}(diagm(fill(3.0^2, 12)))
+        # point_noise = SMatrix{8,8}(diagm(fill(noise_level^2, 8)))
+        point_noise = Diagonal(SVector{8}(noise_level^2 * ones(8)))
+        # line_noise = SMatrix{12,12}(diagm(fill(3.0^2, 12)))
+        line_noise = Diagonal(SVector{12}(repeat([1^2, 0.02^2, 0.02^2], outer=4)))
 
         point_features_const = PointFeatures(
             collect(RUNWAY_CORNERS), projections_const,
@@ -177,20 +179,24 @@ for (camera_config, config_name) in CAMERA_CONFIGS
         SUITE["6DOF+Lines (cached)"][config_name][noise_name] = @benchmarkable begin
             # Run estimation with preallocated cache
             estimatepose6dof(
-                point_features, $line_features_const;
+                point_features, line_features;
                 initial_guess_pos=pos_guess,
                 initial_guess_rot=rot_guess,
                 cache=$cache_init,
             )
         end setup = begin
             # Generate noisy projections
-            # projections = generate_projections_with_noise($noise_level, $camera_config)
-            projections = point_features_const
+            projections = generate_projections_with_noise($noise_level, $camera_config)
+            observed_lines = generate_observed_lines(1.0px, deg2rad(1)rad, camera_config)
 
             # Update point features with noisy observations
             point_features = PointFeatures(
                 collect($RUNWAY_CORNERS), projections,
                 $camera_config, $point_noise
+            )
+            line_features = LineFeatures(
+                collect(RUNWAY_LINES), observed_lines,
+                $camera_config, $line_noise
             )
 
             # Generate new initial guess
