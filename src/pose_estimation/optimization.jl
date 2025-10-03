@@ -92,7 +92,7 @@ Create optimization cache.
 function makecache(u₀, ps::AbstractPoseOptimizationParams; kwargs...)
     T′ = Float64
     poseoptfn = NonlinearFunction{false,FullSpecialize}(pose_optimization_objective)
-    prob = NonlinearLeastSquaresProblem{false}(poseoptfn, u₀, ps)
+    prob = NonlinearLeastSquaresProblem{false}(poseoptfn, nominal2optvar(u₀, ps), ps)
     reltol = real(oneunit(T′)) * (eps(real(one(T′))))^(2 // 5)
     abstol = real(oneunit(T′)) * (eps(real(one(T′))))^(2 // 5)
     init(prob, ALG; reltol, abstol, kwargs...)
@@ -113,9 +113,9 @@ function estimatepose6dof(
     ] |> Array
 
     ps = PoseOptimizationParams6DOF(point_features, line_features)
-    cache = isnothing(cache) ? makecache(u₀, ps) : (reinit!(cache, u₀; p=ps); cache)
+    cache = isnothing(cache) ? makecache(u₀, ps) : (reinit!(cache, nominal2optvar(u₀, ps); p=ps); cache)
     solve!(cache; solveargs...)
-    sol = (; u=cache.u, retcode=cache.retcode)
+    sol = (; u=optvar2nominal(cache.u, ps), retcode=cache.retcode)
 
     !successful_retcode(sol.retcode) && throw(OptimizationFailedError(sol.retcode, sol))
     pos = WorldPoint(sol.u[1:3]m)
@@ -139,7 +139,7 @@ function estimatepose6dof(
         camconfig, noise_model
     )
     return estimatepose6dof(point_features;
-        initial_guess_pos, initial_guess_rot, cache)
+        initial_guess_pos, initial_guess_rot, cache, solveargs)
 end
 
 # Dispatch that takes PointFeatures and LineFeatures directly
@@ -148,14 +148,15 @@ function estimatepose3dof(
     line_features::LineFeatures,
     known_attitude::RotZYX;
     initial_guess_pos::AbstractVector{<:Length}=SA[-1000.0, 0.0, 100.0]m,
-    cache=nothing
+    cache=nothing,
+    solveargs=(;)
 )
     u₀ = initial_guess_pos .|> _ustrip(m) |> Array
 
     ps = PoseOptimizationParams3DOF(point_features, line_features, known_attitude)
-    cache = isnothing(cache) ? makecache(u₀, ps) : (reinit!(cache, u₀; p=ps):cache)
+    cache = isnothing(cache) ? makecache(u₀, ps) : (reinit!(cache, nominal2optvar(u₀, ps); p=ps):cache)
     solve!(cache; solveargs...)
-    sol = (; u=cache.u, retcode=cache.retcode)
+    sol = (; u=optvar2nominal(cache.u, ps), retcode=cache.retcode)
 
     !successful_retcode(sol.retcode) && throw(OptimizationFailedError(sol.retcode, sol))
     pos = WorldPoint(sol.u[1:3]m)
@@ -171,14 +172,15 @@ function estimatepose3dof(
     camconfig::AbstractCameraConfig{:offset}=CAMERA_CONFIG_OFFSET,
     noise_model::N=_defaultnoisemodel(observed_corners);
     initial_guess_pos::AbstractVector{<:Length}=SA[-1000.0, 0.0, 100.0]m,
-    cache=nothing
+    cache=nothing,
+    solveargs=(;)
 ) where {T,N}
     point_features = PointFeatures(
         runway_corners |> Vector, observed_corners |> Vector,
         camconfig, noise_model
     )
     return estimatepose3dof(point_features, NO_LINES, known_attitude;
-        initial_guess_pos, cache)
+        initial_guess_pos, cache, solveargs)
 end
 
 
