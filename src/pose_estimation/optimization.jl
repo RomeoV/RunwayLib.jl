@@ -12,7 +12,7 @@ noise models.
 Custom inverse for upper triangular static matrices using back-substitution.
 Preserves SMatrix type instead of converting to Matrix.
 """
-function LinearAlgebra.inv(U::UpperTriangular{T, <:SMatrix{N,N}}) where {T,N}
+function LinearAlgebra.inv(U::UpperTriangular{T,<:SMatrix{N,N}}) where {T,N}
     A = parent(U)
 
     # Build columns as SVectors, then construct SMatrix from tuple
@@ -25,9 +25,9 @@ function LinearAlgebra.inv(U::UpperTriangular{T, <:SMatrix{N,N}}) where {T,N}
         for i in N:-1:1
             s = b[i]
             for k in i+1:N
-                s -= A[i,k] * x[k]
+                s -= A[i, k] * x[k]
             end
-            x[i] = s / A[i,i]
+            x[i] = s / A[i, i]
         end
 
         SVector{N}(x)
@@ -43,7 +43,7 @@ end
 Custom inverse for lower triangular static matrices using forward-substitution.
 Preserves SMatrix type instead of converting to Matrix.
 """
-function LinearAlgebra.inv(L::LowerTriangular{T, <:SMatrix{N,N}}) where {T,N}
+function LinearAlgebra.inv(L::LowerTriangular{T,<:SMatrix{N,N}}) where {T,N}
     A = parent(L)
 
     # Build columns as SVectors, then construct SMatrix from tuple
@@ -56,9 +56,9 @@ function LinearAlgebra.inv(L::LowerTriangular{T, <:SMatrix{N,N}}) where {T,N}
         for i in 1:N
             s = b[i]
             for k in 1:i-1
-                s -= A[i,k] * x[k]
+                s -= A[i, k] * x[k]
             end
-            x[i] = s / A[i,i]
+            x[i] = s / A[i, i]
         end
 
         SVector{N}(x)
@@ -237,8 +237,6 @@ function pose_optimization_objective_lines(
     cam_rot::Rotation,
     line_features::LineFeatures
 )
-    # Early return for no lines
-    isempty(line_features.world_line_endpoints) && return Float64[]
 
     # Project line endpoints to image coordinates and compute line parameters
     projected_lines = [
@@ -258,7 +256,7 @@ function pose_optimization_objective_lines(
     ]
 
     # Flatten line errors and apply weighting
-    line_errors_vec = reduce(vcat, line_errors)
+    line_errors_vec = reduce(vcat, line_errors; init=SVector{0,Float64}())
     Linv = line_features.Linv
     weighted_errors = Linv * line_errors_vec
 
@@ -310,7 +308,7 @@ function comparelines(l1::Line, l2::Line)
         ustrip(px, r), ustrip(rad, theta)
     end
     (r2, theta2) = let
-        (; r, theta) = l1
+        (; r, theta) = l2
         ustrip(px, r), ustrip(rad, theta)
     end
     resid(r1, theta1, r2, theta2) = SA[

@@ -21,39 +21,39 @@ const CAMERA_CONFIG_CENTERED = CameraConfig{:centered}(7246.4px, 4096px, 3000px)
 const CAMERA_CONFIG_OFFSET = CameraConfig{:offset}(7246.4px, 4096px, 3000px)
 
 # Backward compatibility constructor for existing code
-function CameraConfig{S}(focal_length::typeof(1.0mm), pixel_size::typeof(1.0μm/px), image_width::typeof(1.0px), image_height::typeof(1.0px)) where {S}
+function CameraConfig{S}(focal_length::typeof(1.0mm), pixel_size::typeof(1.0μm / px), image_width::typeof(1.0px), image_height::typeof(1.0px)) where {S}
     focal_length_px = focal_length / pixel_size |> _uconvert(px)
     return CameraConfig{S}(focal_length_px, image_width, image_height)
 end
 
 "Camera model using 3x3 projection matrix with uniform pixel units."
-struct CameraMatrix{S, T <: WithDims(px)} <: AbstractCameraConfig{S}
-    matrix::SMatrix{3, 3, T, 9}  # 3x3 matrix for normalized coordinate projection
+struct CameraMatrix{S,T<:WithDims(px)} <: AbstractCameraConfig{S}
+    matrix::SMatrix{3,3,T,9}  # 3x3 matrix for normalized coordinate projection
     image_width::typeof(1.0px)
     image_height::typeof(1.0px)
 
-    function CameraMatrix{S}(matrix::SMatrix{3, 3, T}, width::WithDims(px), height::WithDims(px)) where {S, T}
+    function CameraMatrix{S}(matrix::SMatrix{3,3,T}, width::WithDims(px), height::WithDims(px)) where {S,T}
         # Delegate to the validating constructor
-        return CameraMatrix{S, T}(matrix, width, height)
+        return CameraMatrix{S,T}(matrix, width, height)
     end
 
     # Inner constructor with validation
-    function CameraMatrix{S, T}(matrix::SMatrix{3, 3, T}, width::WithDims(px), height::WithDims(px)) where {S, T}
+    function CameraMatrix{S,T}(matrix::SMatrix{3,3,T}, width::WithDims(px), height::WithDims(px)) where {S,T}
         Base.isconcretetype(T) || throw(ArgumentError("CameraMatrix eltype must be concrete."))
         S ∈ (:centered, :offset) || throw(ArgumentError("Coordinate system S must be :centered or :offset, got $S"))
         validate_camera_matrix(matrix) || throw(ArgumentError("Invalid camera matrix"))
         ustrip(width) > 0 || throw(ArgumentError("Image width must be positive"))
         ustrip(height) > 0 || throw(ArgumentError("Image height must be positive"))
-        return new{S, T}(matrix, width, height)
+        return new{S,T}(matrix, width, height)
     end
 end
 
 # Convenience constructor without explicit type parameter
-CameraMatrix(S::Symbol, matrix::SMatrix{3, 3, T}, width::WithDims(px), height::WithDims(px)) where {T} = CameraMatrix{S}(matrix, width, height)
+CameraMatrix(S::Symbol, matrix::SMatrix{3,3,T}, width::WithDims(px), height::WithDims(px)) where {T} = CameraMatrix{S}(matrix, width, height)
 
 # Get optical center based on coordinate system
 getopticalcenter(cam::AbstractCameraConfig{:centered}) = SA[0.0px, 0.0px]
-getopticalcenter(cam::AbstractCameraConfig{:offset}) = SA[(cam.image_width + 1px) / 2, (cam.image_height + 1px) / 2]
+getopticalcenter(cam::AbstractCameraConfig{:offset}) = SA[(cam.image_width+1px)/2, (cam.image_height+1px)/2]
 getopticalcenter(cam::CameraMatrix) = SA[cam.matrix[1, 3], cam.matrix[2, 3]]
 
 # Constructor from CameraConfig
@@ -67,23 +67,23 @@ function CameraMatrix(config::CameraConfig{S}) where {S}
     # For offset coordinates:   u = -f * (Y/X) + cx, v = -f * (Z/X) + cy - sign flip needed
     # In offset coordinates, cx and cy will be nonzero.
     matrix = SA[
-        (sgn*f_px) 0px        cx
-        0px        (sgn*f_px) cy
-        0px        0px        1px
+        (sgn*f_px) 0px cx
+        0px (sgn*f_px) cy
+        0px 0px 1px
     ]
     return CameraMatrix{S}(matrix, config.image_width, config.image_height)
 end
 
 # Constructor from CameraMatrix - inverse conversion
 CameraConfig(camera_matrix::CameraMatrix{S}) where {S} = CameraConfig{S}(camera_matrix)
-function CameraConfig{S′}(camera_matrix::CameraMatrix{S}) where {S, S′}
+function CameraConfig{S′}(camera_matrix::CameraMatrix{S}) where {S,S′}
     # Extract focal length in pixels from diagonal elements (ignore off-diagonal terms)
     f_px_x = abs(camera_matrix.matrix[1, 1])  # Take absolute value to handle sign differences
     f_px_y = abs(camera_matrix.matrix[2, 2])
-    
+
     # Use average focal length if x and y are different (assuming square pixels)
     focal_length_px = (f_px_x + f_px_y) / 2
-    
+
     return CameraConfig{S′}(
         focal_length_px,
         camera_matrix.image_width,
@@ -91,7 +91,7 @@ function CameraConfig{S′}(camera_matrix::CameraMatrix{S}) where {S, S′}
     )
 end
 CameraConfig(cameraconf::CameraConfig{S}) where {S} = cameraconf
-CameraConfig{S′}(cameraconf::CameraConfig{S}) where {S, S′} = CameraConfig{S′}(
+CameraConfig{S′}(cameraconf::CameraConfig{S}) where {S,S′} = CameraConfig{S′}(
     cameraconf.focal_length_px,
     cameraconf.image_width,
     cameraconf.image_height
@@ -99,9 +99,9 @@ CameraConfig{S′}(cameraconf::CameraConfig{S}) where {S, S′} = CameraConfig{S
 
 "Project 3D world point to 2D image coordinates using pinhole camera model."
 function project(
-        cam_pos::WorldPoint{T}, cam_rot::RotZYX, world_pt::WorldPoint{T′},
-        camconfig::CameraConfig{S} = CAMERA_CONFIG_OFFSET
-    ) where {T, T′, S}
+    cam_pos::WorldPoint{T}, cam_rot::RotZYX, world_pt::WorldPoint{T′},
+    camconfig::CameraConfig{S}=CAMERA_CONFIG_OFFSET
+) where {T,T′,S}
     cam_pt = world_pt_to_cam_pt(cam_pos, cam_rot, world_pt)
     cam_pt.x <= 0m && throw(BehindCameraException(cam_pt.x))
 
@@ -113,25 +113,25 @@ function project(
 
     T′′ = typeof(u_centered)
     return @match camconfig begin
-        ::CameraConfig{:centered} => ProjectionPoint{T′′, :centered}(u_centered, v_centered)
+        ::CameraConfig{:centered} => ProjectionPoint{T′′,:centered}(u_centered, v_centered)
         ::CameraConfig{:offset} => let
             cx, cy = getopticalcenter(camconfig)
             u, v = -u_centered + cx, -v_centered + cy
-            ProjectionPoint{T′′, :offset}(u, v)
+            ProjectionPoint{T′′,:offset}(u, v)
         end
     end
 end
 
 function project(
-        cam_pos::WorldPoint{T}, cam_rot::RotZYX, world_pt::WorldPoint{T′},
-        camconfig::CameraMatrix{S, U}
-    ) where {T, T′, S, U}
+    cam_pos::WorldPoint{T}, cam_rot::RotZYX, world_pt::WorldPoint{T′},
+    camconfig::CameraMatrix{S,U}
+) where {T,T′,S,U}
     # Transform to camera coordinates
     cam_pt = world_pt_to_cam_pt(cam_pos, cam_rot, world_pt)
     cam_pt.x <= 0m && throw(BehindCameraException(cam_pt.x))
 
     # P_norm = [X/Z, Y/Z, 1]^T (unitless)
-    P_norm = SA[cam_pt.y / cam_pt.x, cam_pt.z / cam_pt.x, 1.0]
+    P_norm = SA[cam_pt.y/cam_pt.x, cam_pt.z/cam_pt.x, 1.0]
 
     # p_img [px] = K_norm [px] * P_norm [unitless] = [result1, result2, result3] [px]
     image_coords = camconfig.matrix * P_norm
@@ -139,27 +139,55 @@ function project(
     u, v = image_coords[1:2]
 
     T′′ = typeof(u)
-    return ProjectionPoint{T′′, S}(u, v)
+    return ProjectionPoint{T′′,S}(u, v)
 end
 
 # Clean dispatch-based coordinate conversion using AbstractCameraConfig
-function convertcamconf(to::AbstractCameraConfig{:centered}, from::AbstractCameraConfig{:offset}, proj::ProjectionPoint{T, :offset}) where {T}
+function convertcamconf(to::AbstractCameraConfig{:centered}, from::AbstractCameraConfig{:offset}, proj::ProjectionPoint{T,:offset}) where {T}
     u, v = proj.x, proj.y
     cx, cy = getopticalcenter(from)
     u_centered, v_centered = -(u - cx), -(v - cy)
-    return ProjectionPoint{T, :centered}(u_centered, v_centered)
+    return ProjectionPoint{T,:centered}(u_centered, v_centered)
 end
 
-function convertcamconf(to::AbstractCameraConfig{:offset}, from::AbstractCameraConfig{:centered}, proj::ProjectionPoint{T, :centered}) where {T}
+function convertcamconf(to::AbstractCameraConfig{:offset}, from::AbstractCameraConfig{:centered}, proj::ProjectionPoint{T,:centered}) where {T}
     u_centered, v_centered = proj.x, proj.y
     cx, cy = getopticalcenter(to)
     u, v = -u_centered + cx, -v_centered + cy
-    return ProjectionPoint{T, :offset}(u, v)
+    return ProjectionPoint{T,:offset}(u, v)
 end
 
 # Same coordinate system - no conversion needed
-convertcamconf(to::AbstractCameraConfig{S}, from::AbstractCameraConfig{S}, proj::ProjectionPoint{T, S}) where {T, S} = proj
+convertcamconf(to::AbstractCameraConfig{S}, from::AbstractCameraConfig{S}, proj::ProjectionPoint{T,S}) where {T,S} = proj
 
 
 "Validate 3x3 matrix for camera projection."
-validate_camera_matrix(matrix::SMatrix{3, 3}) = all(!iszero, [matrix[1, 1], matrix[2, 2]]) && (matrix[3, :] ≈ SVector(0, 0, 1)px) && all(isfinite, matrix)
+validate_camera_matrix(matrix::SMatrix{3,3}) = all(!iszero, [matrix[1, 1], matrix[2, 2]]) && (matrix[3, :] ≈ SVector(0, 0, 1)px) && all(isfinite, matrix)
+
+"""
+    getline(p1::ProjectionPoint, p2::ProjectionPoint) -> Line
+
+Convert two projection points to Hough transform parameters (r, theta).
+Line represented as: r = x*cos(theta) + y*sin(theta)
+"""
+function getline(p1::ProjectionPoint{T,:offset}, p2::ProjectionPoint{T′,:offset}) where {T,T′}
+    # Direction vector along the line
+    d = p2 - p1
+
+    # Normal vector (rotate 90° counter-clockwise)
+    n = SA[-d[2], d[1]] |> normalize
+
+    # Angle of the normal vector
+    theta = atan(n[2], n[1]) * 1rad
+
+    # Distance from origin to line
+    r = dot(p1, n)
+
+    # Ensure r >= 0 (flip if negative)
+    if r < 0px
+        r = -r
+        theta = theta + π * rad
+    end
+
+    return Line(r, theta)
+end

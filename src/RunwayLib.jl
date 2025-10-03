@@ -54,7 +54,7 @@ export UncorrGaussianNoiseModel, CorrGaussianNoiseModel, NoiseModel, covmatrix
 export parse_covariance_data
 
 # Export camera model functions
-export get_focal_length_pixels, get_field_of_view, pixel_to_ray_direction
+export get_focal_length_pixels, get_field_of_view, pixel_to_ray_direction, getline
 
 # Export runway database functions
 export get_runway_corners, validate_runway_spec
