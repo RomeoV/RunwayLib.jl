@@ -5,6 +5,7 @@ authors = ["Romeo Valentin <romeov@stanford.edu>"]
 
 [deps]
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 CEnum = "fa961155-64e5-5f13-b03f-caf6b980ea82"
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 DiffEqBase = "2b5f629d-d688-5b77-993f-72d75c75574e"
@@ -36,6 +37,7 @@ SciMLBase = {rev = "rv/fix-jet-opt", url = "https://github.com/RomeoV/SciMLBase.
 
 [compat]
 ADTypes = "^1.16.0"
+BenchmarkTools = "1.6.0"
 CEnum = "^0.5.0"
 DiffEqBase = "^6.179.0"
 DifferentiationInterface = "0.7"
