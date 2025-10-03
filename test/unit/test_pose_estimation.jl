@@ -1,6 +1,6 @@
 using Test
 using RunwayLib
-import RunwayLib: PointFeatures, pose_optimization_objective_points
+import RunwayLib: PointFeatures, LineFeatures, NO_LINES, pose_optimization_objective_points, pose_optimization_objective_lines
 using Rotations
 import Rotations: params
 using LinearAlgebra
@@ -62,11 +62,58 @@ using StaticArrays
 
     # Define standard runway corners (4 points forming a rectangle)
     runway_corners = [
-        WorldPoint(0.0m, 25.0m, 0.0m),      # near left  
+        WorldPoint(0.0m, 25.0m, 0.0m),      # near left
         WorldPoint(0.0m, -25.0m, 0.0m),     # near right
         WorldPoint(1000.0m, 25.0m, 0.0m),   # far left
         WorldPoint(1000.0m, -25.0m, 0.0m),  # far right
     ]
+    runway_lines = [(runway_corners[1], runway_corners[3]), (runway_corners[2], runway_corners[4])]
+
+    @testset "Pose Estimation - Lines" begin
+        true_pos = WorldPoint(-500.0m, 10.0m, 100.0m)
+        true_rot = RotZYX(roll=0.02, pitch=0.1, yaw=-0.01)
+
+        observed_lines = map(runway_lines) do (p1, p2)
+            getline(project(true_pos, true_rot, p1), project(true_pos, true_rot, p2))
+        end
+
+        @testset "Line Objective Function" begin
+            line_features = LineFeatures(runway_lines, observed_lines,
+                CAMERA_CONFIG_OFFSET, SMatrix{6,6}(1.0I))
+            result = pose_optimization_objective_lines(true_pos, true_rot, line_features)
+            @test result isa AbstractVector
+            @test length(result) == 3 * length(runway_lines)
+            @test all(abs.(result) .< 1e-10)  # Should be near zero at true pose
+        end
+
+        @testset "Lines Improve Accuracy" begin
+            # Add noise to point observations
+            noisy_projections = [proj + ProjectionPoint(randn() * 2.0px, randn() * 2.0px)
+                                for proj in [project(true_pos, true_rot, c) for c in runway_corners]]
+
+            guess_pos = [true_pos.x + 100.0m, true_pos.y - 20.0m, true_pos.z + 30.0m]
+            guess_rot = [true_rot.theta1 + 0.05, true_rot.theta2 - 0.08, true_rot.theta3 + 0.03]rad
+
+            # Points-only estimation
+            point_noise = SMatrix{8,8}(diagm(fill(2.0^2, 8)))
+            point_features = PointFeatures(runway_corners, noisy_projections,
+                CAMERA_CONFIG_OFFSET, point_noise)
+            result_points = estimatepose6dof(point_features;
+                initial_guess_pos=guess_pos, initial_guess_rot=guess_rot)
+
+            # Points + perfect lines estimation
+            line_noise = SMatrix{6,6}(diagm(fill(0.1^2, 6)))
+            line_features = LineFeatures(runway_lines, observed_lines,
+                CAMERA_CONFIG_OFFSET, line_noise)
+            result_combined = estimatepose6dof(point_features, line_features;
+                initial_guess_pos=guess_pos, initial_guess_rot=guess_rot)
+
+            # Combined should be more accurate
+            err_points = norm(result_points.pos - true_pos)
+            err_combined = norm(result_combined.pos - true_pos)
+            @test err_combined < err_points
+        end
+    end
 
     @testset "Pose Estimation - Offset" begin
         config = CAMERA_CONFIG_OFFSET

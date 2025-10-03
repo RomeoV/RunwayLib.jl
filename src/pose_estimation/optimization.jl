@@ -70,36 +70,35 @@ function pose_optimization_objective(
     return vcat(point_residuals, line_residuals)
 end
 
+"""
+    makecache(u₀, ps::AbstractPoseOptimizationParams)
+
+Create optimization cache.
+"""
+function makecache(u₀, ps::AbstractPoseOptimizationParams)
+    T′ = Float64
+    poseoptfn = NonlinearFunction{false,FullSpecialize}(pose_optimization_objective)
+    prob = NonlinearLeastSquaresProblem{false}(poseoptfn, u₀, ps)
+    reltol = real(oneunit(T′)) * (eps(real(one(T′))))^(2 // 5)
+    abstol = real(oneunit(T′)) * (eps(real(one(T′))))^(2 // 5)
+    init(prob, ALG; reltol, abstol)
+end
+
+# Dispatch that takes PointFeatures and LineFeatures directly
 function estimatepose6dof(
-    runway_corners::AbstractVector{<:WorldPoint},
-    observed_corners::AbstractVector{<:ProjectionPoint{T,:offset}},
-    camconfig::AbstractCameraConfig{:offset}=CAMERA_CONFIG_OFFSET,
-    noise_model::N=_defaultnoisemodel(observed_corners);
+    point_features::PointFeatures,
+    line_features::LineFeatures=NO_LINES;
     initial_guess_pos::AbstractVector{<:Length}=SA[-1000.0, 0.0, 100.0]m,
     initial_guess_rot::AbstractVector{<:DimensionlessQuantity}=SA[0.0, 0.0, 0.0]rad,
     cache=nothing
-) where {T,N}
+)
     u₀ = [
         initial_guess_pos .|> _ustrip(m);
         initial_guess_rot .|> _ustrip(rad)
     ] |> Array
 
-    point_features = PointFeatures(
-        runway_corners |> Vector, observed_corners |> Vector,
-        CameraConfig{S4COMP}(camconfig), noise_model
-    )
-    ps = PoseOptimizationParams6DOF(point_features, NO_LINES)
-
-    cache = if isnothing(cache)
-        let T′ = Float64
-            prob = NonlinearLeastSquaresProblem{false}(POSEOPTFN, u₀, ps)
-            reltol = real(oneunit(T′)) * (eps(real(one(T′))))^(2 // 5)
-            abstol = real(oneunit(T′)) * (eps(real(one(T′))))^(2 // 5)
-            init(prob, ALG; reltol, abstol)
-        end
-    else
-        reinit!(cache, u₀; p=ps)
-    end
+    ps = PoseOptimizationParams6DOF(point_features, line_features)
+    cache = isnothing(cache) ? makecache(u₀, ps) : reinit!(cache, u₀; p=ps)
     solve!(cache)
     sol = (; u=cache.u, retcode=cache.retcode)
 
@@ -109,7 +108,46 @@ function estimatepose6dof(
     return (; pos, rot)
 end
 
+# Convenience dispatch for points and projections
+function estimatepose6dof(
+    runway_corners::AbstractVector{<:WorldPoint},
+    observed_corners::AbstractVector{<:ProjectionPoint{T,:offset}},
+    camconfig::AbstractCameraConfig{:offset}=CAMERA_CONFIG_OFFSET,
+    noise_model::N=_defaultnoisemodel(observed_corners);
+    initial_guess_pos::AbstractVector{<:Length}=SA[-1000.0, 0.0, 100.0]m,
+    initial_guess_rot::AbstractVector{<:DimensionlessQuantity}=SA[0.0, 0.0, 0.0]rad,
+    cache=nothing
+) where {T,N}
+    point_features = PointFeatures(
+        runway_corners |> Vector, observed_corners |> Vector,
+        camconfig, noise_model
+    )
+    return estimatepose6dof(point_features;
+        initial_guess_pos, initial_guess_rot, cache)
+end
 
+# Dispatch that takes PointFeatures and LineFeatures directly
+function estimatepose3dof(
+    point_features::PointFeatures,
+    line_features::LineFeatures,
+    known_attitude::RotZYX;
+    initial_guess_pos::AbstractVector{<:Length}=SA[-1000.0, 0.0, 100.0]m,
+    cache=nothing
+)
+    u₀ = initial_guess_pos .|> _ustrip(m) |> Array
+
+    ps = PoseOptimizationParams3DOF(point_features, line_features, known_attitude)
+    cache = isnothing(cache) ? makecache(u₀, ps) : reinit!(cache, u₀; p=ps)
+    solve!(cache)
+    sol = (; u=cache.u, retcode=cache.retcode)
+
+    !successful_retcode(sol.retcode) && throw(OptimizationFailedError(sol.retcode, sol))
+    pos = WorldPoint(sol.u[1:3]m)
+    rot = known_attitude
+    return (; pos, rot)
+end
+
+# Convenience dispatch for points and projections
 function estimatepose3dof(
     runway_corners::AbstractVector{<:WorldPoint},
     observed_corners::AbstractVector{<:ProjectionPoint{T,:offset}},
@@ -119,32 +157,12 @@ function estimatepose3dof(
     initial_guess_pos::AbstractVector{<:Length}=SA[-1000.0, 0.0, 100.0]m,
     cache=nothing
 ) where {T,N}
-
-    u₀ = initial_guess_pos .|> _ustrip(m) |> Array
-
     point_features = PointFeatures(
         runway_corners |> Vector, observed_corners |> Vector,
         camconfig, noise_model
     )
-    ps = PoseOptimizationParams3DOF(point_features, NO_LINES, known_attitude)
-
-    cache = if isnothing(cache)
-        let T′ = Float64
-            prob = NonlinearLeastSquaresProblem{false}(POSEOPTFN, u₀, ps)
-            reltol = real(oneunit(T′)) * (eps(real(one(T′))))^(2 // 5)
-            abstol = real(oneunit(T′)) * (eps(real(one(T′))))^(2 // 5)
-            init(prob, ALG; reltol, abstol)
-        end
-    else
-        reinit!(cache, u₀; p=ps)
-    end
-    solve!(cache)
-    sol = (; u=cache.u, retcode=cache.retcode)
-
-    !successful_retcode(sol.retcode) && throw(OptimizationFailedError(sol.retcode, sol))
-    pos = WorldPoint(sol.u[1:3]m)
-    rot = known_attitude
-    return (; pos, rot)
+    return estimatepose3dof(point_features, NO_LINES, known_attitude;
+        initial_guess_pos, cache)
 end
 
 
