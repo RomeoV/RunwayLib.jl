@@ -75,13 +75,13 @@ end
 
 Create optimization cache.
 """
-function makecache(u₀, ps::AbstractPoseOptimizationParams)
+function makecache(u₀, ps::AbstractPoseOptimizationParams; kwargs...)
     T′ = Float64
     poseoptfn = NonlinearFunction{false,FullSpecialize}(pose_optimization_objective)
     prob = NonlinearLeastSquaresProblem{false}(poseoptfn, u₀, ps)
     reltol = real(oneunit(T′)) * (eps(real(one(T′))))^(2 // 5)
     abstol = real(oneunit(T′)) * (eps(real(one(T′))))^(2 // 5)
-    init(prob, ALG; reltol, abstol)
+    init(prob, ALG; reltol, abstol, kwargs...)
 end
 
 # Dispatch that takes PointFeatures and LineFeatures directly
@@ -90,7 +90,8 @@ function estimatepose6dof(
     line_features::LineFeatures=NO_LINES;
     initial_guess_pos::AbstractVector{<:Length}=SA[-1000.0, 0.0, 100.0]m,
     initial_guess_rot::AbstractVector{<:DimensionlessQuantity}=SA[0.0, 0.0, 0.0]rad,
-    cache=nothing
+    cache=nothing,
+    solveargs=(;)
 )
     u₀ = [
         initial_guess_pos .|> _ustrip(m);
@@ -98,8 +99,8 @@ function estimatepose6dof(
     ] |> Array
 
     ps = PoseOptimizationParams6DOF(point_features, line_features)
-    cache = isnothing(cache) ? makecache(u₀, ps) : reinit!(cache, u₀; p=ps)
-    solve!(cache)
+    cache = isnothing(cache) ? makecache(u₀, ps) : (reinit!(cache, u₀; p=ps); cache)
+    solve!(cache; solveargs...)
     sol = (; u=cache.u, retcode=cache.retcode)
 
     !successful_retcode(sol.retcode) && throw(OptimizationFailedError(sol.retcode, sol))
@@ -116,7 +117,8 @@ function estimatepose6dof(
     noise_model::N=_defaultnoisemodel(observed_corners);
     initial_guess_pos::AbstractVector{<:Length}=SA[-1000.0, 0.0, 100.0]m,
     initial_guess_rot::AbstractVector{<:DimensionlessQuantity}=SA[0.0, 0.0, 0.0]rad,
-    cache=nothing
+    cache=nothing,
+    solveargs=(;)
 ) where {T,N}
     point_features = PointFeatures(
         runway_corners |> Vector, observed_corners |> Vector,
@@ -137,8 +139,8 @@ function estimatepose3dof(
     u₀ = initial_guess_pos .|> _ustrip(m) |> Array
 
     ps = PoseOptimizationParams3DOF(point_features, line_features, known_attitude)
-    cache = isnothing(cache) ? makecache(u₀, ps) : reinit!(cache, u₀; p=ps)
-    solve!(cache)
+    cache = isnothing(cache) ? makecache(u₀, ps) : (reinit!(cache, u₀; p=ps):cache)
+    solve!(cache; solveargs...)
     sol = (; u=cache.u, retcode=cache.retcode)
 
     !successful_retcode(sol.retcode) && throw(OptimizationFailedError(sol.retcode, sol))
