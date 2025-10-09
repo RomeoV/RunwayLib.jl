@@ -8,9 +8,3 @@ RunwayLib = "c31d23ff-e9b5-4186-8ef8-ce4d62614c67"
 SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
-
-[sources]
-ForwardDiff = {rev = "rv/remove-quote-assert-string-interpolation", url = "https://github.com/RomeoV/ForwardDiff.jl.git"}
-NonlinearSolveFirstOrder = {subdir = "lib/NonlinearSolveFirstOrder", url = "https://github.com/SciML/NonlinearSolve.jl"}
-RunwayLib = {rev = "master", url = ".."}
-SciMLBase = {rev = "rv/fix-jet-opt", url = "https://github.com/RomeoV/SciMLBase.jl"}
