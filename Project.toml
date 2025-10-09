@@ -64,6 +64,12 @@ StatsBase = "0.34.5"
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
+[weakdeps]
+PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
+
+[extensions]
+PythonCallExt = "PythonCall"
+
 [preferences.LinearSolve]
 LoadMKL_JLL = false
 
