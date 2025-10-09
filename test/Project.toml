@@ -15,9 +15,3 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
-
-[sources]
-ForwardDiff = {rev = "rv/remove-quote-assert-string-interpolation", url = "https://github.com/RomeoV/ForwardDiff.jl.git"}
-NonlinearSolveFirstOrder = {subdir = "lib/NonlinearSolveFirstOrder", url = "https://github.com/SciML/NonlinearSolve.jl"}
-RunwayLib = {path = ".."}
-SciMLBase = {rev = "rv/fix-jet-opt", url = "https://github.com/RomeoV/SciMLBase.jl"}
