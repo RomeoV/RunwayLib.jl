@@ -32,17 +32,21 @@ struct PoseOptimizationParams3DOF{
 end
 
 "From optimization space into regular space."
-optvar2nominal(x, ps::PoseOptimizationParams3DOF) = [-exp(x[1]); x[2]; exp(x[3])]
-optvar2nominal(x, ps::PoseOptimizationParams6DOF) = [
-    -exp(x[1]); x[2]; exp(x[3]);
-    RotZYX(RodriguesParam(x[4], x[5], x[6])) |> Rotations.params
-]
+optvar2nominal(x, ps::PoseOptimizationParams3DOF) = SA[-exp(x[1]); x[2]; exp(x[3])]
+optvar2nominal(x, ps::PoseOptimizationParams6DOF) = reduce(
+    vcat, (
+        SA[-exp(x[1]); x[2]; exp(x[3])],
+        RotZYX(RodriguesParam(x[4], x[5], x[6])) |> Rotations.params,
+    )
+)
 "From regular space into optimization space."
-nominal2optvar(x, ps::PoseOptimizationParams3DOF) = [log(-x[1]); x[2]; log(x[3])]
-nominal2optvar(x, ps::PoseOptimizationParams6DOF) = [
-    log(-x[1]); x[2]; log(x[3]);
-    RodriguesParam(RotZYX(x[4], x[5], x[6])) |> Rotations.params
-]
+nominal2optvar(x, ps::PoseOptimizationParams3DOF) = SA[log(-x[1]); x[2]; log(x[3])]
+nominal2optvar(x, ps::PoseOptimizationParams6DOF) = reduce(
+    vcat, (
+        SA[log(-x[1]); x[2]; log(x[3])],
+        RodriguesParam(RotZYX(x[4], x[5], x[6])) |> Rotations.params,
+    )
+)
 
 """
     pose_optimization_objective(pose_params, ps)

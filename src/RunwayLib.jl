@@ -30,15 +30,15 @@ _reduce(f::F) where {F} = Base.Fix1(reduce, f)
 const px = pixel
 
 # Capture basefactors at compile time (includes our custom pixel unit)
-const localunits = copy(Unitful.basefactors)
+Unitful.register(RunwayLib)
 
-# Runtime initialization to properly register units
-function __init__()
-    # Restore basefactors captured at compile time
-    merge!(Unitful.basefactors, localunits)
-    # Register the pixel unit with Unitful
-    Unitful.register(RunwayLib)
-end
+# # Runtime initialization to properly register units
+# function __init__()
+#     # Restore basefactors captured at compile time
+#     merge!(Unitful.basefactors, localunits)
+#     # Register the pixel unit with Unitful
+#     Unitful.register(RunwayLib)
+# end
 
 # Export coordinate system types
 export WorldPoint, CameraPoint, ProjectionPoint
