@@ -25,7 +25,7 @@ $(LIB_DIR)/libposeest.so: loadrunwaylib.jl Project.toml Manifest.toml $(SRC)
 
 Manifest.toml: Project.toml ../Project.toml
 	-rm -f Manifest.toml
-	$(JULIA) --project=. -e 'using Pkg; Pkg.instantiate()' 2> Manifest.toml.log
+	$(JULIA) --project=. -e 'using Pkg; Pkg.instantiate()'
 	@touch $@ # Pkg.instantiate doesn't update the mtime if there are no changes
 
 # Create include directory with header file
