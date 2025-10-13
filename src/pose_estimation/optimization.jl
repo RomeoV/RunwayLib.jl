@@ -36,7 +36,8 @@ optvar2nominal(x::AT, ps::PoseOptimizationParams3DOF) where {AT} = SA[-exp(x[1])
 optvar2nominal(x::AT, ps::PoseOptimizationParams6DOF) where {AT} = reduce(
     vcat, (
         SA[-exp(x[1]); x[2]; exp(x[3])],
-        RotZYX(RodriguesParam(x[4], x[5], x[6])) |> Rotations.params,
+        # RotZYX(RodriguesParam(x[4], x[5], x[6])) |> Rotations.params,
+        x[4:6],
     )
 ) |> AT
 "From regular space into optimization space."
@@ -44,7 +45,8 @@ nominal2optvar(x::AT, ps::PoseOptimizationParams3DOF) where {AT} = SA[log(-x[1])
 nominal2optvar(x::AT, ps::PoseOptimizationParams6DOF) where {AT} = reduce(
     vcat, (
         SA[log(-x[1]); x[2]; log(x[3])],
-        RodriguesParam(RotZYX(x[4], x[5], x[6])) |> Rotations.params,
+        # RodriguesParam(RotZYX(x[4], x[5], x[6])) |> Rotations.params,
+        x[4:6],
     )
 ) |> AT
 
