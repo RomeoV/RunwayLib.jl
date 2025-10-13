@@ -3,7 +3,7 @@ SRC = $(shell find ../src -name "*.jl")
 CC = gcc
 
 CFLAGS = -Wall -O2
-BUILD_DIR = RunwayLibCompiled2
+BUILD_DIR = RunwayLibCompiled
 RPATH_FLAGS = -Wl,-rpath,'$$ORIGIN/$(BUILD_DIR)/lib' \
               -Wl,-rpath,'$$ORIGIN/$(BUILD_DIR)/lib/julia'
 LDFLAGS = -L$(BUILD_DIR)/lib -L$(BUILD_DIR)/lib/julia
