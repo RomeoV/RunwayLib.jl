@@ -63,8 +63,9 @@ function pose_optimization_objective_points(
 
     # Flatten corner errors and apply weighting
     corner_errors_vec = reduce(vcat, corner_errors)
-    Linv = point_features.Linv / 1px
-    weighted_errors = Linv * corner_errors_vec
+    Linv = point_features.Linv
+    # `Linv` has units 1/px, but adding it directly to `Linv` has some issue, so we just divide here.
+    weighted_errors = Linv * corner_errors_vec / px
 
     return ustrip.(NoUnits, weighted_errors)
 end
