@@ -30,9 +30,9 @@ TypedTables = "9d95f2ec-7b3d-5a63-8d20-e2491e220bb9"
 Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
 [sources]
-ForwardDiff = {rev = "rv/remove-quote-assert-string-interpolation", url = "https://github.com/RomeoV/ForwardDiff.jl.git"}
-NonlinearSolveFirstOrder = {subdir = "lib/NonlinearSolveFirstOrder", url = "https://github.com/SciML/NonlinearSolve.jl"}
-ProbabilisticParameterEstimators = {url = "https://github.com/RomeoV/ProbabilisticParameterEstimators.jl"}
+# this can be removed once the next version is released and the compat is adjusted accordingly
+ForwardDiff = {rev = "5d2edc1a14d70faa2bcd56f4a9a6f1e25120a2c5", url = "https://github.com/JuliaDiff/ForwardDiff.jl.git"}
+# this is still waiting for https://github.com/AayushSabharwal/SciMLBase.jl/tree/as/fix-jet-opt
 SciMLBase = {rev = "rv/fix-jet-opt", url = "https://github.com/RomeoV/SciMLBase.jl"}
 
 [compat]
@@ -52,7 +52,7 @@ NonlinearSolveFirstOrder = "^1.8.0"
 Polyester = "0.7.18"
 PolyesterWeave = "0.2.2"
 PrecompileTools = "1"
-ProbabilisticParameterEstimators = "0.8.0,0.8.1,0.8.2"
+ProbabilisticParameterEstimators = "0.8.3"
 SciMLBase = "^2.102.1"
 StatsBase = "0.34.5"
 
