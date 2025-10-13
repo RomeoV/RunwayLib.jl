@@ -104,11 +104,15 @@ using StaticArrays
                 initial_guess_pos=guess_pos, initial_guess_rot=guess_rot)
 
             # Points + perfect lines estimation
-            line_features = LineFeatures(runway_lines, observed_lines,
-                CAMERA_CONFIG_OFFSET, line_noise)
-            result_combined = estimatepose6dof(point_features, line_features;
-                initial_guess_pos=guess_pos, initial_guess_rot=guess_rot)
             line_noise = SMatrix{6, 6}(diagm(fill(0.5^2, 6)))
+            line_features = LineFeatures(
+                runway_lines, observed_lines,
+                CAMERA_CONFIG_OFFSET, line_noise
+            )
+            result_combined = estimatepose6dof(
+                point_features, line_features;
+                initial_guess_pos = guess_pos, initial_guess_rot = guess_rot
+            )
 
             # Combined should be more accurate
             err_points = norm(result_points.pos - true_pos)
