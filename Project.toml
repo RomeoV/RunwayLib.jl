@@ -28,6 +28,11 @@ StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 TypedTables = "9d95f2ec-7b3d-5a63-8d20-e2491e220bb9"
 Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
+[sources]
+ForwardDiff = {rev = "rv/remove-quote-assert-string-interpolation", url = "https://github.com/RomeoV/ForwardDiff.jl.git"}
+NonlinearSolveFirstOrder = {subdir = "lib/NonlinearSolveFirstOrder", url = "https://github.com/SciML/NonlinearSolve.jl"}
+SciMLBase = {rev = "rv/fix-jet-opt", url = "https://github.com/RomeoV/SciMLBase.jl"}
+
 [compat]
 ADTypes = "^1.16.0"
 CEnum = "^0.5.0"
