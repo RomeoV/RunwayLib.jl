@@ -8,8 +8,5 @@ SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
-[compat]
-DataStructures = "0.18"
-
 [preferences.LinearSolve]
 LoadMKL_JLL = false
