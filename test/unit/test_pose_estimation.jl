@@ -89,7 +89,7 @@ using StaticArrays
         @testset "Lines Improve Accuracy" begin
             # Add noise to point observations
             noisy_projections = [
-                proj + ProjectionPoint(2.0px * randn(2))
+                proj + ProjectionPoint(2.0px * randn(2) .+ 1.0px)
                     for proj in [project(true_pos, true_rot, c) for c in runway_corners]
             ]
 
