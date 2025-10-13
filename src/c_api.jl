@@ -187,21 +187,6 @@ Base.@ccallable function get_error_message(error_code::Cint)::Ptr{UInt8}
     return ERROR_MESSAGES[error_code]
 end
 
-# Library initialization
-Base.@ccallable function initialize_poseest_library(depot_path::Ptr{UInt8})::Cint
-    try
-        if depot_path != C_NULL
-            path_str = unsafe_string(depot_path)
-            ENV["JULIA_DEPOT_PATH"] = path_str
-        end
-        LIBRARY_INITIALIZED[] = true
-        return POSEEST_SUCCESS
-    catch e
-        println(stderr, "Failed to initialize library: $e")
-        return POSEEST_ERROR_INVALID_INPUT
-    end
-end
-
 # 6DOF pose estimation with covariance specification and initial guess
 Base.@ccallable function estimate_pose_6dof(
     runway_corners_::Ptr{WorldPointF64},
