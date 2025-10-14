@@ -77,6 +77,7 @@ export BehindCameraException
 # Include submodules
 include("camera_model/withdims.jl")
 include("coordinate_systems/types.jl")
+include("coordinate_systems/unitful_printing.jl")
 include("coordinate_systems/transformations.jl")
 include("pose_estimation/types.jl")
 include("camera_model/projection.jl")
