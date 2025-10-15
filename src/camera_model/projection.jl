@@ -10,17 +10,86 @@ abstract type AbstractCameraConfig{S} end
 
 # CameraConfig has been removed - use CameraMatrix instead
 # Temporary backward compatibility for CAMERA_CONFIG_OFFSET
+
+"""
+$(TYPEDEF)
+
+Camera configuration with reference frame `S` being either `:offset` or `:centered`.
+Check [Camera Model](@ref) for further explanation.
+
+# Fields
+$(TYPEDFIELDS)
+
+# Examples
+```jldoctest; output = false
+using RunwayLib, Unitful.DefaultSymbols, Rotations
+cam_pos = WorldPoint(-10m, 0m, 0m)
+cam_rot = RotZYX(zeros(3)...)
+world_pt = WorldPoint(0m, 0m, 0m)
+
+focal_length = 25mm
+pixel_size = 5μm/px
+camconf_centered = CameraConfig{:centered}(focal_length, pixel_size, 4096.0px, 2048.0px)
+project(cam_pos, cam_rot, world_pt, camconf_centered); nothing
+# output
+
+```
+"""
 struct CameraConfig{S} <: AbstractCameraConfig{S}
     focal_length_px::typeof(1.0px)
     image_width::typeof(1.0px)
     image_height::typeof(1.0px)
 end
 
+"""
+    CameraConfig{S}(
+        focal_length::WithDims(mm), pixel_size::WithDims(mm / px),
+        image_width::WithDims(px), image_height::WithDims(px)
+    )
+
+Convenience constructor for `CameraConfig` taking focal length and pixel size separately.
+"""
+CameraConfig{S}(
+    focal_length::WithDims(mm), pixel_size::WithDims(mm / px),
+    image_width::WithDims(px), image_height::WithDims(px)
+) where {S} = CameraConfig{S}(focal_length / pixel_size, image_width, image_height)
+
 # Only :offset configuration supported
 # 25.0mm ÷ 3.45μm = 7246.4 pixels
 const CAMERA_CONFIG_OFFSET = CameraConfig{:offset}(7246.4px, 4096px, 3000px)
 
-"Camera model using 3x3 projection matrix with uniform pixel units."
+"""
+    struct CameraMatrix{S,T<:WithDims(px)} <: AbstractCameraConfig{S}
+Camera model using 3x3 projection matrix with uniform pixel units.
+The reference frame `S` can either be `:offset` or `:centered`.
+See [Camera Model](@ref) for more explanation.
+
+!!! note
+    Notably it is the users responsibility to construct the matrix such that
+    the axes are aligned correctly, i.e., for `S=:offset` the first two offdiagonal
+    elements must be negative.
+
+!!! warning
+    At this time, only `S = :offset` is implemented.
+
+# Examples
+```jldoctest; output = false
+using StaticArrays, RunwayLib
+f_px = 5e6px  # focal length in pixels
+cx, cy = 2048px, 1024px
+matrix = SA[
+    -f_px   0px  cx
+    0px   -f_px  cy
+    0px   0px   1px
+]
+CameraMatrix{:offset}(matrix, 2cx, 2cy); nothing
+# output
+
+```
+
+# Related Functions
+See also [`project`](@ref).
+"""
 struct CameraMatrix{S,T<:WithDims(px)} <: AbstractCameraConfig{S}
     matrix::SMatrix{3,3,T,9}  # 3x3 matrix for normalized coordinate projection
     image_width::typeof(1.0px)
@@ -35,7 +104,7 @@ struct CameraMatrix{S,T<:WithDims(px)} <: AbstractCameraConfig{S}
     function CameraMatrix{S,T}(matrix::SMatrix{3,3,T}, width::WithDims(px), height::WithDims(px)) where {S,T}
         Base.isconcretetype(T) || throw(ArgumentError("CameraMatrix eltype must be concrete."))
         S == :offset || throw(ArgumentError("Only :offset coordinate system is supported, got $S"))
-        validate_camera_matrix(matrix) || throw(ArgumentError("Invalid camera matrix"))
+        validate_camera_matrix(matrix, S) || throw(ArgumentError("Invalid camera matrix"))
         ustrip(width) > 0 || throw(ArgumentError("Image width must be positive"))
         ustrip(height) > 0 || throw(ArgumentError("Image height must be positive"))
         return new{S,T}(matrix, width, height)
@@ -46,7 +115,7 @@ end
 CameraMatrix(S::Symbol, matrix::SMatrix{3,3,T}, width::WithDims(px), height::WithDims(px)) where {T} = CameraMatrix{S}(matrix, width, height)
 
 # Get optical center based on coordinate system
-getopticalcenter(cam::AbstractCameraConfig{:offset}) = SA[(cam.image_width+1px)/2, (cam.image_height+1px)/2]
+getopticalcenter(cam::AbstractCameraConfig{:offset}) = SA[cam.image_width/2, cam.image_height/2]
 getopticalcenter(cam::CameraMatrix) = SA[cam.matrix[1, 3], cam.matrix[2, 3]]
 
 # Constructor from CameraConfig - only :offset supported
@@ -90,7 +159,15 @@ CameraConfig{S′}(cameraconf::CameraConfig{S}) where {S,S′} = CameraConfig{S�
     cameraconf.image_height
 )
 
-"Project 3D world point to 2D image coordinates using pinhole camera model."
+"""
+    function project(
+        cam_pos::WorldPoint{T}, cam_rot::RotZYX, world_pt::WorldPoint{T′},
+        camconfig::CameraConfig{S}=CAMERA_CONFIG_OFFSET
+    ) where {T,T′,S}
+
+Project 3D world point to 2D image coordinates using pinhole camera model.
+See [Camera Model](@ref) for more information.
+"""
 function project(
     cam_pos::WorldPoint{T}, cam_rot::RotZYX, world_pt::WorldPoint{T′},
     camconfig::CameraConfig{S}=CAMERA_CONFIG_OFFSET
@@ -115,6 +192,14 @@ function project(
     end
 end
 
+"""
+    function project(
+        cam_pos::WorldPoint{T}, cam_rot::RotZYX, world_pt::WorldPoint{T′},
+        camconfig::CameraMatrix{S,U}
+    ) where {T,T′,S,U}
+
+Version dispatching on `CameraMatrix`.
+"""
 function project(
     cam_pos::WorldPoint{T}, cam_rot::RotZYX, world_pt::WorldPoint{T′},
     camconfig::CameraMatrix{S,U}
@@ -140,7 +225,13 @@ convertcamconf(to::AbstractCameraConfig{:offset}, from::AbstractCameraConfig{:of
 
 
 "Validate 3x3 matrix for camera projection."
-validate_camera_matrix(matrix::SMatrix{3,3}) = all(!iszero, [matrix[1, 1], matrix[2, 2]]) && (matrix[3, :] ≈ SVector(0, 0, 1)px) && all(isfinite, matrix)
+function validate_camera_matrix(matrix::SMatrix{3,3}, S)
+    c1 = all(!iszero, [matrix[1, 1], matrix[2, 2]])
+    c2 = matrix[3, :] ≈ SVector(0, 0, 1)px
+    c3 = all(isfinite, matrix)
+    c4 = all(==(S == :offset ? -1 : 1), [sign(matrix[1, 1]), sign(matrix[2, 2])])
+    all([c1, c2, c3, c4])
+end
 
 """
     getline(p1::ProjectionPoint, p2::ProjectionPoint) -> Line
