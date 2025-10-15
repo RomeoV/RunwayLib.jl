@@ -20,6 +20,7 @@ using ProbabilisticParameterEstimators: UncorrGaussianNoiseModel, CorrGaussianNo
 using SciMLBase: successful_retcode, FullSpecialize
 import SciMLBase
 import Base: OncePerTask
+using DocStringExtensions
 
 _uconvert(u) = Base.Fix1(uconvert, u)
 _ustrip(u) = Base.Fix1(ustrip, u)

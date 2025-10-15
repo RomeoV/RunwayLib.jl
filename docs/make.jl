@@ -8,8 +8,8 @@ makedocs(
     repo=Remotes.GitHub("RomeoV", "RunwayLib.jl"),
     pages=[
         "RunwayLib.jl: Fast Pose Estimation and Runtime Assurance for Runway Landings." => "index.md",
-        "Getting started" => "getting_started.md",
-        # Camera Models
+        "getting_started.md",
+        "camera_model.md",
         # Noise Models
         # C Interface
         # Julia interface
