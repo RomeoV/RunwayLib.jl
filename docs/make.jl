@@ -1,6 +1,12 @@
 using Documenter
 using RunwayLib
 
+# Generate python_interface.md from template
+template = read(joinpath(@__DIR__, "src", "python_interface_template.md"), String)
+example = read(joinpath(@__DIR__, "..", "test", "python_interface", "smoke_test.py"), String)
+output = replace(template, "{{PYTHON_EXAMPLE}}" => example)
+write(joinpath(@__DIR__, "src", "python_interface.md"), output)
+
 makedocs(
     sitename="RunwayLib",
     format=Documenter.HTML(),

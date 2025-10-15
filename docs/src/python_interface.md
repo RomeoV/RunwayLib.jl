@@ -50,6 +50,12 @@ rot = np.array(res_jl.rot)
 
 for i in range(1_000):
     jl.estimatepose6dof(points3d, points2d, camconf)
+
+# Smoke test assertions
+assert pos.shape == (3,), f"Expected position shape (3,), got {pos.shape}"
+assert rot.shape == (3, 3), f"Expected rotation shape (3, 3), got {rot.shape}"
+print(f"✓ Smoke test passed! Position: {pos}, Rotation shape: {rot.shape}")
+
 ```
 
 Notice that we can also directly wrap `np.array` for `WorldPoint` and the other, e.g.:
