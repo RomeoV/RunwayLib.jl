@@ -20,7 +20,8 @@ jobs:
       fail-fast: false
       matrix:
         version:
-          - '^1.12.0-rc1'
+          - '1'
+          - '1.12'
         arch:
           - x64
     steps:
@@ -36,14 +37,22 @@ jobs:
   python-smoke-test:
     name: Python Interface Smoke Test
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        version:
+          - '1'
+          - '1.12'
+        arch:
+          - x64
     steps:
       - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: ${{ matrix.version }}
+          arch: ${{ matrix.arch }}
+      - uses: julia-actions/cache@v2
       - uses: astral-sh/setup-uv@v5
       - name: Run Python smoke test
         working-directory: test/python_interface
-        run: |
-          uv run --with juliacall --with numpy python -c "
-          from juliacall import Main as jl
-          jl.Pkg.develop(path='../..')
-          exec(open('smoke_test.py').read())
-          "
+        run: uv run smoke_test.py

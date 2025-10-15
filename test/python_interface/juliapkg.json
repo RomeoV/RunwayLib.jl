@@ -1,0 +1,14 @@
+{
+    "julia": "1.12",
+    "packages": {
+        "RunwayLib": {
+            "uuid": "c31d23ff-e9b5-4186-8ef8-ce4d62614c67",
+            "path": "../..",
+            "dev": true
+        },
+        "OpenSSL_jll": {
+            "uuid": "458c3c95-2e84-50aa-8efc-19380b2a3a95",
+            "version": "3.5"
+        }
+    }
+}
