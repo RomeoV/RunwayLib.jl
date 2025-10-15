@@ -32,14 +32,20 @@ camconf = jl.CameraMatrix[jl.Symbol(&quot;offset&quot;)](
 
 jl.seval(&quot;using RunwayLib.Unitful: ustrip&quot;)
 res_jl = jl.estimatepose6dof(points3d, points2d, camconf)
-pos = np.array(jl.broadcast(jl.ustrip, res_jl.pos))
-rot = np.array(res_jl.rot)
+pos = np.asarray(jl.broadcast(jl.ustrip, res_jl.pos))  # or `np.array(..., copy=None)`
+rot = np.asarray(res_jl.rot)
 
 for i in range(1_000):
-    jl.estimatepose6dof(points3d, points2d, camconf)</code></pre><p>Notice that we can also directly wrap <code>np.array</code> for <code>WorldPoint</code> and the other, e.g.:</p><pre><code class="language-python hljs">points2d_np = [
+    jl.estimatepose6dof(points3d, points2d, camconf)
+
+# Smoke test assertions
+assert pos.shape == (3,), f&quot;Expected position shape (3,), got {pos.shape}&quot;
+assert rot.shape == (3, 3), f&quot;Expected rotation shape (3, 3), got {rot.shape}&quot;
+print(f&quot;✓ Smoke test passed! Position: {pos}, Rotation shape: {rot.shape}&quot;)
+</code></pre><p>Notice that we can also directly wrap <code>np.array</code> for <code>WorldPoint</code> and the other, e.g.:</p><pre><code class="language-python hljs">points2d_np = [
     np.array([2284.8, 619.32]),
     np.array([2355.2, 620.90]),
     np.array([2399.5, 903.30]),
     np.array([2252.4, 904.09]),
 ]
-point2d = [jl.ProjectionPoint(p) for p in points2d_np]</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../camera_model/">« Camera Model</a><a class="docs-footer-nextpage" href="../C_interface/">C Interface »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.14.1 on <span class="colophon-date" title="Wednesday 15 October 2025 05:54">Wednesday 15 October 2025</span>. Using Julia version 1.12.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+point2d = [jl.ProjectionPoint(p) for p in points2d_np]</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../camera_model/">« Camera Model</a><a class="docs-footer-nextpage" href="../C_interface/">C Interface »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.14.1 on <span class="colophon-date" title="Wednesday 15 October 2025 23:50">Wednesday 15 October 2025</span>. Using Julia version 1.12.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
