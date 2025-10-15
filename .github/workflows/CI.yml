@@ -32,3 +32,18 @@ jobs:
       - uses: julia-actions/cache@v2
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
+
+  python-smoke-test:
+    name: Python Interface Smoke Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Run Python smoke test
+        working-directory: test/python_interface
+        run: |
+          uv run --with juliacall --with numpy python -c "
+          from juliacall import Main as jl
+          jl.Pkg.develop(path='../..')
+          exec(open('smoke_test.py').read())
+          "

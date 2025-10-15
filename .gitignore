@@ -23,3 +23,6 @@ __pycache__
 poseest_py/poseest/native/RunwayLibCompiled/
 
 docs/src/figs/*.pdf
+
+# Generated documentation files
+docs/src/python_interface.md
