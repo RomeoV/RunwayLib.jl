@@ -114,9 +114,10 @@ using StaticArrays
                 initial_guess_pos = guess_pos, initial_guess_rot = guess_rot
             )
 
-            # Combined should be more accurate
-            err_points = norm(result_points.pos - true_pos)
-            err_combined = norm(result_combined.pos - true_pos)
+            # Combined should be more accurate in crosstrack and height.
+            # sidelines dont't give much information about alongtrack.
+            err_points = norm(result_points.pos[2:3] - true_pos[2:3])
+            err_combined = norm(result_combined.pos[2:3] - true_pos[2:3])
             @test err_combined < err_points
         end
     end
