@@ -11,9 +11,8 @@ makedocs(
         "getting_started.md",
         "camera_model.md",
         "python_interface.md",
-        # Noise Models
-        # C Interface
-        # Python interface
+        "C_interface.md",
+        "noise_models.md",
     ]
 )
 
