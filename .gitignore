@@ -21,3 +21,5 @@ poseest_py/poseest/native/RunwayLibCompiled/
 
 __pycache__
 poseest_py/poseest/native/RunwayLibCompiled/
+
+docs/src/figs/*.pdf
