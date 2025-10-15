@@ -10,9 +10,10 @@ makedocs(
         "RunwayLib.jl: Fast Pose Estimation and Runtime Assurance for Runway Landings." => "index.md",
         "getting_started.md",
         "camera_model.md",
+        "python_interface.md",
         # Noise Models
         # C Interface
-        # Julia interface
+        # Python interface
     ]
 )
 
