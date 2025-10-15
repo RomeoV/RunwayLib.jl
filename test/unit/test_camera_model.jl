@@ -242,35 +242,35 @@ using Rotations
         @testset "Camera Matrix Validation Function" begin
             # Test valid matrix - using Float64 3x3 matrix for validate_camera_matrix function
             good_matrix = SA[
-                2000.0  0.0     1024.0;
-                0.0     2000.0  512.0;
-                0.0     0.0     1.0
+                -2000.0 0.0 1024.0;
+                0.0 -2000.0 512.0;
+                0.0 0.0 1.0
             ]px
-            @test validate_camera_matrix(good_matrix) == true
+            @test validate_camera_matrix(good_matrix, :offset) == true
 
             # Test matrix with zero focal length
             bad_focal = SA[
-                0.0     0.0     1024.0;
-                0.0     2000.0  512.0;
-                0.0     0.0     1.0
+                0.0 0.0 1024.0;
+                0.0 2000.0 512.0;
+                0.0 0.0 1.0
             ]px
-            @test validate_camera_matrix(bad_focal) == false
+            @test validate_camera_matrix(bad_focal, :offset) == false
 
             # Test matrix with invalid bottom row
             bad_bottom = SA[
-                2000.0  0.0     1024.0;
-                0.0     2000.0  512.0;
-                1.0     0.0     1.0
+                2000.0 0.0 1024.0;
+                0.0 2000.0 512.0;
+                1.0 0.0 1.0
             ]px
-            @test validate_camera_matrix(bad_bottom) == false
+            @test validate_camera_matrix(bad_bottom, :offset) == false
 
             # Test matrix with NaN
             nan_matrix = SA[
-                NaN     0.0     1024.0;
-                0.0     2000.0  512.0;
-                0.0     0.0     1.0
+                NaN 0.0 1024.0;
+                0.0 2000.0 512.0;
+                0.0 0.0 1.0
             ]px
-            @test validate_camera_matrix(nan_matrix) == false
+            @test validate_camera_matrix(nan_matrix, :offset) == false
         end
 
         @testset "Pose Estimation with CameraMatrix" begin
