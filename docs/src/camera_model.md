@@ -45,7 +45,7 @@ project(cam_pos, cam_rot, world_pt2, camconf_centered)
 project(cam_pos, cam_rot, world_pt2, camconf_offset)
 ```
 
-## Line projections
+## Line Projections
 For `:offset` camera models, we also currently support line features.
 Lines are specified with respect to a reference point chosen to be the "offset origin"
 and parameterized by their Hough transform, i.e., the angle and radius.
