@@ -1,6 +1,7 @@
-# Getting Started
+# RunwayLib.jl
 
-*TLDR*
+## Getting Started
+
 ```@example gettingstarted
 using RunwayLib, Unitful.DefaultSymbols, Rotations
 import Rotations: params
