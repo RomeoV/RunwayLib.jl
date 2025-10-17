@@ -36,6 +36,10 @@ import Rotations: params
 ```
 
 ## Using Line Features
+Besides point features we can additionally include line features which can typically improve
+our altitude and crosstrack estimations, but usually can't improve our alongtrack estimation much because the line projections are constant along the glidepath.
+See [Line Projections](@ref) for more information on the line parameterization.
+
 ```@example gettingstarted
 line_pts = [
     (runway_corners[1], runway_corners[2]),
