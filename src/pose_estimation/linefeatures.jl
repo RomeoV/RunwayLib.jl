@@ -24,7 +24,7 @@ struct LineFeatures{
     cov::M
     Linv::M′
 end
-function LineFeatures(world_line_endpoints, observed_lines, camconfig, noisemodel::NoiseModel)
+function LineFeatures(world_line_endpoints, observed_lines, camconfig=CAMERA_CONFIG_OFFSET, noisemodel::NoiseModel=_defaultnoisemodel_lines(world_line_endpoints))
     cov = covmatrix(noisemodel) |> Matrix
     return LineFeatures(world_line_endpoints, observed_lines, camconfig, cov)
 end
