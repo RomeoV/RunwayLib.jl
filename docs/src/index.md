@@ -4,7 +4,6 @@
 
 ```@example gettingstarted
 using RunwayLib, Unitful.DefaultSymbols, Rotations
-import Rotations: params
 
 runway_corners = [
     WorldPoint(0.0m, 50m, 0m),     # near left
@@ -24,6 +23,16 @@ noisy_observations = [p + ProjectionPoint(2.0*randn(2)px) for p in true_observat
 )[(:pos, :rot)]
 
 cam_pos_est
+```
+
+We can extract roll-pitch-yaw as
+```@example gettingstarted
+import Rotations: params
+(yaw, pitch, roll) = params(cam_rot_est)
+@show rad2deg(roll*rad)
+@show rad2deg(pitch*rad)
+@show rad2deg(yaw*rad)
+;
 ```
 
 ## Using Line Features
