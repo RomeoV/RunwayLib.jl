@@ -18,6 +18,7 @@ makedocs(
         "python_interface.md",
         "C_interface.md",
         "noise_models.md",
+        "integrity_check.md",
         "api_reference.md",
     ]
 )
