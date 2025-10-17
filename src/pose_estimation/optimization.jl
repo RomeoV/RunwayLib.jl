@@ -204,9 +204,15 @@ function setup_for_precompile()
 end
 
 
-const _defaultnoisemodel(pts) =
+const _defaultnoisemodel_points(pts) =
     let
         distributions = [SA[Normal(0.0, 2.0), Normal(0.0, 2.0)] for _ in pts] |> Array
+        UncorrGaussianNoiseModel(reduce(vcat, distributions))
+    end
+const _defaultnoisemodel(pts) = _defaultnoisemodel_points(pts)
+const _defaultnoisemodel_lines(line_endpoints) =
+    let
+        distributions = [SA[Normal(0.0, 2.0), Normal(0.0, 2.0), Normal(0.0, 2.0)] for _ in line_endpoints] |> Array
         UncorrGaussianNoiseModel(reduce(vcat, distributions))
     end
 
