@@ -25,3 +25,31 @@ noisy_observations = [p + ProjectionPoint(2.0*randn(2)px) for p in true_observat
 
 cam_pos_est
 ```
+
+## Using Line Features
+```@example gettingstarted
+line_pts = [
+    (runway_corners[1], runway_corners[2]),
+    (runway_corners[3], runway_corners[4]),
+]
+true_lines = map(line_pts) do (p1, p2)
+    proj1 = project(cam_pos, cam_rot, p1)
+    proj2 = project(cam_pos, cam_rot, p2)
+    getline(proj1, proj2)
+end
+observed_lines = [
+  Line(
+    r + 1px*randn(),
+    theta + deg2rad(1°)*randn()
+  )
+  for (; r, theta) in true_lines
+]
+
+# now with additional line features
+(cam_pos_est, cam_rot_est) = estimatepose6dof(
+    PointFeatures(runway_corners, noisy_observations),
+    LineFeatures(line_pts, observed_lines)
+)[(:pos, :rot)]
+
+cam_pos_est
+```
