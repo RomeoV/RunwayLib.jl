@@ -26,12 +26,17 @@ int main() {
         {-7246.4, 0.0, 0.0, 0.0, -7246.4, 0.0, 2048.0, 1500.0, 1.0},
         4096.0,
         3000.0};
-    WorldPointF64 initial_guess_pos = {-1000, 0, 150};
-    RotationF64 initial_guess_rot = {0., 0., 0.};
 
-    int result = estimate_pose_6dof(world_points, projections, num_points, NULL,
-                                    COV_DEFAULT, &cammat, &initial_guess_pos,
-                                    &initial_guess_rot, &pose_result);
+    // Known rotation (yaw, pitch, roll) - from docs/src/index.md
+    // yaw=0°, pitch=5°, roll=1.5° converted to radians
+    RotationF64 known_rotation = {0.0, 0.087266, 0.026180};
+
+    // Initial guess for position
+    WorldPointF64 initial_guess_pos = {-1000, 0, 150};
+
+    int result = estimate_pose_3dof(world_points, projections, num_points,
+                                    &known_rotation, NULL, COV_DEFAULT,
+                                    &cammat, &initial_guess_pos, &pose_result);
 
     if (result != POSEEST_SUCCESS) {
         printf("Error: %s\n", get_error_message(result));

@@ -42,7 +42,7 @@ Unitful.register(RunwayLib)
 # end
 
 # Export coordinate system types
-export WorldPoint, CameraPoint, ProjectionPoint
+export WorldPoint, CameraPoint, ProjectionPoint, Line
 
 # Export transformation functions
 export world_pt_to_cam_pt, cam_pt_to_world_pt, project

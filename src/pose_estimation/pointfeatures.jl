@@ -17,7 +17,7 @@ struct PointFeatures{
     cov::M
     Linv::M′
 end
-function PointFeatures(runway_corners, observed_corners, camconfig=CAMERA_CONFIG_OFFSET, noisemodel::NoiseModel=_defaultnoisemodel(runway_corners))
+function PointFeatures(runway_corners, observed_corners, camconfig=CAMERA_CONFIG_OFFSET, noisemodel::NoiseModel=_defaultnoisemodel_points(runway_corners))
     cov = covmatrix(noisemodel) |> Matrix
     return PointFeatures(runway_corners, observed_corners, camconfig, cov)
 end

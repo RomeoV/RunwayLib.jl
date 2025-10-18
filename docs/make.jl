@@ -14,11 +14,12 @@ makedocs(
     repo=Remotes.GitHub("RomeoV", "RunwayLib.jl"),
     pages=[
         "RunwayLib.jl: Fast Pose Estimation and Runtime Assurance for Runway Landings." => "index.md",
-        "getting_started.md",
         "camera_model.md",
         "python_interface.md",
         "C_interface.md",
         "noise_models.md",
+        "integrity_check.md",
+        "api_reference.md",
     ]
 )
 

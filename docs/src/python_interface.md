@@ -45,8 +45,8 @@ camconf = jl.CameraMatrix[jl.Symbol("offset")](
 
 jl.seval("using RunwayLib.Unitful: ustrip")
 res_jl = jl.estimatepose6dof(points3d, points2d, camconf)
-pos = np.array(jl.broadcast(jl.ustrip, res_jl.pos))
-rot = np.array(res_jl.rot)
+pos = np.asarray(jl.broadcast(jl.ustrip, res_jl.pos))  # or `np.array(..., copy=None)`
+rot = np.asarray(res_jl.rot)
 
 for i in range(1_000):
     jl.estimatepose6dof(points3d, points2d, camconf)
