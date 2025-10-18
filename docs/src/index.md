@@ -8,7 +8,7 @@ using RunwayLib, Unitful.DefaultSymbols, Rotations
 runway_corners = [
     WorldPoint(0.0m, 50m, 0m),     # near left
     WorldPoint(3000.0m, 50m, 0m),  # far left
-    WorldPoint(3000.0m, 50m, 0m),  # far right
+    WorldPoint(3000.0m, -50m, 0m),  # far right
     WorldPoint(0.0m, -50m, 0m),    # near right
 ]
 
