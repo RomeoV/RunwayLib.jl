@@ -22,7 +22,7 @@ using JSON
 
         # Build compilation command
         gcc_cmd = [
-            "gcc", "-Wall", "-O2", "-std=c23",
+            "gcc", "-Wall", "-O2", "-std=c99",
             "-I$(joinpath(compiled_lib, "include"))",
             "-o", test_exe,
             joinpath(test_c_dir, "test_main.c"),
@@ -75,7 +75,7 @@ using JSON
 
         # Build compilation command
         gcc_cmd = [
-            "gcc", "-Wall", "-O2", "-std=c23",
+            "gcc", "-Wall", "-O2", "-std=c99",
             "-I$(joinpath(compiled_lib, "include"))",
             "-o", test_exe_3dof,
             joinpath(test_c_dir, "test_3dof.c"),
