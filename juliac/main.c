@@ -37,14 +37,14 @@ int main() {
         return 1;
     }
 
-    printf("Pose estimated successfully\n");
-    printf("Position: (%.2f, %.2f, %.2f) m\n", pose_result.position.x,
-           pose_result.position.y, pose_result.position.z);
-    printf("Rotation (yaw, pitch, roll): (%.4f, %.4f, %.4f) rad\n",
-           pose_result.rotation.yaw, pose_result.rotation.pitch,
-           pose_result.rotation.roll);
-    printf("Residual norm: %.6f\n", pose_result.residual_norm);
-    printf("Converged: %s\n", pose_result.converged ? "yes" : "no");
+    printf("{\n");
+    printf("  \"position\": {\"x\": %.2f, \"y\": %.2f, \"z\": %.2f},\n",
+           pose_result.position.x, pose_result.position.y, pose_result.position.z);
+    printf("  \"rotation\": {\"yaw\": %.4f, \"pitch\": %.4f, \"roll\": %.4f},\n",
+           pose_result.rotation.yaw, pose_result.rotation.pitch, pose_result.rotation.roll);
+    printf("  \"residual_norm\": %.6f,\n", pose_result.residual_norm);
+    printf("  \"converged\": %s\n", pose_result.converged ? "true" : "false");
+    printf("}\n");
 
     return 0;
 }
