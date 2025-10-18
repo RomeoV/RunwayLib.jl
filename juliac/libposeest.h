@@ -30,6 +30,32 @@ typedef enum {
     CAMERA_CONFIG_OFFSET = 1
 } CameraConfigType;
 
+/**
+ * Camera matrix for pose estimation.
+ *
+ * The matrix is a 3x3 camera intrinsics matrix stored in ROW-MAJOR order:
+ *   [fx,  0, cx,
+ *     0, fy, cy,
+ *     0,  0,  1]
+ *
+ * IMPORTANT: The matrix array uses C's row-major layout. It will be transposed
+ * when loaded by Julia (which uses column-major ordering).
+ *
+ * For offset coordinate systems (coordinate_system_tag = 1), focal lengths
+ * fx and fy should be negative.
+ *
+ * Fields:
+ *   - matrix: 9 elements in row-major order (row1, row2, row3)
+ *   - image_width: Width of the image in pixels
+ *   - image_height: Height of the image in pixels
+ *   - coordinate_system_tag: 0 for centered, 1 for offset (only offset supported)
+ */
+typedef struct {
+    double matrix[9];
+    double image_width;
+    double image_height;
+    CameraConfigType coordinate_system_tag; // 0 for centered, 1 for offset
+} CameraMatrixF64;
 // Error codes
 #define POSEEST_SUCCESS 0
 #define POSEEST_ERROR_INVALID_INPUT -1
