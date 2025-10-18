@@ -9,8 +9,6 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
-env:
-  JULIA_PKG_IGNORE_HASHES: "1"
 jobs:
   test:
     name: Julia ${{ matrix.version }} - self-hosted - ${{ matrix.arch }} - ${{ github.event_name }}
