@@ -43,37 +43,23 @@ typedef enum {
 int test_estimators();
 
 // Enhanced API functions
-int estimate_pose_6dof(
-    const WorldPointF64* runway_corners,
-    const ProjectionPointF64* projections,
-    int num_points,
-    CameraConfigType camera_config,
-    PoseEstimate_C* result
-);
+int estimate_pose_6dof(const WorldPointF64 *runway_corners,
+                       const ProjectionPointF64 *projections, int num_points,
+                       CameraConfigType camera_config, PoseEstimate_C *result);
 
-int estimate_pose_3dof(
-    const WorldPointF64* runway_corners,
-    const ProjectionPointF64* projections,
-    int num_points,
-    const Rotation_C* known_rotation,
-    CameraConfigType camera_config,
-    PoseEstimate_C* result
-);
+int estimate_pose_3dof(const WorldPointF64 *runway_corners,
+                       const ProjectionPointF64 *projections, int num_points,
+                       const Rotation_C *known_rotation,
+                       CameraConfigType camera_config, PoseEstimate_C *result);
 
 // Utility functions
-int project_point(
-    const WorldPointF64* camera_position,
-    const Rotation_C* camera_rotation,
-    const WorldPointF64* world_point,
-    CameraConfigType camera_config,
-    ProjectionPointF64* result
-);
-
-// Library initialization (sets JULIA_DEPOT_PATH)
-int initialize_poseest_library(const char* depot_path);
+int project_point(const WorldPointF64 *camera_position,
+                  const Rotation_C *camera_rotation,
+                  const WorldPointF64 *world_point,
+                  CameraConfigType camera_config, ProjectionPointF64 *result);
 
 // Get error message for error code
-const char* get_error_message(int error_code);
+const char *get_error_message(int error_code);
 
 #ifdef __cplusplus
 }
