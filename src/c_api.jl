@@ -182,12 +182,32 @@ end
 # Store error messages in a global to ensure they persist
 const ERROR_MESSAGES = Dict{Int,Ptr{UInt8}}()
 
+# Static buffer for detailed error messages from exceptions
+const LAST_ERROR_BUFFER = Vector{UInt8}(undef, 500)
+
+function set_last_error(msg::String)
+    # Simple AOT-friendly error formatting - just copy the string
+    bytes = codeunits(msg)
+    n = min(length(bytes), length(LAST_ERROR_BUFFER) - 1)
+    copyto!(LAST_ERROR_BUFFER, 1, bytes, 1, n)
+    LAST_ERROR_BUFFER[n + 1] = 0  # null terminator
+end
+
+# Type-specific error message formatters (AOT-friendly - using only fixed strings)
+set_last_error(fn::String, ::ArgumentError) = set_last_error(fn * ": ArgumentError")
+set_last_error(fn::String, ::BoundsError) = set_last_error(fn * ": BoundsError")
+set_last_error(fn::String, ::Exception) = set_last_error(fn * ": Unknown error")
+
 Base.@ccallable function get_error_message(error_code::Cint)::Ptr{UInt8}
     if !haskey(ERROR_MESSAGES, error_code)
         msg = get_error_message_impl(POSEEST_ERROR(error_code))
         ERROR_MESSAGES[error_code] = pointer(msg)
     end
     return ERROR_MESSAGES[error_code]
+end
+
+Base.@ccallable function get_last_error_detail()::Ptr{UInt8}
+    return pointer(LAST_ERROR_BUFFER)
 end
 
 # 6DOF pose estimation with covariance specification and initial guess
@@ -238,7 +258,7 @@ Base.@ccallable function estimate_pose_6dof(
 
         if initial_guess_rot != C_NULL
             initial_rot_c = unsafe_load(initial_guess_rot)
-            initial_rot = SA[initial_rot_c.data[1], initial_rot_c.data[2], initial_rot_c.data[3]] * 1rad
+            initial_rot = initial_rot_c * 1rad
         else
             initial_rot = SA[0.0, 0.0, 0.0]rad  # Default value
         end
@@ -262,10 +282,13 @@ Base.@ccallable function estimate_pose_6dof(
         return POSEEST_SUCCESS
 
     catch e
+        # Only set generic error if no specific error was already set
+        if LAST_ERROR_BUFFER[1] == 0
+            set_last_error("estimate_pose_6dof", e)
+        end
         if isa(e, BoundsError) || isa(e, ArgumentError)
             return POSEEST_ERROR_INVALID_INPUT
         else
-            rethrow(e)
             return POSEEST_ERROR_NO_CONVERGENCE
         end
     end
@@ -340,8 +363,10 @@ Base.@ccallable function estimate_pose_3dof(
 
     catch e
         if isa(e, BoundsError) || isa(e, ArgumentError)
+            set_last_error("estimate_pose_3dof", e)
             return POSEEST_ERROR_INVALID_INPUT
         else
+            set_last_error("estimate_pose_3dof", e)
             return POSEEST_ERROR_NO_CONVERGENCE
         end
     end
@@ -460,8 +485,10 @@ Base.@ccallable function compute_integrity(
 
     catch e
         if isa(e, BoundsError) || isa(e, ArgumentError)
+            set_last_error("compute_integrity", e)
             return POSEEST_ERROR_INVALID_INPUT
         else
+            set_last_error("compute_integrity", e)
             return POSEEST_ERROR_NO_CONVERGENCE
         end
     end
