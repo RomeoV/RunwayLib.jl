@@ -15,4 +15,6 @@ using StaticArrays
     # include("unit/test_visualization.jl")
 
     # include("integration/test_end_to_end.jl")
+
+    include("c_interface/test_c_api.jl")
 end
