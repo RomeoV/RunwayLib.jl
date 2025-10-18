@@ -87,6 +87,15 @@ int estimate_pose_6dof(const WorldPointF64 *runway_corners,
                        const RotationF64 *initial_guess_rot,
                        PoseEstimateF64 *result);
 
+int estimate_pose_3dof(const WorldPointF64 *runway_corners,
+                       const ProjectionPointF64 *projections, int num_points,
+                       const RotationF64 *known_rotation,
+                       const double *covariance_data,
+                       CovarianceType covariance_type,
+                       const CameraMatrixF64 *cammat,
+                       const WorldPointF64 *initial_guess_pos,
+                       PoseEstimateF64 *result);
+
 // Get error message for error code
 const char *get_error_message(int error_code);
 
