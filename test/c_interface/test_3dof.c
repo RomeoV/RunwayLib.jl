@@ -19,9 +19,11 @@ int main() {
 
     PoseEstimateF64 pose_result;
     CameraMatrixF64 cammat = {
-        // camera matrix row-by-row, will be transposed when loading into Julia,
-        // which is column-major.
-        {-7246.4, 0.0, 2048.0, 0.0, -7246.4, 1500.0, 0.0, 0.0, 1.0},
+        // Camera matrix in column-major order (Julia's native layout)
+        // Matrix: [fx  0  cx]    Column-major storage: [col1, col2, col3]
+        //         [ 0 fy  cy] -> [fx, 0, 0,  0, fy, 0,  cx, cy, 1]
+        //         [ 0  0   1]
+        {-7246.4, 0.0, 0.0, 0.0, -7246.4, 0.0, 2048.0, 1500.0, 1.0},
         4096.0,
         3000.0};
 

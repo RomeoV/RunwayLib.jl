@@ -77,11 +77,9 @@ function get_camera_matrix_from_c(camera_matrix_c::CameraMatrix_C)
     # Only :offset coordinate system supported
     # Note: coordinate_system field ignored - always use :offset
 
-    # C arrays are row-major, but Julia SMatrix is column-major, so transpose
-    matrix_transposed = transpose(camera_matrix_c.matrix)
-
     # Create CameraMatrix with proper units
-    matrix_with_units = matrix_transposed * px
+    # Note: C caller must provide matrix in column-major order (Julia's native layout)
+    matrix_with_units = camera_matrix_c.matrix * px
     width_with_units = camera_matrix_c.image_width * px
     height_with_units = camera_matrix_c.image_height * px
 
