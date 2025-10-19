@@ -34,8 +34,6 @@ TypedTables = "9d95f2ec-7b3d-5a63-8d20-e2491e220bb9"
 Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
 [sources]
-# this can be removed once the next version is released and the compat is adjusted accordingly
-ForwardDiff = {rev = "5d2edc1a14d70faa2bcd56f4a9a6f1e25120a2c5", url = "https://github.com/JuliaDiff/ForwardDiff.jl.git"}
 # this is still waiting for https://github.com/AayushSabharwal/SciMLBase.jl/tree/as/fix-jet-opt
 SciMLBase = {rev = "rv/fix-jet-opt", url = "https://github.com/RomeoV/SciMLBase.jl"}
 
@@ -47,7 +45,7 @@ DiffEqBase = "^6.179.0"
 DifferentiationInterface = "0.7"
 Distributions = "0.25.120"
 DocStringExtensions = "0.9.5"
-ForwardDiff = "^1.0.1"
+ForwardDiff = "1.2.2"
 LightSumTypes = "5.2.1"
 LinearAlgebra = "^1.11.0"
 LinearSolve = "^3.25.0"
