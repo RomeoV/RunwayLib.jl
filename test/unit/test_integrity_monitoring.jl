@@ -173,58 +173,10 @@ end
     end
 
     @testset "2. Normal vs High Noise Scenarios" begin
-        @testset "Normal Noise Case" retry_test(1) do
-            (; true_pos, true_rot, runway_corners, make_noisy_projections) = create_runway_scenario()
-            noise_level = 2.0
-            sigmas = noise_level * ones(length(runway_corners))
-            noise_cov = Diagonal(repeat(sigmas .^ 2, inner=2))
-
-            stats = compute_integrity_statistic(
-                true_pos, true_rot,
-                runway_corners, make_noisy_projections(noise_level),
-                noise_cov
-            )
-
-            # Normal case should pass integrity check
-            @test stats.p_value > 0.05
-            @test stats.dofs == 2
-            @test stats.stat >= 0
-            @test isfinite(stats.stat)
-        end
-
-        @testset "High Noise Case" retry_test(1) do
-            # Create scenario with higher actual noise than modeled
-            noise_level = 6.0  # 3x higher actual noise
-            (; true_pos, true_rot, runway_corners, make_noisy_projections
-            ) = create_runway_scenario()
-            modeled_sigmas = 2 * ones(length(runway_corners))  # Still model as 2.0
-            modeled_cov = Diagonal(repeat(modeled_sigmas .^ 2, inner=2))
-
-            stats = compute_integrity_statistic(
-                true_pos, true_rot,
-                runway_corners,
-                make_noisy_projections(noise_level),
-                modeled_cov
-            )
-
-            # High noise case should be more likely to fail integrity check
-            # Note: With only 2 DOF, statistical power is limited
-            println(stats)
-            @test stats.stat > 1.0  # Should have larger chi-squared statistic than normal case
-        end
-    end
-
-    @testset "3. Statistical Calibration (Monte Carlo)" begin
-        n_trials = 1000  # Reduced for faster testing, increase for production
-
-        @testset "P-value Distribution Test" retry_test(1) do
-            noise_level = 2.0
-            p_values = map(1:n_trials) do i
-                (; true_pos, true_rot, runway_corners, make_noisy_projections
-                ) = create_runway_scenario(;
-                    true_pos=sample_aircraft_pos(),
-                    true_rot=sample_aircraft_rot()
-                )
+        @testset "Normal Noise Case" begin
+            retry_test(1) do
+                (; true_pos, true_rot, runway_corners, make_noisy_projections) = create_runway_scenario()
+                noise_level = 2.0
                 sigmas = noise_level * ones(length(runway_corners))
                 noise_cov = Diagonal(repeat(sigmas .^ 2, inner=2))
 
@@ -233,19 +185,73 @@ end
                     runway_corners, make_noisy_projections(noise_level),
                     noise_cov
                 )
-                stats.p_value
+
+                # Normal case should pass integrity check
+                @test stats.p_value > 0.05
+                @test stats.dofs == 2
+                @test stats.stat >= 0
+                @test isfinite(stats.stat)
             end
+        end
 
-            # Validate p-value distribution
-            validation = validate_p_value_distribution(p_values, n_bins=10)
+        @testset "High Noise Case" begin
+            retry_test(1) do
+                # Create scenario with higher actual noise than modeled
+                noise_level = 6.0  # 3x higher actual noise
+                (; true_pos, true_rot, runway_corners, make_noisy_projections
+                ) = create_runway_scenario()
+                modeled_sigmas = 2 * ones(length(runway_corners))  # Still model as 2.0
+                modeled_cov = Diagonal(repeat(modeled_sigmas .^ 2, inner=2))
 
-            @test validation.uniform_distribution
-            @test 0.0 <= minimum(p_values)
-            @test maximum(p_values) <= 1.0
+                stats = compute_integrity_statistic(
+                    true_pos, true_rot,
+                    runway_corners,
+                    make_noisy_projections(noise_level),
+                    modeled_cov
+                )
 
-            # Check that approximately 5% of trials fail at α=0.05
-            failure_rate = mean(p_values .< 0.05)
-            @test 0.02 < failure_rate < 0.08
+                # High noise case should be more likely to fail integrity check
+                # Note: With only 2 DOF, statistical power is limited
+                println(stats)
+                @test stats.stat > 1.0  # Should have larger chi-squared statistic than normal case
+            end
+        end
+    end
+
+    @testset "3. Statistical Calibration (Monte Carlo)" begin
+        n_trials = 1000  # Reduced for faster testing, increase for production
+
+        @testset "P-value Distribution Test" begin
+            retry_test(1) do
+                noise_level = 2.0
+                p_values = map(1:n_trials) do i
+                    (; true_pos, true_rot, runway_corners, make_noisy_projections
+                    ) = create_runway_scenario(;
+                        true_pos=sample_aircraft_pos(),
+                        true_rot=sample_aircraft_rot()
+                    )
+                    sigmas = noise_level * ones(length(runway_corners))
+                    noise_cov = Diagonal(repeat(sigmas .^ 2, inner=2))
+
+                    stats = compute_integrity_statistic(
+                        true_pos, true_rot,
+                        runway_corners, make_noisy_projections(noise_level),
+                        noise_cov
+                    )
+                    stats.p_value
+                end
+
+                # Validate p-value distribution
+                validation = validate_p_value_distribution(p_values, n_bins=10)
+
+                @test validation.uniform_distribution
+                @test 0.0 <= minimum(p_values)
+                @test maximum(p_values) <= 1.0
+
+                # Check that approximately 5% of trials fail at α=0.05
+                failure_rate = mean(p_values .< 0.05)
+                @test 0.02 < failure_rate < 0.08
+            end
         end
     end
 
@@ -253,41 +259,45 @@ end
         (; true_pos, true_rot, runway_corners, make_noisy_projections) = create_runway_scenario()
         noise_level = 2.0
 
-        @testset "Diagonal Noise Model" retry_test(1) do
-            # Create vector of Normal distributions for UncorrGaussianNoiseModel
-            normal_dists = [Normal(0.0, noise_level) for _ in 1:8]
-            noise_model = UncorrGaussianNoiseModel(normal_dists)
-            cov_matrix = covmatrix(noise_model)
+        @testset "Diagonal Noise Model" begin
+            retry_test(1) do
+                # Create vector of Normal distributions for UncorrGaussianNoiseModel
+                normal_dists = [Normal(0.0, noise_level) for _ in 1:8]
+                noise_model = UncorrGaussianNoiseModel(normal_dists)
+                cov_matrix = covmatrix(noise_model)
 
-            stats = compute_integrity_statistic(
-                true_pos, true_rot,
-                runway_corners, make_noisy_projections(noise_level),
-                cov_matrix
-            )
+                stats = compute_integrity_statistic(
+                    true_pos, true_rot,
+                    runway_corners, make_noisy_projections(noise_level),
+                    cov_matrix
+                )
 
-            @test stats.p_value > 0.01
-            @test size(cov_matrix) == (8, 8)
-            @test isdiag(cov_matrix)
+                @test stats.p_value > 0.01
+                @test size(cov_matrix) == (8, 8)
+                @test isdiag(cov_matrix)
+            end
         end
 
-        @testset "Full Covariance Noise Model" retry_test(1) do
-            # Create correlated noise model using MvNormal
-            base_var = noise_level^2
-            correlation = 0.3
-            cov_full = base_var * (I + correlation * (ones(8, 8) - I))
-            mv_normal = MvNormal(zeros(8), cov_full)
-            noise_model = CorrGaussianNoiseModel(mv_normal)
-            cov_matrix = covmatrix(noise_model)
+        @testset "Full Covariance Noise Model" begin
+            retry_test(1) do
+                # Create correlated noise model using MvNormal
+                base_var = noise_level^2
+                correlation = 0.3
+                cov_full = base_var * (I + correlation * (ones(8, 8) - I))
+                mv_normal = MvNormal(zeros(8), cov_full)
+                noise_model = CorrGaussianNoiseModel(mv_normal)
+                cov_matrix = covmatrix(noise_model)
 
-            stats = compute_integrity_statistic(
-                true_pos, true_rot,
-                runway_corners, make_noisy_projections(noise_level),
-                cov_matrix
-            )
+                stats = compute_integrity_statistic(
+                    true_pos, true_rot,
+                    runway_corners, make_noisy_projections(noise_level),
+                    cov_matrix
+                )
 
-            @test stats.p_value > 0.01
-            @test !isdiag(cov_matrix)
-            @test issymmetric(cov_matrix)
+                @test stats.p_value > 0.01
+                @test !isdiag(cov_matrix)
+                @test issymmetric(cov_matrix)
+            end
         end
     end
 
@@ -297,55 +307,59 @@ end
         sigmas = noise_level * ones(length(runway_corners))
         noise_cov = Diagonal(repeat(sigmas .^ 2, inner=2))
 
-        @testset "6-DOF Pose Estimation Integration" retry_test(1) do
-            noisy_projections = make_noisy_projections(noise_level)
-            # Estimate pose using 6-DOF estimator
-            pose_result = estimatepose6dof(
-                runway_corners,
-                noisy_projections,
-                CameraMatrix(CAMERA_CONFIG_OFFSET)
-            )
+        @testset "6-DOF Pose Estimation Integration" begin
+            retry_test(1) do
+                noisy_projections = make_noisy_projections(noise_level)
+                # Estimate pose using 6-DOF estimator
+                pose_result = estimatepose6dof(
+                    runway_corners,
+                    noisy_projections,
+                    CameraMatrix(CAMERA_CONFIG_OFFSET)
+                )
 
-            # Test integrity using estimated pose
-            stats = compute_integrity_statistic(
-                pose_result.pos, pose_result.rot,
-                runway_corners, noisy_projections,
-                noise_cov
-            )
+                # Test integrity using estimated pose
+                stats = compute_integrity_statistic(
+                    pose_result.pos, pose_result.rot,
+                    runway_corners, noisy_projections,
+                    noise_cov
+                )
 
-            @test stats.p_value > 0.01
+                @test stats.p_value > 0.01
 
-            # Estimated pose should be reasonably close to true pose
-            pos_error = norm([
-                ustrip(m, pose_result.pos.x - true_pos.x),
-                ustrip(m, pose_result.pos.y - true_pos.y),
-                ustrip(m, pose_result.pos.z - true_pos.z)
-            ])
-            @test pos_error < 50.0
+                # Estimated pose should be reasonably close to true pose
+                pos_error = norm([
+                    ustrip(m, pose_result.pos.x - true_pos.x),
+                    ustrip(m, pose_result.pos.y - true_pos.y),
+                    ustrip(m, pose_result.pos.z - true_pos.z)
+                ])
+                @test pos_error < 50.0
+            end
         end
 
-        @testset "3-DOF Pose Estimation Integration" retry_test(1) do
-            noisy_projections = make_noisy_projections(noise_level)
-            # Estimate position with known rotation
-            pose_result = estimatepose3dof(
-                runway_corners,
-                noisy_projections,
-                true_rot,  # Use true rotation
-                CameraMatrix(CAMERA_CONFIG_OFFSET)
-            )
+        @testset "3-DOF Pose Estimation Integration" begin
+            retry_test(1) do
+                noisy_projections = make_noisy_projections(noise_level)
+                # Estimate position with known rotation
+                pose_result = estimatepose3dof(
+                    runway_corners,
+                    noisy_projections,
+                    true_rot,  # Use true rotation
+                    CameraMatrix(CAMERA_CONFIG_OFFSET)
+                )
 
-            # Test integrity using estimated pose
-            stats = compute_integrity_statistic(
-                pose_result.pos, pose_result.rot,
-                runway_corners, noisy_projections,
-                noise_cov
-            )
+                # Test integrity using estimated pose
+                stats = compute_integrity_statistic(
+                    pose_result.pos, pose_result.rot,
+                    runway_corners, noisy_projections,
+                    noise_cov
+                )
 
-            @test stats.p_value > 0.01
+                @test stats.p_value > 0.01
+            end
         end
     end
 
-    @testset "Non-Default Camera Matrix Integration" retry_test(1) do
+    @testset "Non-Default Camera Matrix Integration" begin
         # Test integrity monitoring with a custom camera matrix (like Python tests use)
         custom_camera_matrix = CameraMatrix{:offset}(
             SA[-7246.4 0.0 2048.5; 0.0 -7246.4 1500.5; 0.0 0.0 1.0] * px,  # Note negative focal lengths like Python test
@@ -367,27 +381,28 @@ end
         # Generate projections with custom camera matrix
         projections = [project(true_pos, true_rot, corner, custom_camera_matrix) for corner in runway_corners]
 
-        # Add small amount of noise like Python test
-        Random.seed!(123)
-        noisy_projections = projections .+ [ProjectionPoint(0.1 * randn(2)px) for _ in projections]
-
-        # Create diagonal noise covariance
-        noise_level = 2.0
-        sigmas = noise_level * ones(length(runway_corners))
-        noise_cov = Diagonal(repeat(sigmas .^ 2, inner=2))
-
         @testset "Integrity with Custom Camera Matrix" begin
-            # This should work with custom camera matrix
-            stats = compute_integrity_statistic(
-                true_pos, true_rot,
-                runway_corners, noisy_projections,
-                noise_cov, custom_camera_matrix
-            )
+            retry_test(1) do
+                # Add small amount of noise like Python test
+                noisy_projections = projections .+ [ProjectionPoint(0.1 * randn(2)px) for _ in projections]
 
-            @test stats.p_value > 0.01  # Should have reasonable integrity
-            @test stats.dofs == 2  # 4 points * 2 coords - 6 DOF = 2
-            @test stats.stat >= 0
-            @test isfinite(stats.stat)
+                # Create diagonal noise covariance
+                noise_level = 2.0
+                sigmas = noise_level * ones(length(runway_corners))
+                noise_cov = Diagonal(repeat(sigmas .^ 2, inner=2))
+
+                # This should work with custom camera matrix
+                stats = compute_integrity_statistic(
+                    true_pos, true_rot,
+                    runway_corners, noisy_projections,
+                    noise_cov, custom_camera_matrix
+                )
+
+                @test stats.p_value > 0.01  # Should have reasonable integrity
+                @test stats.dofs == 2  # 4 points * 2 coords - 6 DOF = 2
+                @test stats.stat >= 0
+                @test isfinite(stats.stat)
+            end
         end
     end
 
