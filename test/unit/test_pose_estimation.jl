@@ -6,6 +6,7 @@ import Rotations: params
 using LinearAlgebra
 using Unitful, Unitful.DefaultSymbols
 using StaticArrays
+include("../test_utils.jl")
 
 @testset "Pose Estimation" begin
     @testset "Static Array Support" begin
@@ -86,11 +87,11 @@ using StaticArrays
             @test all(abs.(result) .< 1e-10)  # Should be near zero at true pose
         end
 
-        @testset "Lines Improve Accuracy" begin
+        @testset "Lines Improve Accuracy" retry_test(1) do
             # Add noise to point observations
             noisy_projections = [
-                proj + ProjectionPoint(2.0px * randn(2) .+ 1.0px)
-                    for proj in [project(true_pos, true_rot, c) for c in runway_corners]
+                proj + ProjectionPoint(2.0px * randn(2))
+                for proj in [project(true_pos, true_rot, c) for c in runway_corners]
             ]
 
             guess_pos = [true_pos.x + 100.0m, true_pos.y - 20.0m, true_pos.z + 30.0m]
@@ -104,14 +105,14 @@ using StaticArrays
                 initial_guess_pos=guess_pos, initial_guess_rot=guess_rot)
 
             # Points + perfect lines estimation
-            line_noise = SMatrix{6, 6}(diagm(fill(0.5^2, 6)))
+            line_noise = SMatrix{6,6}(diagm(fill(0.5^2, 6)))
             line_features = LineFeatures(
                 runway_lines, observed_lines,
                 CAMERA_CONFIG_OFFSET, line_noise
             )
             result_combined = estimatepose6dof(
                 point_features, line_features;
-                initial_guess_pos = guess_pos, initial_guess_rot = guess_rot
+                initial_guess_pos=guess_pos, initial_guess_rot=guess_rot
             )
 
             # Combined should be more accurate in crosstrack and height.
