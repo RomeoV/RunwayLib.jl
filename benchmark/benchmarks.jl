@@ -154,6 +154,7 @@ for (camera_config, config_name) in CAMERA_CONFIGS
 
         # Preallocate features and cache
         projections_const = [project(TRUE_POS, TRUE_ROT, corner, camera_config) for corner in RUNWAY_CORNERS]
+        observed_lines_const = generate_observed_lines(noise_level, deg2rad(noise_level), camera_config)
 
         # point_noise = SMatrix{8,8}(diagm(fill(noise_level^2, 8)))
         point_noise = Diagonal(SVector{8}(noise_level^2 * ones(8)))
