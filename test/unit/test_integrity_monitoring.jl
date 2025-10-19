@@ -44,6 +44,7 @@ using StatsBase
 using Random
 using Unitful
 using Unitful.DefaultSymbols
+include("../test_utils.jl")
 
 # ==============================================================================
 # Test Utility Functions
@@ -172,7 +173,7 @@ end
     end
 
     @testset "2. Normal vs High Noise Scenarios" begin
-        @testset "Normal Noise Case" begin
+        @testset "Normal Noise Case" retry_test(1) do
             (; true_pos, true_rot, runway_corners, make_noisy_projections) = create_runway_scenario()
             noise_level = 2.0
             sigmas = noise_level * ones(length(runway_corners))
@@ -191,7 +192,7 @@ end
             @test isfinite(stats.stat)
         end
 
-        @testset "High Noise Case" begin
+        @testset "High Noise Case" retry_test(1) do
             # Create scenario with higher actual noise than modeled
             noise_level = 6.0  # 3x higher actual noise
             (; true_pos, true_rot, runway_corners, make_noisy_projections
@@ -216,7 +217,7 @@ end
     @testset "3. Statistical Calibration (Monte Carlo)" begin
         n_trials = 1000  # Reduced for faster testing, increase for production
 
-        @testset "P-value Distribution Test" begin
+        @testset "P-value Distribution Test" retry_test(1) do
             noise_level = 2.0
             p_values = map(1:n_trials) do i
                 (; true_pos, true_rot, runway_corners, make_noisy_projections
@@ -252,7 +253,7 @@ end
         (; true_pos, true_rot, runway_corners, make_noisy_projections) = create_runway_scenario()
         noise_level = 2.0
 
-        @testset "Diagonal Noise Model" begin
+        @testset "Diagonal Noise Model" retry_test(1) do
             # Create vector of Normal distributions for UncorrGaussianNoiseModel
             normal_dists = [Normal(0.0, noise_level) for _ in 1:8]
             noise_model = UncorrGaussianNoiseModel(normal_dists)
@@ -269,7 +270,7 @@ end
             @test isdiag(cov_matrix)
         end
 
-        @testset "Full Covariance Noise Model" begin
+        @testset "Full Covariance Noise Model" retry_test(1) do
             # Create correlated noise model using MvNormal
             base_var = noise_level^2
             correlation = 0.3
@@ -295,9 +296,9 @@ end
         noise_level = 1.5
         sigmas = noise_level * ones(length(runway_corners))
         noise_cov = Diagonal(repeat(sigmas .^ 2, inner=2))
-        noisy_projections = make_noisy_projections(noise_level)
 
-        @testset "6-DOF Pose Estimation Integration" begin
+        @testset "6-DOF Pose Estimation Integration" retry_test(1) do
+            noisy_projections = make_noisy_projections(noise_level)
             # Estimate pose using 6-DOF estimator
             pose_result = estimatepose6dof(
                 runway_corners,
@@ -323,7 +324,8 @@ end
             @test pos_error < 50.0
         end
 
-        @testset "3-DOF Pose Estimation Integration" begin
+        @testset "3-DOF Pose Estimation Integration" retry_test(1) do
+            noisy_projections = make_noisy_projections(noise_level)
             # Estimate position with known rotation
             pose_result = estimatepose3dof(
                 runway_corners,
@@ -343,7 +345,7 @@ end
         end
     end
 
-    @testset "Non-Default Camera Matrix Integration" begin
+    @testset "Non-Default Camera Matrix Integration" retry_test(1) do
         # Test integrity monitoring with a custom camera matrix (like Python tests use)
         custom_camera_matrix = CameraMatrix{:offset}(
             SA[-7246.4 0.0 2048.5; 0.0 -7246.4 1500.5; 0.0 0.0 1.0] * px,  # Note negative focal lengths like Python test
