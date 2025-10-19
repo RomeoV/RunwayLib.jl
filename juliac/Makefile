@@ -22,7 +22,7 @@ $(BUILD_DIR)/lib/libposeest.so: loadrunwaylib.jl Project.toml ../Project.toml ..
 	$(JULIA) --project juliac-script.jl $(BUILD_DIR)
 	mv $(BUILD_DIR)/lib/lib.so $(BUILD_DIR)/lib/libposeest.so
 
-$(BUILD_DIR)/include/libposeest.h: libposeest.h
+$(BUILD_DIR)/include/libposeest.h: libposeest.h $(BUILD_DIR)/lib/libposeest.so
 	@mkdir -p $(BUILD_DIR)/include
 	cp libposeest.h $(BUILD_DIR)/include
 
