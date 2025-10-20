@@ -5,7 +5,7 @@ RunwayLib = "c31d23ff-e9b5-4186-8ef8-ce4d62614c67"
 
 [compat]
 DataStructures = "0.18"
-JuliaC = "0.1"
+JuliaC = "0.2"
 
 [preferences.LinearSolve]
 LoadMKL_JLL = false
