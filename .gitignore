@@ -26,3 +26,7 @@ docs/src/figs/*.pdf
 
 # Generated documentation files
 docs/src/python_interface.md
+
+# Test binaries
+test/c_interface/test_3dof
+test/c_interface/test_c_api
