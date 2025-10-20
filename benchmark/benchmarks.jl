@@ -195,7 +195,7 @@ for (camera_config, config_name) in CAMERA_CONFIGS
         end setup = begin
             # Generate noisy projections
             projections = generate_projections_with_noise($noise_level, $camera_config)
-            observed_lines = generate_observed_lines(1.0px, deg2rad(1)rad, camera_config)
+            observed_lines = generate_observed_lines(1.0px, deg2rad(1)rad, $camera_config)
 
             # Update point features with noisy observations
             point_features = PointFeatures(
