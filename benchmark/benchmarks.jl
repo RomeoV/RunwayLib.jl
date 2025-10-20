@@ -154,12 +154,14 @@ for (camera_config, config_name) in CAMERA_CONFIGS
 
         # Preallocate features and cache
         projections_const = [project(TRUE_POS, TRUE_ROT, corner, camera_config) for corner in RUNWAY_CORNERS]
-        observed_lines_const = generate_observed_lines(noise_level, deg2rad(noise_level), camera_config)
+        observed_lines_const = generate_observed_lines(noise_level * px, deg2rad(noise_level)rad, camera_config)
 
         # point_noise = SMatrix{8,8}(diagm(fill(noise_level^2, 8)))
         point_noise = Diagonal(SVector{8}(noise_level^2 * ones(8)))
         # line_noise = SMatrix{12,12}(diagm(fill(3.0^2, 12)))
-        line_noise = Diagonal(SVector{12}(repeat([1^2, 0.02^2, 0.02^2], outer=4)))
+        line_noise = let pnoise = noise_level, tnoise = deg2rad(noise_level)
+            Diagonal(SVector{12}(repeat([pnoise^2, tnoise^2, tnoise^2], outer=4)))
+        end
 
         point_features_const = PointFeatures(
             collect(RUNWAY_CORNERS), projections_const,
@@ -173,7 +175,12 @@ for (camera_config, config_name) in CAMERA_CONFIGS
 
         # Create initial cache
         pos_guess_init, rot_guess_init = generate_smaller_initial_guess()
-        u₀_init = vcat(ustrip.(m, pos_guess_init), ustrip.(rad, rot_guess_init))
+        # Notice we currently case u0 here to be a regular array.
+        # This is because of the jacobian construction for static array outputs.
+        # This can be fixed in 
+        # https://github.com/SciML/NonlinearSolve.jl/blob/ac9344f9359833282e443c4479427ad9ce3311dd/lib/NonlinearSolveBase/src/jacobian.jl#L78
+        # and I have a fix, but it's challenging to do in a fork without causing invalidations.
+        u₀_init = vcat(ustrip.(m, pos_guess_init), ustrip.(rad, rot_guess_init)) |> Array
         ps_const = PoseOptimizationParams6DOF(point_features_const, line_features_const)
         cache_init = RunwayLib.makecache(u₀_init, ps_const)
 
