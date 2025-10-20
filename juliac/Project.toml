@@ -4,7 +4,7 @@ JuliaC = "acedd4c2-ced6-4a15-accc-2607eb759ba2"
 RunwayLib = "c31d23ff-e9b5-4186-8ef8-ce4d62614c67"
 
 [compat]
-DataStructures = "0.18"
+DataStructures = "0.18, 0.19"
 JuliaC = "0.2"
 
 [preferences.LinearSolve]
