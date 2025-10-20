@@ -102,8 +102,8 @@ include("../test_utils.jl")
                 point_noise = SMatrix{8,8}(diagm(fill(2.0^2, 8)))
                 point_features = PointFeatures(runway_corners, noisy_projections,
                     CAMERA_CONFIG_OFFSET, point_noise)
-                result_points = estimatepose6dof(point_features;
-                    initial_guess_pos=guess_pos, initial_guess_rot=guess_rot)
+                result_points = estimatepose3dof(point_features, RunwayLib.NO_LINES,
+                    true_rot; initial_guess_pos=guess_pos)
 
                 # Points + perfect lines estimation
                 line_noise = SMatrix{6,6}(diagm(fill(0.5^2, 6)))
@@ -111,10 +111,9 @@ include("../test_utils.jl")
                     runway_lines, observed_lines,
                     CAMERA_CONFIG_OFFSET, line_noise
                 )
-                result_combined = estimatepose6dof(
-                    point_features, line_features;
-                    initial_guess_pos=guess_pos, initial_guess_rot=guess_rot
-                )
+                result_combined = estimatepose3dof(
+                    point_features, line_features, true_rot;
+                    initial_guess_pos=guess_pos)
 
                 # Combined should be more accurate in crosstrack and height.
                 # sidelines dont't give much information about alongtrack.
