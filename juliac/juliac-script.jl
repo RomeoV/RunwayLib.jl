@@ -5,7 +5,6 @@ img = ImageRecipe(
     output_type="--output-lib",
     file="./loadrunwaylib.jl",
     project="..",
-    enable_trim=true,
     trim_mode="safe",
     add_ccallables=true,
     verbose=true
