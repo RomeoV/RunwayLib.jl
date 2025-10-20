@@ -10,8 +10,6 @@ jobs:
   bench:
     runs-on: ubuntu-latest
     steps:
-      - uses: RomeoV/AirspeedVelocity.jl@set-project-toml
+      - uses: MilesCranmer/AirspeedVelocity.jl@action-v1
         with:
-          julia-version: '1'
-          script: "benchmark/benchmarks.jl"
           enable-plots: true
