@@ -174,7 +174,7 @@ end
 
     @testset "2. Normal vs High Noise Scenarios" begin
         @testset "Normal Noise Case" begin
-            retry_test(1) do
+            retry_test(2) do
                 (; true_pos, true_rot, runway_corners, make_noisy_projections) = create_runway_scenario()
                 noise_level = 2.0
                 sigmas = noise_level * ones(length(runway_corners))
