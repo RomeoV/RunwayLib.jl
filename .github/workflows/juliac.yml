@@ -1,8 +1,12 @@
 name: juliac
 
 on:
+  push:
+    branches:
+      - master
   pull_request:
-    branches: [master]
+    branches:
+      - master
   workflow_dispatch:
 
 concurrency:
