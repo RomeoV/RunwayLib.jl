@@ -33,9 +33,15 @@ StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 TypedTables = "9d95f2ec-7b3d-5a63-8d20-e2491e220bb9"
 Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
-[sources]
-# this is still waiting for https://github.com/AayushSabharwal/SciMLBase.jl/tree/as/fix-jet-opt
-SciMLBase = {rev = "rv/fix-jet-opt", url = "https://github.com/RomeoV/SciMLBase.jl"}
+[weakdeps]
+PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
+
+[sources.SciMLBase]
+rev = "rv/fix-jet-opt"
+url = "https://github.com/RomeoV/SciMLBase.jl"
+
+[extensions]
+PythonCallExt = "PythonCall"
 
 [compat]
 ADTypes = "1.16.0"
@@ -58,15 +64,10 @@ PrecompileTools = "1"
 ProbabilisticParameterEstimators = "0.8.3"
 SciMLBase = "2.102.1"
 StatsBase = "0.34.5"
+Unitful = "1"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-
-[weakdeps]
-PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
-
-[extensions]
-PythonCallExt = "PythonCall"
 
 [preferences.LinearSolve]
 LoadMKL_JLL = false
