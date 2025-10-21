@@ -174,7 +174,7 @@ end
 
     @testset "2. Normal vs High Noise Scenarios" begin
         @testset "Normal Noise Case" begin
-            retry_test(2) do
+            TestUtils.retry_test(2) do
                 (; true_pos, true_rot, runway_corners, make_noisy_projections) = create_runway_scenario()
                 noise_level = 2.0
                 sigmas = noise_level * ones(length(runway_corners))
@@ -195,7 +195,7 @@ end
         end
 
         @testset "High Noise Case" begin
-            retry_test(2) do
+            TestUtils.retry_test(2) do
                 # Create scenario with higher actual noise than modeled
                 noise_level = 6.0  # 3x higher actual noise
                 (; true_pos, true_rot, runway_corners, make_noisy_projections
@@ -222,7 +222,7 @@ end
         n_trials = 1000  # Reduced for faster testing, increase for production
 
         @testset "P-value Distribution Test" begin
-            retry_test(1) do
+            TestUtils.retry_test(1) do
                 noise_level = 2.0
                 p_values = map(1:n_trials) do i
                     (; true_pos, true_rot, runway_corners, make_noisy_projections
@@ -260,7 +260,7 @@ end
         noise_level = 2.0
 
         @testset "Diagonal Noise Model" begin
-            retry_test(1) do
+            TestUtils.retry_test(1) do
                 # Create vector of Normal distributions for UncorrGaussianNoiseModel
                 normal_dists = [Normal(0.0, noise_level) for _ in 1:8]
                 noise_model = UncorrGaussianNoiseModel(normal_dists)
@@ -279,7 +279,7 @@ end
         end
 
         @testset "Full Covariance Noise Model" begin
-            retry_test(1) do
+            TestUtils.retry_test(1) do
                 # Create correlated noise model using MvNormal
                 base_var = noise_level^2
                 correlation = 0.3
@@ -308,7 +308,7 @@ end
         noise_cov = Diagonal(repeat(sigmas .^ 2, inner=2))
 
         @testset "6-DOF Pose Estimation Integration" begin
-            retry_test(1) do
+            TestUtils.retry_test(1) do
                 noisy_projections = make_noisy_projections(noise_level)
                 # Estimate pose using 6-DOF estimator
                 pose_result = estimatepose6dof(
@@ -337,7 +337,7 @@ end
         end
 
         @testset "3-DOF Pose Estimation Integration" begin
-            retry_test(1) do
+            TestUtils.retry_test(1) do
                 noisy_projections = make_noisy_projections(noise_level)
                 # Estimate position with known rotation
                 pose_result = estimatepose3dof(
@@ -382,7 +382,7 @@ end
         projections = [project(true_pos, true_rot, corner, custom_camera_matrix) for corner in runway_corners]
 
         @testset "Integrity with Custom Camera Matrix" begin
-            retry_test(1) do
+            TestUtils.retry_test(1) do
                 # Add small amount of noise like Python test
                 noisy_projections = projections .+ [ProjectionPoint(0.1 * randn(2)px) for _ in projections]
 
