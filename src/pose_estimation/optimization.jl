@@ -251,6 +251,19 @@ const CACHE_6DOF = let
     init(prob, ALG; reltol, abstol)
 end
 
+const CACHE_6DOF_p = let
+    (; runway_corners, projections, true_pos, true_rot) = setup_for_precompile()
+    noise_model = _defaultnoisemodel(projections)
+    point_features = PointFeatures(runway_corners, projections, CAMERA_CONFIG_OFFSET, noise_model)
+    p = PoseOptimizationParams6DOF(point_features, NO_LINES)
+end
+function makecache(u₀::SVector{6,Float64}, ps::typeof(CACHE_6DOF_p))
+    # @info "USING PREMADE CACHE"
+    cache = CACHE_6DOF
+    reinit!(cache, nominal2optvar(u₀, ps); p=ps)
+    return cache
+end
+
 const CACHE_3DOF = let
     (; runway_corners, projections, true_pos, true_rot) = setup_for_precompile()
     noise_model = _defaultnoisemodel(projections)
