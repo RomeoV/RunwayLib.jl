@@ -10,7 +10,7 @@ and use juliacall to install `RunwayLib` and the `PythonCall` extension which en
 the python API.
 ```python
 from juliacall import Main as jl
-jl.Pkg.add(url="http://github.com/RomeoV/RunwayLib.jl", rev="docs")  # should land on master asap
+jl.Pkg.add(url="http://github.com/RomeoV/RunwayLib.jl")  # will be registered soon
 ```
 You only need to do this once. Now you should be able to use `RunwayLib` from python like so:
 ```python
