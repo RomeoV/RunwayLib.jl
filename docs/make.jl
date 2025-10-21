@@ -1,4 +1,5 @@
 using Documenter
+using DocumenterCitations
 using DocumenterInterLinks
 using RunwayLib
 
@@ -7,6 +8,11 @@ template = read(joinpath(@__DIR__, "src", "python_interface_template.md"), Strin
 example = read(joinpath(@__DIR__, "..", "test", "python_interface", "smoke_test.py"), String)
 output = replace(template, "{{PYTHON_EXAMPLE}}" => example)
 write(joinpath(@__DIR__, "src", "python_interface.md"), output)
+
+bib = CitationBibliography(
+    joinpath(@__DIR__, "src", "refs.bib");
+    style=:numeric
+)
 
 links = InterLinks(
     "Rotations" => (
