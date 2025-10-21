@@ -1,4 +1,5 @@
 using Documenter
+using DocumenterInterLinks
 using RunwayLib
 
 # Generate python_interface.md from template
@@ -7,9 +8,20 @@ example = read(joinpath(@__DIR__, "..", "test", "python_interface", "smoke_test.
 output = replace(template, "{{PYTHON_EXAMPLE}}" => example)
 write(joinpath(@__DIR__, "src", "python_interface.md"), output)
 
+links = InterLinks(
+    "Rotations" => (
+        "https://juliageometry.github.io/Rotations.jl/dev/",
+        "https://juliageometry.github.io/Rotations.jl/dev/objects.inv"
+    ),
+    "ProbabilisticParameterEstimators" => (
+        "https://romeov.github.io/ProbabilisticParameterEstimators.jl/dev/",
+        "https://romeov.github.io/ProbabilisticParameterEstimators.jl/dev/objects.inv",
+    ),
+)
+
 makedocs(
     sitename="RunwayLib",
-    format=Documenter.HTML(),
+    format=Documenter.HTML(assets=String["assets/citations.css"]),
     modules=[RunwayLib],
     repo=Remotes.GitHub("RomeoV", "RunwayLib.jl"),
     pages=[
@@ -20,7 +32,8 @@ makedocs(
         "noise_models.md",
         "integrity_check.md",
         "api_reference.md",
-    ]
+    ],
+    plugins=[bib, links]
 )
 
 # Documenter can also automatically deploy documentation to gh-pages.
