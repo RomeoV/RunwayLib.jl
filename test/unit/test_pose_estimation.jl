@@ -88,7 +88,7 @@ include("../test_utils.jl")
         end
 
         @testset "Lines Improve Accuracy" begin
-            retry_test(1) do
+            TestUtils.retry_test(1) do
                 # Add noise to point observations
                 noisy_projections = [
                     proj + ProjectionPoint(2.0px * randn(2))
