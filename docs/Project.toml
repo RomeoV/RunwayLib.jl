@@ -1,5 +1,6 @@
 [deps]
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+DocumenterCitations = "daee34ce-89f3-4625-b898-19384cb65244"
 Rotations = "6038ab10-8711-5258-84ad-4b1120ba62dc"
 RunwayLib = "c31d23ff-e9b5-4186-8ef8-ce4d62614c67"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
@@ -8,4 +9,5 @@ Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
 [compat]
 Documenter = "1"
+DocumenterCitations = "1"
 Typstry = "0.6"
