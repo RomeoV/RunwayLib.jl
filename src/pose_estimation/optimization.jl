@@ -128,7 +128,7 @@ function estimatepose6dof(
     u₀ = [
         initial_guess_pos .|> _ustrip(m);
         initial_guess_rot .|> _ustrip(rad)
-    ] |> Array
+    ]
 
     ps = PoseOptimizationParams6DOF(point_features, line_features)
     cache = isnothing(cache) ? makecache(u₀, ps) : (reinit!(cache, nominal2optvar(u₀, ps); p=ps); cache)
@@ -169,7 +169,7 @@ function estimatepose3dof(
     cache=nothing,
     solveargs=(;)
 )
-    u₀ = initial_guess_pos .|> _ustrip(m) |> Array
+    u₀ = initial_guess_pos .|> _ustrip(m)
 
     ps = PoseOptimizationParams3DOF(point_features, line_features, known_attitude)
     cache = isnothing(cache) ? makecache(u₀, ps) : (reinit!(cache, nominal2optvar(u₀, ps); p=ps):cache)
@@ -218,13 +218,13 @@ end
 
 const _defaultnoisemodel_points(pts) =
     let
-        distributions = [SA[Normal(0.0, 2.0), Normal(0.0, 2.0)] for _ in pts] |> Array
+        distributions = [SA[Normal(0.0, 2.0), Normal(0.0, 2.0)] for _ in pts]
         UncorrGaussianNoiseModel(reduce(vcat, distributions))
     end
 const _defaultnoisemodel(pts) = _defaultnoisemodel_points(pts)
 const _defaultnoisemodel_lines(line_endpoints) =
     let
-        distributions = [SA[Normal(0.0, 2.0), Normal(0.0, 2.0), Normal(0.0, 2.0)] for _ in line_endpoints] |> Array
+        distributions = [SA[Normal(0.0, 2.0), Normal(0.0, 2.0), Normal(0.0, 2.0)] for _ in line_endpoints]
         UncorrGaussianNoiseModel(reduce(vcat, distributions))
     end
 
