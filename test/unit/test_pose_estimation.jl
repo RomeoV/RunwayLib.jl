@@ -56,7 +56,7 @@ include("../test_utils.jl")
                 true_rot.theta1, true_rot.theta2, true_rot.theta3]
 
             result = RunwayLib.pose_optimization_objective(optvar, ps)
-            @test result isa SVector
+            @test result isa SVector skip = true  # currently we cast to Array to make sure to get a mutable jacobian
             @test length(result) == 2 * length(runway_corners) + 3 * length(world_lines)
         end
     end
