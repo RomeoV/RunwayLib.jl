@@ -82,7 +82,7 @@ function pose_optimization_objective(
 ) where {T<:Real}
     optvar = optvar2nominal(optvar, ps)
     # Extract camera position from optimization variables
-    cam_pos = WorldPoint(optvar[1:3]m)
+    cam_pos = WorldPoint(optvar[1:3] .* m)
 
     # Determine camera rotation via pattern matching
     cam_rot = @match ps begin
@@ -99,7 +99,7 @@ function pose_optimization_objective(
     line_residuals = pose_optimization_objective_lines(cam_pos, cam_rot, ps.line_features)
 
     # Combine residuals
-    return vcat(point_residuals, line_residuals)
+    return reduce(vcat, (point_residuals, line_residuals)) |> Array
 end
 
 """
