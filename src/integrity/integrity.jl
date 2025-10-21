@@ -50,7 +50,7 @@ compute_integrity_statistic(
     observed_pts::AbstractVector{<:ProjectionPoint},
     noise_cov::NoiseModel,
     camconfig=CAMERA_CONFIG_OFFSET
-) = compute_integrity_statistic(cam_pos, cam_rot, world_pts, observed_pts, covmat(noise_cov), camconfig)
+) = compute_integrity_statistic(cam_pos, cam_rot, world_pts, observed_pts, covmatrix(noise_cov), camconfig)
 
 
 """
