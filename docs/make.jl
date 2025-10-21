@@ -37,6 +37,9 @@ makedocs(
         "C_interface.md",
         "noise_models.md",
         "integrity_check.md",
+        "caches.md",
+        "performance_tips.md",
+        "uncertainty_predictions.md",
         "api_reference.md",
     ],
     plugins=[bib, links]
