@@ -203,7 +203,7 @@ end
 
 
 function setup_for_precompile()
-    runway_corners = [
+    runway_corners = SA[
         WorldPoint(1000.0m, -50.0m, 0.0m),
         WorldPoint(1000.0m, 50.0m, 0.0m),
         WorldPoint(3000.0m, 50.0m, 0.0m),
@@ -211,7 +211,7 @@ function setup_for_precompile()
     ]
     true_pos = WorldPoint(-1300.0m, 0.0m, 80.0m)
     true_rot = RotZYX(roll=0.03, pitch=0.04, yaw=0.05)
-    projections = [project(true_pos, true_rot, corner, CAMERA_CONFIG_OFFSET) for corner in runway_corners]
+    projections = SVector([project(true_pos, true_rot, corner, CAMERA_CONFIG_OFFSET) for corner in runway_corners])
     return (; runway_corners, projections, true_pos, true_rot)
 end
 
@@ -243,7 +243,7 @@ const CACHE_6DOF = let
     noise_model = _defaultnoisemodel(projections)
     point_features = PointFeatures(runway_corners, projections, CAMERA_CONFIG_OFFSET, noise_model)
     ps = PoseOptimizationParams6DOF(point_features, NO_LINES)
-    prob = NonlinearLeastSquaresProblem{false}(POSEOPTFN, rand(6), ps)
+    prob = NonlinearLeastSquaresProblem{false}(POSEOPTFN, @SVector(rand(6)), ps)
     T = Float64
     # sqrt of the default
     reltol = real(oneunit(T)) * (eps(real(one(T))))^(2 // 5)
