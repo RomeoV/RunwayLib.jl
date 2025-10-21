@@ -33,6 +33,8 @@ end
 
 "From optimization space into regular space."
 optvar2nominal(x::AT, ps::PoseOptimizationParams3DOF) where {AT} = SA[-exp(x[1]); x[2]; exp(x[3])] |> AT
+# For some reason this solution introduces an allocation which costs 15% performance for one solve...
+# We don't see this issue for [`nominal2optvar`](@ref) although it should be the same...
 optvar2nominal(x::AT, ps::PoseOptimizationParams6DOF) where {AT} = reduce(
     vcat, (
         SA[-exp(x[1]); x[2]; exp(x[3])],
@@ -40,6 +42,16 @@ optvar2nominal(x::AT, ps::PoseOptimizationParams6DOF) where {AT} = reduce(
         x[4:6],
     )
 ) |> AT
+# So we instead implement it like this for StaticArrays
+optvar2nominal(x::AT, ps::PoseOptimizationParams6DOF) where {AT<:StaticArray} = SA[
+    -exp(x[1]);
+    x[2];
+    exp(x[3]);
+    x[4];
+    x[5];
+    x[6]
+]
+
 "From regular space into optimization space."
 nominal2optvar(x::AT, ps::PoseOptimizationParams3DOF) where {AT} = SA[log(-x[1]); x[2]; log(x[3])] |> AT
 nominal2optvar(x::AT, ps::PoseOptimizationParams6DOF) where {AT} = reduce(
