@@ -29,6 +29,7 @@ ProbabilisticParameterEstimators = "0098cf3f-3e1e-4f11-b01c-dd9dec1b3374"
 Rotations = "6038ab10-8711-5258-84ad-4b1120ba62dc"
 SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+StaticArraysCore = "1e83bf80-4336-4d27-bf5d-d5a4f845583c"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 TypedTables = "9d95f2ec-7b3d-5a63-8d20-e2491e220bb9"
 Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
@@ -36,10 +37,10 @@ Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 [weakdeps]
 PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
 
-[sources.SciMLBase]
-# this is still waiting for https://github.com/AayushSabharwal/SciMLBase.jl/tree/as/fix-jet-opt
-rev = "rv/fix-jet-opt"
-url = "https://github.com/RomeoV/SciMLBase.jl"
+[sources]
+SciMLBase = {rev = "rv/fix-jet-opt", url = "https://github.com/RomeoV/SciMLBase.jl"}
+StaticArraysCore = {rev="lazy-string", url="https://github.com/RomeoV/StaticArraysCore.jl"}
+NonlinearSolveBase = {rev="lazy-string", url="https://github.com/RomeoV/NonlinearSolve.jl", subdir="lib/NonlinearSolveBase"}
 
 [extensions]
 PythonCallExt = "PythonCall"
