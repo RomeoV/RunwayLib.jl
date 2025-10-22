@@ -31,7 +31,10 @@ links = InterLinks(
 
 makedocs(
     sitename="RunwayLib",
-    format=Documenter.HTML(assets=String["assets/citations.css"]),
+    format=Documenter.HTML(
+        assets=String["assets/citations.css"],
+        size_threshold_ignore=["benchmarks.md"],
+    ),
     modules=[RunwayLib],
     repo=Remotes.GitHub("RomeoV", "RunwayLib.jl"),
     pages=[
@@ -43,6 +46,7 @@ makedocs(
         "integrity_check.md",
         "caches.md",
         "performance_tips.md",
+        "benchmarks.md",
         "uncertainty_predictions.md",
         "api_reference.md",
     ],
