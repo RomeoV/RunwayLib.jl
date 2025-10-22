@@ -1,0 +1,12 @@
+[deps]
+AlgebraOfGraphics = "cbdf2221-f076-402e-a563-3d30da359d67"
+BonitoBook = "b416d416-7a6e-4336-8c1a-1f8a8cd59518"
+PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
+Rotations = "6038ab10-8711-5258-84ad-4b1120ba62dc"
+RunwayLib = "c31d23ff-e9b5-4186-8ef8-ce4d62614c67"
+StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
+Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
+WGLMakie = "276b4fcb-3e11-5398-bf8b-a0c2d153d008"
+
+[sources]
+BonitoBook = {url = "http://github.com/SimonDanisch/BonitoBook.jl"}
