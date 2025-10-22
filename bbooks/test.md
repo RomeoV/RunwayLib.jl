@@ -42,10 +42,7 @@ end;
 posests = map(1:500) do _
     noisy_observations = [p + ProjectionPoint(2.0*randn(2)px) for p in true_observations]
     observed_lines = [
-      Line(
-        r + 1px*randn(),
-        theta + deg2rad(1°)*randn()
-      )
+      Line(r + 1px*randn(), theta + deg2rad(1°)*randn())
       for (; r, theta) in true_lines
     ]
     (cam_pos_est, cam_rot_est) = estimatepose6dof(
@@ -66,22 +63,19 @@ end
 Let's compare this with points estimated from all four corners, and from all four corners and the sideline angles.
 
 ```julia (editor=true, logging=false, output=true)
-posests_onlycorners = map(1:500) do _
+posests_onlycorners = map(1:1500) do _
     noisy_observations = [p + ProjectionPoint(2.0*randn(2)px) for p in true_observations]
     (cam_pos_est, cam_rot_est) = estimatepose6dof(
         PointFeatures(runway_corners[1:4], noisy_observations[1:4]),
     )[(:pos, :rot)]
     cam_pos_est
 end;
-posests_allcornersandlines = map(1:500) do _
+posests_allcornersandlines = map(1:1500) do _
     noisy_observations = [p + ProjectionPoint(2.0*randn(2)px) for p in true_observations]
     observed_lines = [
-        Line(
-          r + 1px*randn(),
-          theta + deg2rad(1°)*randn()
-        )
-        for (; r, theta) in true_lines
-      ]  
+      Line(r + 1px*randn(), theta + deg2rad(1°)*randn())
+      for (; r, theta) in true_lines
+    ]
     (cam_pos_est, cam_rot_est) = estimatepose6dof(
         PointFeatures(runway_corners[1:4], noisy_observations[1:4]),
         LineFeatures(line_pts, observed_lines)
@@ -98,7 +92,7 @@ with_theme(theme_black()) do
     scatter!(ax, [p .|> _ustrip(m) for p in posests_allcornersandlines]; label="4 corners+lines", alpha=0.8)
     fig[1,2] = Legend(fig, ax, "Comparing Solutions")
     fig
-    end
+end
 ```
 ## What if we know some more information?
 
@@ -108,16 +102,13 @@ Let's say we can fix the altitude (e.g. because we know we're on the ground).
 posests_fixedalt = map(1:500) do _
     noisy_observations = [p + ProjectionPoint(2.0*randn(2)px) for p in true_observations]
     observed_lines = [
-      Line(
-        r + 1px*randn(),
-        theta + deg2rad(1°)*randn()
-      )
+      Line(r + 1px*randn(), theta + deg2rad(1°)*randn())
       for (; r, theta) in true_lines
     ]
     (cam_pos_est, cam_rot_est) = estimatepose6dof(
         PointFeatures(runway_corners[1:2], noisy_observations[1:2]),
         LineFeatures(line_pts, observed_lines);
-        constraints=NTuple{1}((3=>ustrip(m, cam_pos.z),))
+        constraints=(3=>ustrip(m, cam_pos.z),)
     )[(:pos, :rot)]
     cam_pos_est
 end;
@@ -126,12 +117,13 @@ with_theme(theme_black()) do
   sl = Makie.Slider(fig[3,1], range=0:0.01:1.0, startvalue=0.6)
   ax = Axis3(fig[1:2,1]; aspect=:equal)
   scatter!(ax, [p .|> _ustrip(m) for p in posests]; label="2 corners+lines", alpha=sl.value)
-  scatter!(ax, [p .|> _ustrip(m) for p in posests_fixedalt]; label="+fixed altitude", alpha=sl.value)
+  scatter!(ax, [p .|> _ustrip(m) for p in posests_fixedalt]; label="+fixed altitude", alpha=0.6)
   fig[1,2] = Legend(fig, ax, "Comparing Solutions")
   fig
 end
 ```
 As we can see, fixing one of the variables works and is almost like "slicing" into the previous solution!
+
 ```julia (editor=true, logging=false, output=true)
 Revise.retry()
 ```
