@@ -39,7 +39,6 @@ PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
 
 [sources]
 SciMLBase = {rev = "rv/fix-jet-opt", url = "https://github.com/RomeoV/SciMLBase.jl"}
-StaticArraysCore = {rev="lazy-string", url="https://github.com/RomeoV/StaticArraysCore.jl"}
 NonlinearSolveBase = {rev="lazy-string", url="https://github.com/RomeoV/NonlinearSolve.jl", subdir="lib/NonlinearSolveBase"}
 
 [extensions]
@@ -69,6 +68,7 @@ PythonCall = "0.9"
 Rotations = "1"
 SciMLBase = "2.102.1"
 StaticArrays = "1"
+StaticArraysCore = "1.4.4"
 StatsBase = "0.34.5"
 TypedTables = "1"
 Unitful = "1"
