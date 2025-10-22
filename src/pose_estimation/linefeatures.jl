@@ -26,7 +26,7 @@ struct LineFeatures{
 end
 function LineFeatures(world_line_endpoints, observed_lines, camconfig=CAMERA_CONFIG_OFFSET, noisemodel::NoiseModel=_defaultnoisemodel_lines(world_line_endpoints))
     n = length(world_line_endpoints)
-    cov = covmatrix(noisemodel) |> (runway_corners isa StaticArray ? SMatrix{3n,3n} : Matrix)
+    cov = covmatrix(noisemodel) |> (world_line_endpoints isa StaticArray ? SMatrix{3n,3n} : Matrix)
     return LineFeatures(world_line_endpoints, observed_lines, camconfig, cov)
 end
 function LineFeatures(world_line_endpoints, observed_lines, camconfig, cov::AbstractMatrix)
