@@ -10,11 +10,15 @@ Parameters for 6-DOF pose optimization (position + attitude).
 """
 struct PoseOptimizationParams6DOF{
     PF<:PointFeatures,
-    LF<:LineFeatures
+    LF<:LineFeatures,
+    NC
 } <: AbstractPoseOptimizationParams
     point_features::PF
     line_features::LF
+    constraints::NTuple{NC,Pair{Int,Float64}}
 end
+PoseOptimizationParams6DOF(point_features::PF, line_features::LF) where {PF,LF} =
+    PoseOptimizationParams6DOF{PF,LF,0}(point_features, line_features, ())
 
 """
     PoseOptimizationParams3DOF{A, PF, LF}
@@ -24,12 +28,16 @@ Parameters for 3-DOF pose optimization (position only with known attitude).
 struct PoseOptimizationParams3DOF{
     A<:Rotation{3},
     PF<:PointFeatures,
-    LF<:LineFeatures
+    LF<:LineFeatures,
+    NC
 } <: AbstractPoseOptimizationParams
     point_features::PF
     line_features::LF
     known_attitude::A
+    constraints::NTuple{NC,Pair{Int,Float64}}
 end
+PoseOptimizationParams3DOF(point_features::PF, line_features::LF, known_attitude::A) where {PF,LF,A} =
+    PoseOptimizationParams3DOF{A,PF,LF,0}(point_features, line_features, known_attitude, ())
 
 "From optimization space into regular space."
 optvar2nominal(x::AT, ps::PoseOptimizationParams3DOF) where {AT} = SA[-exp(x[1]); x[2]; exp(x[3])] |> AT
@@ -98,8 +106,11 @@ function pose_optimization_objective(
     # Compute line feature residuals
     line_residuals = pose_optimization_objective_lines(cam_pos, cam_rot, ps.line_features)
 
+    # Constraint residuals
+    cstr_residuals = [1e1 * (optvar[i] - val) for (i, val) in SVector(ps.constraints)] |> SVector
+
     # Combine residuals
-    return reduce(vcat, (point_residuals, line_residuals)) |> Array
+    return reduce(vcat, (point_residuals, line_residuals, cstr_residuals)) |> Array
 end
 
 """
@@ -123,14 +134,15 @@ function estimatepose6dof(
     initial_guess_pos::AbstractVector{<:Length}=SA[-1000.0, 0.0, 100.0]m,
     initial_guess_rot::AbstractVector{<:DimensionlessQuantity}=SA[0.0, 0.0, 0.0]rad,
     cache=nothing,
-    solveargs=(;)
-)
+    solveargs=(;),
+    constraints::NTuple{NC,Pair{Int,Float64}}=(),
+) where {NC}
     u₀ = [
         initial_guess_pos .|> _ustrip(m);
         initial_guess_rot .|> _ustrip(rad)
     ]
 
-    ps = PoseOptimizationParams6DOF(point_features, line_features)
+    ps = PoseOptimizationParams6DOF(point_features, line_features, constraints)
     cache = isnothing(cache) ? makecache(u₀, ps) : (reinit!(cache, nominal2optvar(u₀, ps); p=ps); cache)
     solve!(cache; solveargs...)
     sol = (; u=optvar2nominal(cache.u, ps), retcode=cache.retcode)
@@ -150,7 +162,7 @@ function estimatepose6dof(
     initial_guess_pos::AbstractVector{<:Length}=SA[-1000.0, 0.0, 100.0]m,
     initial_guess_rot::AbstractVector{<:DimensionlessQuantity}=SA[0.0, 0.0, 0.0]rad,
     cache=nothing,
-    solveargs=(;)
+    solveargs=(;),
 ) where {T,N}
     point_features = PointFeatures(
         runway_corners |> Vector, observed_corners |> Vector,
@@ -167,11 +179,12 @@ function estimatepose3dof(
     known_attitude::RotZYX;
     initial_guess_pos::AbstractVector{<:Length}=SA[-1000.0, 0.0, 100.0]m,
     cache=nothing,
-    solveargs=(;)
-)
+    solveargs=(;),
+    constraints::NTuple{NC,Pair{Int,Float64}}=(),
+) where {NC}
     u₀ = initial_guess_pos .|> _ustrip(m)
 
-    ps = PoseOptimizationParams3DOF(point_features, line_features, known_attitude)
+    ps = PoseOptimizationParams3DOF(point_features, line_features, known_attitude, constraints)
     cache = isnothing(cache) ? makecache(u₀, ps) : (reinit!(cache, nominal2optvar(u₀, ps); p=ps):cache)
     solve!(cache; solveargs...)
     sol = (; u=optvar2nominal(cache.u, ps), retcode=cache.retcode)
