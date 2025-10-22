@@ -23,6 +23,10 @@ links = InterLinks(
         "https://romeov.github.io/ProbabilisticParameterEstimators.jl/dev/",
         "https://romeov.github.io/ProbabilisticParameterEstimators.jl/dev/objects.inv",
     ),
+    "NonlinearSolve" => (
+        "https://docs.sciml.ai/NonlinearSolve/stable/",
+        "https://docs.sciml.ai/NonlinearSolve/stable/objects.inv",
+    ),
 )
 
 makedocs(
