@@ -122,9 +122,3 @@ with_theme(theme_black()) do
 end
 ```
 As we can see, fixing one of the variables works and is almost like "slicing" into the previous solution!
-```julia (editor=true, logging=false, output=true)
-
-
-
-nothing
-```

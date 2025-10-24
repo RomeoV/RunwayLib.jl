@@ -1,4 +1,4 @@
-# Document Title
+# Experiment 1
 
 ```@setup experiment1
 using Bonito
