@@ -34,6 +34,9 @@ makedocs(
     format=Documenter.HTML(
         assets=String["assets/citations.css"],
         size_threshold_ignore=["benchmarks.md", "test_container.md"],
+        prettyurls=false,
+        size_threshold=3000000,
+        example_size_threshold=3000000
     ),
     modules=[RunwayLib],
     repo=Remotes.GitHub("RomeoV", "RunwayLib.jl"),
