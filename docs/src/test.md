@@ -1,9 +1,6 @@
 # Pose Estimation From Lines
 
 ```julia (editor=true, logging=false, output=true)
-using Revise
-```
-```julia (editor=true, logging=false, output=true)
 using WGLMakie: px as mpx
 using WGLMakie
 ```
@@ -125,10 +122,6 @@ with_theme(theme_black()) do
 end
 ```
 As we can see, fixing one of the variables works and is almost like "slicing" into the previous solution!
-
-```julia (editor=true, logging=false, output=true)
-Revise.retry()
-```
 ```julia (editor=true, logging=false, output=true)
 
 
