@@ -54,7 +54,8 @@ end;
 ```julia (editor=true, logging=false, output=true)
 with_theme(theme_black()) do
     fig = Figure()#size=(1200, 800))
-    ax = Axis3(fig[1,1]; aspect=:equal)
+    ax = LScene(fig[1,1]; show_axis=false)
+    Makie.scale!(ax.scene, 0.1,1,1)
     scatter!(ax, [p .|> _ustrip(m) for p in posests])
     fig
 end
@@ -85,7 +86,8 @@ end;
 with_theme(theme_black()) do
     fig = Figure()#size=(1000, 500))
     sl = Makie.Slider(fig[3,1], range=0:0.01:1.0, startvalue=0.6)
-    ax = Axis3(fig[1:2,1]; aspect=:equal)
+    ax = LScene(fig[1:2,1]; show_axis=false)
+    scale!(ax.scene, (0.1, 1, 1))
     scatter!(ax, [p .|> _ustrip(m) for p in posests]; label="2 corners+lines", alpha=sl.value)
     scatter!(ax, [p .|> _ustrip(m) for p in posests_onlycorners]; label="4 corners", alpha=sl.value)
     scatter!(ax, [p .|> _ustrip(m) for p in posests_allcornersandlines]; label="4 corners+lines", alpha=0.8)
@@ -114,7 +116,8 @@ end;
 with_theme(theme_black()) do
   fig = Figure()#size=(1000, 500))
   sl = Makie.Slider(fig[3,1], range=0:0.01:1.0, startvalue=0.6)
-  ax = Axis3(fig[1:2,1]; aspect=:equal)
+  ax = LScene(fig[1:2,1]; show_axis=false)
+  scale!(ax.scene, (0.1, 1, 1))
   scatter!(ax, [p .|> _ustrip(m) for p in posests]; label="2 corners+lines", alpha=sl.value)
   scatter!(ax, [p .|> _ustrip(m) for p in posests_fixedalt]; label="+fixed altitude", alpha=0.6)
   fig[1,2] = Legend(fig, ax, "Comparing Solutions")
