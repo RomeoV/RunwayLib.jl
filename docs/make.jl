@@ -63,5 +63,7 @@ makedocs(
 # See "Hosting Documentation" and deploydocs() in the Documenter manual
 # for more information.
 deploydocs(
-    repo="github.com/RomeoV/RunwayLib.jl.git"
+    repo="github.com/RomeoV/RunwayLib.jl.git",
+    devbranch="master",
+    push_preview=true
 )
