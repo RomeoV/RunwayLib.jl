@@ -35,10 +35,17 @@ jobs:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
       - uses: julia-actions/cache@v2
+      - name: Clean up any stale CondaPkg environment
+        run: rm -rf .CondaPkg
       - uses: julia-actions/julia-buildpkg@v1
+        env:
+          # Prevent PythonCall from using CondaPkg if it exists in cached depot
+          JULIA_CONDAPKG_BACKEND: "Null"
       - uses: julia-actions/julia-runtest@v1
         env:
           GROUP: ${{ matrix.group }}
+          # Prevent PythonCall from using CondaPkg during tests
+          JULIA_CONDAPKG_BACKEND: "Null"
 
   python-smoke-test:
     name: Python Interface Smoke Test
