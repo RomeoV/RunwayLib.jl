@@ -61,4 +61,9 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       - name: Run Python smoke test
         working-directory: test/python_interface
+        env:
+          # Configure PythonCall to use the Python from PATH (managed by uv)
+          # instead of using CondaPkg to avoid race conditions during precompilation
+          JULIA_CONDAPKG_BACKEND: "Null"
+          JULIA_PYTHONCALL_EXE: "python"
         run: uv run smoke_test.py

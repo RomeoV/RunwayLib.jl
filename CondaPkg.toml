@@ -1,0 +1,9 @@
+# CondaPkg configuration for PythonCall
+# This ensures the Python environment is set up correctly
+
+[deps]
+# Minimal Python dependencies
+python = ">=3.9"
+
+[pip.deps]
+# Add any pip dependencies here if needed
