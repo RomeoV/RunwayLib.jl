@@ -59,6 +59,8 @@ jobs:
           arch: ${{ matrix.arch }}
       - uses: julia-actions/cache@v2
       - uses: astral-sh/setup-uv@v5
+      - name: Clean up any stale CondaPkg environment
+        run: rm -rf .CondaPkg
       - name: Run Python smoke test
         working-directory: test/python_interface
         env:
