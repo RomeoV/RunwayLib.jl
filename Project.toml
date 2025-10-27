@@ -38,7 +38,7 @@ Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
 
 [sources]
-NonlinearSolveBase = {rev="lazy-string", url="https://github.com/RomeoV/NonlinearSolve.jl", subdir="lib/NonlinearSolveBase"}
+NonlinearSolveBase = {rev="master", url="https://github.com/SciML/NonlinearSolve.jl", subdir="lib/NonlinearSolveBase"}
 
 [extensions]
 PythonCallExt = "PythonCall"
