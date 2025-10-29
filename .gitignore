@@ -2,6 +2,9 @@
 Manifest.toml
 main
 
+# CondaPkg Python environment (managed by PythonCall)
+.CondaPkg/
+
 # Compiled Julia/C libraries and artifacts
 juliac/RunwayLibCompiled/
 juliac/mainc
