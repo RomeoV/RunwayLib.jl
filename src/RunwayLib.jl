@@ -6,12 +6,12 @@ using LinearSolve: CholeskyFactorization, LinearSolve, init
 using Rotations: Rotations, RotZYX, Rotation, RodriguesParam
 using ADTypes: AutoForwardDiff
 using DifferentiationInterface: DifferentiationInterface, jacobian
+import StaticArrays: similar_type
+using StaticArrays: StaticArrays, FieldVector, SA, Size, SArray, SVector, SMatrix, MVector, setindex
 import NonlinearSolveBase
 include("piracy.jl")
 using NonlinearSolveFirstOrder: LevenbergMarquardt, NonlinearLeastSquaresProblem, NonlinearFunction,
     reinit!, solve!
-import StaticArrays: similar_type
-using StaticArrays: StaticArrays, FieldVector, SA, Size, SArray, SVector, SMatrix, MVector, setindex
 using TypedTables: TypedTables, Table
 using Unitful: Unitful, @u_str, @unit, NoUnits, Quantity, dimension, uconvert,
     ustrip, Length
