@@ -37,9 +37,6 @@ Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 [weakdeps]
 PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
 
-[sources]
-NonlinearSolveBase = {rev="master", url="https://github.com/SciML/NonlinearSolve.jl", subdir="lib/NonlinearSolveBase"}
-
 [extensions]
 PythonCallExt = "PythonCall"
 
