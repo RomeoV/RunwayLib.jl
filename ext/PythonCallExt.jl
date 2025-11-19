@@ -58,4 +58,25 @@ PointFeatures(runway_corners::AbstractVector, observed_corners::AbstractVector, 
         camconfig,
         noisemodel
     )
+
+
+LineFeatures(world_line_endpoints::AbstractVector, observed_lines::AbstractVector) =
+    LineFeatures(
+        identity.(world_line_endpoints),
+        identity.(observed_lines),
+    )
+LineFeatures(world_line_endpoints::AbstractVector, observed_lines::AbstractVector, camconfig) =
+    LineFeatures(
+        identity.(world_line_endpoints),
+        identity.(observed_lines),
+        camconfig,
+    )
+LineFeatures(world_line_endpoints::AbstractVector, observed_lines::AbstractVector, camconfig, noise) =
+    LineFeatures(
+        identity.(world_line_endpoints),
+        identity.(observed_lines),
+        camconfig,
+        noise
+    )
+
 end

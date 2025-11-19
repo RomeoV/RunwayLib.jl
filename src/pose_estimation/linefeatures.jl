@@ -24,12 +24,22 @@ struct LineFeatures{
     cov::M
     Linv::M′
 end
-function LineFeatures(world_line_endpoints, observed_lines, camconfig=CAMERA_CONFIG_OFFSET, noisemodel::NoiseModel=_defaultnoisemodel_lines(world_line_endpoints))
+function LineFeatures(
+    world_line_endpoints::AbstractVector{<:NTuple{2,<:WorldPoint{<:WithDims(m)}}},
+    observed_lines::AbstractVector{<:Line{<:WithDims(px),<:WithDims(rad)}},
+    camconfig=CAMERA_CONFIG_OFFSET,
+    noisemodel::NoiseModel=_defaultnoisemodel_lines(world_line_endpoints)
+)
     n = length(world_line_endpoints)
     cov = covmatrix(noisemodel) |> (world_line_endpoints isa StaticArray ? SMatrix{3n,3n} : Matrix)
     return LineFeatures(world_line_endpoints, observed_lines, camconfig, cov)
 end
-function LineFeatures(world_line_endpoints, observed_lines, camconfig, cov::AbstractMatrix)
+function LineFeatures(
+    world_line_endpoints::AbstractVector{<:NTuple{2,<:WorldPoint{<:WithDims(m)}}},
+    observed_lines::AbstractVector{<:Line{<:WithDims(px),<:WithDims(rad)}},
+    camconfig,
+    cov::AbstractMatrix
+)
     U = cholesky(cov).U
     Linv = inv(U')  # Preserve static array type if input is static
     return LineFeatures(world_line_endpoints, observed_lines, camconfig, cov, Linv)
