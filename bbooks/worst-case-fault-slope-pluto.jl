@@ -18,6 +18,8 @@ begin
 	using LinearAlgebra
 	import RunwayLib.StaticArrays: Size
 	using SparseArrays
+	using FileIO, MeshIO
+	using Tau
 end
 
 # ╔═╡ 46af6473-88bf-49b9-8dc9-0a72e995f784
@@ -26,6 +28,32 @@ main {
     max-width: 1000px;
 }
 """
+
+# ╔═╡ 64d2c0fd-2542-4b2c-80f6-134ed8434c3b
+HTML("""
+<!-- the wrapper span -->
+<div>
+	<button id="myrestart" href="#">Restart Notebook</button>
+	
+	<script>
+		const div = currentScript.parentElement
+		const button = div.querySelector("button#myrestart")
+		const cell= div.closest('pluto-cell')
+		console.log(button);
+		button.onclick = function() { restart_nb() };
+		function restart_nb() {
+			console.log("Restarting Notebook");
+		        cell._internal_pluto_actions.send(                    
+		            "restart_process",
+                            {},
+                            {
+                                notebook_id: editor_state.notebook.notebook_id,
+                            }
+                        )
+		};
+	</script>
+</div>
+""")
 
 # ╔═╡ ddee502b-6245-45eb-b4cc-ce4a4f749fcf
 runway_corners = [
@@ -73,10 +101,18 @@ Makie.wong_colors();
 # ╔═╡ 56e87bb5-b7e6-45c1-a2cb-95e0aaf2a000
 drand = normalize(randn(8))
 
+# ╔═╡ 59a0ab1e-0360-4d24-9320-fb3966062b9d
+aircraft_model = load(joinpath("assets", "A320NeoV2_lowpoly.stl"));
+
 # ╔═╡ 120a3051-4909-4e65-a35d-82e76b706567
 function setup_corner_selections(fig)
 	gl = GridLayout(fig[3, 1:2], tellwidth = false)		
-	axismenu = Menu(gl[1, 0], options = ["alongtrack", "crosstrack", "altitude"], default = "alongtrack", tellwidth=true, width=100)
+	axismenu = Menu(gl[1, 0], 
+					options = [
+						"alongtrack", "crosstrack", "altitude",
+						"yaw", "pitch", "roll",
+					],
+					default = "alongtrack", tellwidth=true, width=100)
 	
 	subgl = GridLayout(gl[1, 1])
 	
@@ -93,6 +129,24 @@ function setup_corner_selections(fig)
 	rowgap!(subgl, 8)
 	colgap!(subgl, 8)
 	(; gl, cbs, axismenu)
+end
+
+# ╔═╡ e2850d53-5bd7-4515-8ccf-1f8b3cb4f02a
+Rotations.QuatRotation(RotZ(τ*rad/4)) |> Rotations.params
+
+# ╔═╡ 684bd932-6cd1-4fe8-bd1f-76998de1b2e7
+function quat_from_rotmatrix(dcm::AbstractMatrix{T}) where {T<:Real}
+    a2 = 1 + dcm[1,1] + dcm[2,2] + dcm[3,3]
+    a = sqrt(a2)/2
+    b,c,d = (dcm[3,2]-dcm[2,3])/4a, (dcm[1,3]-dcm[3,1])/4a, (dcm[2,1]-dcm[1,2])/4a
+    return Quaternion(a,b,c,d)
+end
+
+# ╔═╡ b495605a-ffe7-4783-a490-1d635731da0a
+# corrects the mesh rotation, adds our rotation, and turns it to quaternion for Makie
+function to_corrected_quat(R::Rotation{3})
+	quat = QuatRotation(R * RotZ(1/4 * τ))
+	Quaternion(quat.x, quat.y, quat.z, quat.w)
 end
 
 # ╔═╡ 853b6a37-c9aa-4ef3-9a46-bcd4e06807f7
@@ -161,6 +215,7 @@ with_theme(theme_black()) do
 	    PointFeatures(runway_corners, $perturbed_observations)
 	)
 	cam_pos_pert = @lift $(cam_pose_est_pert).pos
+	cam_rot_pert = @lift $(cam_pose_est_pert).rot
 
 	passed = @lift compute_integrity_statistic(
         $(cam_pose_est_pert)[(:pos, :rot)]...,
@@ -169,17 +224,25 @@ with_theme(theme_black()) do
         2.0*I(length(runway_corners)*2)
     ).p_value > 0.05
 
-	ax3 = Axis3(fig[1,1]; title="Pose Estimate")
-	scatter!(ax3, @lift [
+	ax3 = Axis3(fig[1,1]; title="Pose Estimate")#, limits=(-2500, 1500, -100, 100, 0, 200))
+	meshscatter!(ax3, @lift [
 		              cam_pos_est .|> _ustrip(m),
 		              $(cam_pos_pert) .|> _ustrip(m)
-				  ]; color=@lift([(c1, 1.0), (($(passed) ? :green : :red), 1.0)]))
+				  ]; 
+				 color=@lift([(c1, 1.0), (($(passed) ? :green : :red), 1.0)]),
+				 marker=aircraft_model, 
+				 markersize=1/3,
+				 rotation=@lift to_corrected_quat.([
+					 $cam_rot_est, $cam_rot_pert
+				 ])			 
+				)
 
 	
 	ax = Axis(fig[1,2]; yreversed=true, title="Perturbed Observations")
 	
 	scatterlines!(ax, [obs .|> _ustrip(px) for obs in cycle(true_observations)])
-
+    scatterlines!(ax, @lift([obs .|> _ustrip(px) for obs in cycle(yobs_pts .+ $yperturb_pts .+ $yrand_pts .+ $yfi_pts)]); color=(:yellow, 0.5), linestyle=:dash)
+	
 	arrows2d!(ax, [obs .|> _ustrip(px) for obs in yobs_pts],
 			    yperturb_pts;
 			  color=:red
@@ -285,6 +348,7 @@ end
 # ╔═╡ Cell order:
 # ╟─46af6473-88bf-49b9-8dc9-0a72e995f784
 # ╠═b5b8f3c8-c4dc-11f0-82e6-e3e1218a8fd8
+# ╟─64d2c0fd-2542-4b2c-80f6-134ed8434c3b
 # ╠═47423636-18d6-42cb-85e6-4a0909dc168d
 # ╠═ddee502b-6245-45eb-b4cc-ce4a4f749fcf
 # ╠═2fe79916-81bf-4487-bd21-4656783cc4c6
@@ -298,7 +362,11 @@ end
 # ╠═d5a57f78-dae7-4ceb-aab5-a83a6dddc204
 # ╠═49755fa4-babc-43a7-86db-2afcc96b18f7
 # ╠═56e87bb5-b7e6-45c1-a2cb-95e0aaf2a000
-# ╟─120a3051-4909-4e65-a35d-82e76b706567
+# ╠═59a0ab1e-0360-4d24-9320-fb3966062b9d
+# ╠═120a3051-4909-4e65-a35d-82e76b706567
+# ╠═e2850d53-5bd7-4515-8ccf-1f8b3cb4f02a
+# ╠═684bd932-6cd1-4fe8-bd1f-76998de1b2e7
+# ╠═b495605a-ffe7-4783-a490-1d635731da0a
 # ╠═a530d3e4-22db-4744-8b39-5947be16772c
 # ╠═656fdbdc-2614-4aa0-a4dc-4021c5b2ea8c
 # ╠═853b6a37-c9aa-4ef3-9a46-bcd4e06807f7
