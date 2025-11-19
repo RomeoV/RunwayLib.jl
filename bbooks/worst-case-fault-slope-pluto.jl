@@ -68,11 +68,32 @@ cycle(xs::AbstractVector) = xs[[eachindex(xs); first(eachindex(xs))]]
 (x, y) = true_observations[1]
 
 # ╔═╡ 49755fa4-babc-43a7-86db-2afcc96b18f7
-Makie.wong_colors()
+Makie.wong_colors();
 
 # ╔═╡ 56e87bb5-b7e6-45c1-a2cb-95e0aaf2a000
 drand = normalize(randn(8))
-#drand = f_i
+
+# ╔═╡ 120a3051-4909-4e65-a35d-82e76b706567
+function setup_corner_selections(fig)
+	gl = GridLayout(fig[3, 1:2], tellwidth = false)		
+	axismenu = Menu(gl[1, 0], options = ["alongtrack", "crosstrack", "altitude"], default = "alongtrack", tellwidth=true, width=100)
+	
+	subgl = GridLayout(gl[1, 1])
+	
+	cb1 = Checkbox(subgl[1, 1], checked = true)
+	cb2 = Checkbox(subgl[2, 1], checked = false)
+	cb3 = Checkbox(subgl[3, 1], checked = false)
+	cb4 = Checkbox(subgl[4, 1], checked = false)
+	cbs = [cb1, cb2, cb3, cb4]
+
+	Label(subgl[1, 2], "Near Left", halign = :left)
+	Label(subgl[2, 2], "Far Left", halign = :left)
+	Label(subgl[3, 2], "Far Right", halign = :left)
+	Label(subgl[4, 2], "Near Right", halign = :left)
+	rowgap!(subgl, 8)
+	colgap!(subgl, 8)
+	(; gl, cbs, axismenu)
+end
 
 # ╔═╡ 853b6a37-c9aa-4ef3-9a46-bcd4e06807f7
 # find fi = (In - HH^+)^{inv}* alpha H^+
@@ -99,7 +120,7 @@ function computefi(alphaidx, fault_indices, H; normalize=true)
 	A_i = sparse(collect(fault_indices), 1:nf, ones(nf), n, nf)
     # Compute worst-case fault direction
     proj_parity = I - H * S_0
-    f_i = A_i * inv(A_i' * proj_parity * A_i) * (A_i' * s_0)
+    f_i = A_i * ((A_i' * proj_parity * A_i) \ (A_i' * s_0))
     
     normalize && normalize!(f_i)
     f_i
@@ -120,29 +141,14 @@ with_theme(theme_black()) do
 	)
 	sl1, sl2, sl3, sl4 = slg.sliders;
 
-	gl = GridLayout(fig[3, 1:2], tellwidth = false)
-	axismenu = Menu(gl[1, 0], options = ["alongtrack", "crosstrack", "altitude"], default = "alongtrack", tellwidth=true, width=100)
-	
-	subgl = GridLayout(gl[1, 1])
-	
-	cb1 = Checkbox(subgl[1, 1], checked = true)
-	cb2 = Checkbox(subgl[2, 1], checked = false)
-	cb3 = Checkbox(subgl[3, 1], checked = false)
-	cb4 = Checkbox(subgl[4, 1], checked = false)
-	cbs = [cb1, cb2, cb3, cb4]
-
-	Label(subgl[1, 2], "Near Left", halign = :left)
-	Label(subgl[2, 2], "Far Left", halign = :left)
-	Label(subgl[3, 2], "Far Right", halign = :left)
-	Label(subgl[4, 2], "Near Right", halign = :left)
-	rowgap!(subgl, 8)
-	colgap!(subgl, 8)
+	(; gl, cbs, axismenu) = setup_corner_selections(fig)
+	cb1, cb2, cb3, cb4 = cbs
 	fi_indices = @lift let
 		idx = findall([$(cb1.checked), $(cb2.checked), $(cb3.checked), $(cb4.checked)])
 		[(1:2:8)[idx];
 		 (2:2:8)[idx]]
 	end
-	alphaidx = @lift findfirst(==($(axismenu.selection)), axismenu.options[])
+	alphaidx = @lift findfirst(==($(axismenu.selection)), $(axismenu.options))
 	yobs_pts = Point2.(true_observations)
 	yperturb = @lift Q' * [$(sl1.value); $(sl2.value)]
 	yperturb_pts = @lift ProjectionPoint.(eachcol(reshape($yperturb, 2, :)))*px
@@ -292,6 +298,7 @@ end
 # ╠═d5a57f78-dae7-4ceb-aab5-a83a6dddc204
 # ╠═49755fa4-babc-43a7-86db-2afcc96b18f7
 # ╠═56e87bb5-b7e6-45c1-a2cb-95e0aaf2a000
+# ╟─120a3051-4909-4e65-a35d-82e76b706567
 # ╠═a530d3e4-22db-4744-8b39-5947be16772c
 # ╠═656fdbdc-2614-4aa0-a4dc-4021c5b2ea8c
 # ╠═853b6a37-c9aa-4ef3-9a46-bcd4e06807f7
