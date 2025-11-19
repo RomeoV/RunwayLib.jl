@@ -16,6 +16,8 @@ begin
 	using Unitful
     import RunwayLib: px, _ustrip
 	using LinearAlgebra
+	import RunwayLib.StaticArrays: Size
+	using SparseArrays
 end
 
 # ╔═╡ 46af6473-88bf-49b9-8dc9-0a72e995f784
@@ -66,48 +68,11 @@ cycle(xs::AbstractVector) = xs[[eachindex(xs); first(eachindex(xs))]]
 (x, y) = true_observations[1]
 
 # ╔═╡ 49755fa4-babc-43a7-86db-2afcc96b18f7
-Makie.wong_colors();
+Makie.wong_colors()
 
 # ╔═╡ 56e87bb5-b7e6-45c1-a2cb-95e0aaf2a000
 drand = normalize(randn(8))
-
-# ╔═╡ a530d3e4-22db-4744-8b39-5947be16772c
-with_theme(theme_black()) do
-	c1, c2, c3, c4, c5, c6, c7 = Makie.wong_colors()
-
-	fig = Figure(; size=(900, 600))
-	slg = Makie.SliderGrid(
-		fig[2, 1:2],
-		(label="perturbation dir 1: ", range=-100:0.5:100, startvalue=0.0),
-		(label="perturbation dir 2:", range=-100:0.5:100, startvalue=0.0),
-		(label="random pertubation: ", range=-100:0.5:100, startvalue=0.0),
-	)
-	sl1, sl2, sl3 = slg.sliders;
-	yperturb = @lift [Q' drand] * [$(sl1.value); $(sl2.value); $(sl3.value)]
-
-	perturbed_observations = @lift noisy_observations .+ ProjectionPoint.(eachcol(reshape($yperturb, 2, :)))*px
-	cam_pos_pert = @lift estimatepose6dof(
-	    PointFeatures(runway_corners, $perturbed_observations)
-	)[:pos]
-
-	ax3 = Axis3(fig[1,1]; title="Pose Estimate")
-	scatter!(ax3, @lift [
-		              cam_pos_est .|> _ustrip(m),
-		              $(cam_pos_pert) .|> _ustrip(m)
-				  ]; color=[c1, c6])
-
-	
-	ax = Axis(fig[1,2]; yreversed=true, title="Perturbed Observations")
-	
-	scatterlines!(ax, [obs .|> _ustrip(px) for obs in cycle(true_observations)])
-
-	arrows2d!(ax, Point2.([obs .|> _ustrip(px) for obs in true_observations]),
-			    @lift(Point2.(eachcol(reshape($yperturb, 2, :))));
-			  color=:red
-		   )
-			
-	fig
-end
+#drand = f_i
 
 # ╔═╡ 853b6a37-c9aa-4ef3-9a46-bcd4e06807f7
 # find fi = (In - HH^+)^{inv}* alpha H^+
@@ -121,6 +86,119 @@ function computefi(alphaidx, H; normalize=true)
 end
 #f_i = computefi(1, H)
 #g_fi = sqrt(s_0' * computefi(1, H; normalize=false))
+
+# ╔═╡ 683af497-4a84-40dd-87e8-0e06ba04d6a3
+function computefi(alphaidx, fault_indices, H; normalize=true)
+    α = let alpha = zeros(6); alpha[alphaidx] = 1; alpha end
+    S_0 = pinv(H)
+    s_0 = S_0' * α
+    
+    # Create selection matrix for dual fault
+    n = size(H, 1)
+	nf = length(fault_indices)
+	A_i = sparse(collect(fault_indices), 1:nf, ones(nf), n, nf)
+    # Compute worst-case fault direction
+    proj_parity = I - H * S_0
+    f_i = A_i * inv(A_i' * proj_parity * A_i) * (A_i' * s_0)
+    
+    normalize && normalize!(f_i)
+    f_i
+end
+
+
+# ╔═╡ a530d3e4-22db-4744-8b39-5947be16772c
+with_theme(theme_black()) do
+	c1, c2, c3, c4, c5, c6, c7 = Makie.wong_colors()
+
+	fig = Figure(; size=(900, 600))
+	slg = Makie.SliderGrid(
+		fig[2, 1:2],
+		(label="perturbation dir 1: ", range=-100:0.5:100, startvalue=0.0),
+		(label="perturbation dir 2:", range=-100:0.5:100, startvalue=0.0),
+		(label="random pertubation: ", range=-100:0.5:100, startvalue=0.0),
+		(label="worst case pertubation: ", range=-100:0.5:100, startvalue=0.0),
+	)
+	sl1, sl2, sl3, sl4 = slg.sliders;
+
+	gl = GridLayout(fig[3, 1:2], tellwidth = false)
+	axismenu = Menu(gl[1, 0], options = ["alongtrack", "crosstrack", "altitude"], default = "alongtrack", tellwidth=true, width=100)
+	
+	subgl = GridLayout(gl[1, 1])
+	
+	cb1 = Checkbox(subgl[1, 1], checked = true)
+	cb2 = Checkbox(subgl[2, 1], checked = false)
+	cb3 = Checkbox(subgl[3, 1], checked = false)
+	cb4 = Checkbox(subgl[4, 1], checked = false)
+	cbs = [cb1, cb2, cb3, cb4]
+
+	Label(subgl[1, 2], "Near Left", halign = :left)
+	Label(subgl[2, 2], "Far Left", halign = :left)
+	Label(subgl[3, 2], "Far Right", halign = :left)
+	Label(subgl[4, 2], "Near Right", halign = :left)
+	rowgap!(subgl, 8)
+	colgap!(subgl, 8)
+	fi_indices = @lift let
+		idx = findall([$(cb1.checked), $(cb2.checked), $(cb3.checked), $(cb4.checked)])
+		[(1:2:8)[idx];
+		 (2:2:8)[idx]]
+	end
+	alphaidx = @lift findfirst(==($(axismenu.selection)), axismenu.options[])
+	yobs_pts = Point2.(true_observations)
+	yperturb = @lift Q' * [$(sl1.value); $(sl2.value)]
+	yperturb_pts = @lift ProjectionPoint.(eachcol(reshape($yperturb, 2, :)))*px
+	yrand_pts = @lift ProjectionPoint.(eachcol(reshape($(sl3.value) * drand, 2, :)))*px
+	f_i = @lift computefi($alphaidx, $fi_indices, H)
+	yfi_pts = @lift ProjectionPoint.(eachcol(reshape($(sl4.value) * $f_i, 2, :)))*px
+
+	perturbed_observations = @lift noisy_observations .+ $yperturb_pts .+ $yrand_pts .+ $yfi_pts
+	cam_pose_est_pert = @lift estimatepose6dof(
+	    PointFeatures(runway_corners, $perturbed_observations)
+	)
+	cam_pos_pert = @lift $(cam_pose_est_pert).pos
+
+	passed = @lift compute_integrity_statistic(
+        $(cam_pose_est_pert)[(:pos, :rot)]...,
+        runway_corners,
+        $perturbed_observations, 
+        2.0*I(length(runway_corners)*2)
+    ).p_value > 0.05
+
+	ax3 = Axis3(fig[1,1]; title="Pose Estimate")
+	scatter!(ax3, @lift [
+		              cam_pos_est .|> _ustrip(m),
+		              $(cam_pos_pert) .|> _ustrip(m)
+				  ]; color=@lift([(c1, 1.0), (($(passed) ? :green : :red), 1.0)]))
+
+	
+	ax = Axis(fig[1,2]; yreversed=true, title="Perturbed Observations")
+	
+	scatterlines!(ax, [obs .|> _ustrip(px) for obs in cycle(true_observations)])
+
+	arrows2d!(ax, [obs .|> _ustrip(px) for obs in yobs_pts],
+			    yperturb_pts;
+			  color=:red
+		   )
+	arrows2d!(ax, @lift([obs .|> _ustrip(px) for obs in (yobs_pts .+ $yperturb_pts)]),
+			    yrand_pts;
+			  color=c7
+		   )
+	arrows2d!(ax, @lift([obs .|> _ustrip(px) for obs in (yobs_pts .+ $yperturb_pts .+ $yrand_pts)]),
+			yfi_pts;
+		  color=c4
+	   )
+
+
+	#arrows2d!(ax, @lift(Point2.([obs .|> _ustrip(px) for obs in true_observations]) .+ $yperturb_pts),
+	#		yf_ipts;
+	#	  color=c4
+	#   )
+
+			
+	fig
+end
+
+# ╔═╡ 656fdbdc-2614-4aa0-a4dc-4021c5b2ea8c
+f_i = computefi(1, H)
 
 # ╔═╡ 6e3438b3-81b1-4055-87f9-28731bd674c2
 function get_pvalue(ø, (; threshold, std, alphaidx, H))
@@ -215,7 +293,9 @@ end
 # ╠═49755fa4-babc-43a7-86db-2afcc96b18f7
 # ╠═56e87bb5-b7e6-45c1-a2cb-95e0aaf2a000
 # ╠═a530d3e4-22db-4744-8b39-5947be16772c
+# ╠═656fdbdc-2614-4aa0-a4dc-4021c5b2ea8c
 # ╠═853b6a37-c9aa-4ef3-9a46-bcd4e06807f7
+# ╠═683af497-4a84-40dd-87e8-0e06ba04d6a3
 # ╠═6e3438b3-81b1-4055-87f9-28731bd674c2
 # ╠═17bffe68-fcf8-406d-b2e1-31ebdece6af3
 # ╠═3beb4274-3955-4ac4-af4c-2770e58a769b
