@@ -27,13 +27,30 @@ camconf = jl.CameraMatrix[jl.Symbol("offset")](
     intrinsic_matrix, jl.px(2048.0), jl.px(1024.0),
 )
 
-jl.seval("using RunwayLib.Unitful: ustrip")
-res_jl = jl.estimatepose6dof(points3d, points2d, camconf)
+jl.seval("using RunwayLib.Unitful: ustrip, rad")
+
+line_pts = [
+    (points3d[1], points3d[2]),  # near left, far left, according to points3d
+    (points3d[0], points3d[3])   # near right, far right, according to points3d
+];
+observed_lines = [
+    # these are bogus numbers for illustration purposes only
+    jl.Line(
+        jl.px(2000.0),
+        jl.rad(np.deg2rad(1))
+    ),
+    jl.Line(
+        jl.px(2000.0),
+        jl.rad(np.deg2rad(-1))
+    )
+];
+
+res_jl = jl.estimatepose6dof(
+    jl.PointFeatures(points3d, points2d, camconf),
+    jl.LineFeatures(line_pts, observed_lines, camconf)
+)
 pos = np.asarray(jl.broadcast(jl.ustrip, res_jl.pos))  # or `np.array(..., copy=None)`
 rot = np.asarray(res_jl.rot)
-
-for i in range(1_000):
-    jl.estimatepose6dof(points3d, points2d, camconf)
 
 # Smoke test assertions
 assert pos.shape == (3,), f"Expected position shape (3,), got {pos.shape}"
