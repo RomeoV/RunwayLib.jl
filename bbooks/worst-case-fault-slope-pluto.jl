@@ -11,15 +11,15 @@ import Pkg; Pkg.activate(".")
 begin
 	using RunwayLib
 	using WGLMakie
-	using BracketingNonlinearSolve
+	using BracketingNonlinearSolve  # line search
 	using Unitful.DefaultSymbols, Rotations
 	using Unitful
     import RunwayLib: px, _ustrip
 	using LinearAlgebra
 	import RunwayLib.StaticArrays: Size
 	using SparseArrays
-	using FileIO, MeshIO
-	using Tau
+	using FileIO, MeshIO  # load airplane mesh
+	using Tau  # τ=2π
 end
 
 # ╔═╡ 46af6473-88bf-49b9-8dc9-0a72e995f784
