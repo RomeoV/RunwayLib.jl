@@ -215,12 +215,21 @@ with_theme(theme_black()) do
 	cam_rot_pert = @lift $(cam_pose_est_pert).rot
 
 	pose_delta_layout = GridLayout(control_menu[1,0])
-	Label(pose_delta_layout[0, 1], text="Pose Delta", font=:bold)
+	Label(pose_delta_layout[0, 0:1], text="Pose Delta", font=:bold)
+	Label(pose_delta_layout[1, 0], text="x = \ny = \nz = ")
 	Label(pose_delta_layout[1, 1], text=@lift(let 
 		s = repr("text/plain", round.([typeof(1.0m)], (cam_pos_est - $cam_pos_pert); digits=2))
 		split(s, '\n')[2:end] |> x->join(x, '\n')
 	end), halign=:right)
 	rowgap!(pose_delta_layout, 0)
+	colgap!(pose_delta_layout, 0)
+	Label(pose_delta_layout[0, 2:4], text="Attitude Delta", font=:bold)
+	Label(pose_delta_layout[1, 2], text="roll\npitch\nyaw", justification=:left)
+	Label(pose_delta_layout[1, 3], text="=\n=\n=", justification=:left)
+	Label(pose_delta_layout[1, 4], text=@lift(let 
+		s = repr("text/plain", round.([typeof(1.0°)], reverse(rad2deg.((params($cam_rot_pert) - params(cam_rot_est)).*rad)); digits=1))
+		split(s, '\n')[2:end] |> x->join(x, '\n')
+	end), halign=:right)
 
 
 	passed = @lift compute_integrity_statistic(
@@ -233,9 +242,9 @@ with_theme(theme_black()) do
 	# POSE VIEW
 	ax3 = Axis3(fig[1,1]; title="Pose Estimate", 
 				aspect=:data,
-			    xlabel="alongtrack [m]",
-			    ylabel="crosstrack [m]",
-			    zlabel="altitude [m]"
+			    xlabel="x = alongtrack [m]",
+			    ylabel="y = crosstrack [m]",
+			    zlabel="z = altitude [m]"
 			   )
 	## Plot Aircraft
 	meshargs = (;
