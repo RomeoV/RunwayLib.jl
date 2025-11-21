@@ -149,12 +149,6 @@ function to_corrected_quat(R::Rotation{3})
 	Quaternion(quat.x, quat.y, quat.z, quat.w)
 end
 
-# ╔═╡ fe706472-f0f1-49cd-94db-ca4537012491
-LinearAlgebra.pinv(M::AbstractMatrix{<:Quantity}) = pinv(ustrip(M)) * inv(oneunit(first(M)))
-
-# ╔═╡ a76ba211-2106-40b2-a326-cac15b4545c4
-LinearAlgebra.pinv(M::UnitfulMatrix) = pinv(M.data) * inv(oneunit(first(M)))
-
 # ╔═╡ 683af497-4a84-40dd-87e8-0e06ba04d6a3
 function computefi(alphaidx, fault_indices, H; normalize=true, sixdof=true)
     α = let alpha = zeros(sixdof ? 6 : 3); alpha[alphaidx] = 1; alpha end
@@ -363,8 +357,14 @@ function compute_slope_nounits(alphaidx, fault_indices, H)
 end
 
 
-# ╔═╡ 5a7c8917-f1d0-482c-8e3d-c42d9e11412d
-pinv(rand(3,3)*1m)
+# ╔═╡ fe706472-f0f1-49cd-94db-ca4537012491
+#LinearAlgebra.pinv(M::AbstractMatrix{<:Quantity}) = pinv(ustrip(M)) * inv(oneunit(first(M)))
+
+# ╔═╡ a76ba211-2106-40b2-a326-cac15b4545c4
+#LinearAlgebra.pinv(M::UnitfulMatrix) = pinv(M.data) * inv(oneunit(first(M)))
+
+# ╔═╡ e00d78a4-0d5c-4e63-b0de-e2a5cac79abd
+UnitfulMatrix(H * px/m) |> pinv
 
 # ╔═╡ 05fd4f82-3e37-4f50-83ed-66474a8f3003
 let H_=copy(H), alphaidx=1, fault_indices=[1, 2]
