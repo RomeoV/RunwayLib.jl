@@ -331,50 +331,6 @@ function get_pvalue(ø, (; threshold, std, alphaidx, H))
     p - threshold
 end
 
-# ╔═╡ 532e4b44-f7f6-47b6-bb49-58257d2b1157
-"""
-Computes the Worst-Case Failure Mode Slope (g) for a given state and fault subset.
-Ref: Equation (32) in Joerger et al. 2014.
-
-g² = (s₀ᵀ A) (Aᵀ P A)⁻¹ (Aᵀ s₀)
-"""
-function compute_slope_nounits(alphaidx, fault_indices, H)
-	# 1. Define extraction vector s₀ for the state of interest (alpha)
-	α = let alpha = zeros(6); alpha[alphaidx] = 1; alpha end
-	S_0 = pinv(H)
-	s_0 = S_0' * α
-	
-	# 2. Define Parity Projection Matrix P
-	# P = I - H(HᵀH)⁻¹Hᵀ = I - H S₀
-	proj_parity = I - H * S_0
-
-	# 3. Define Fault Selection Matrix A
-	n = size(H, 1)
-	nf = length(fault_indices)
-	A_i = sparse(collect(fault_indices), 1:nf, ones(nf), n, nf)
-
-	# 4. Compute Slope Squared (Eq 32)
-	# The term m_Xi in the paper is Aᵀ s₀
-	m_Xi = A_i' * s_0
-	
-	# The central term (Aᵀ (I - H S₀) A)⁻¹
-	# This measures how "visible" faults in this subspace are to the parity check
-	visibility_matrix = A_i' * proj_parity * A_i
-	
-	g_squared = m_Xi' * (visibility_matrix \ m_Xi)
-	return sqrt(g_squared)
-end
-
-
-# ╔═╡ fe706472-f0f1-49cd-94db-ca4537012491
-#LinearAlgebra.pinv(M::AbstractMatrix{<:Quantity}) = pinv(ustrip(M)) * inv(oneunit(first(M)))
-
-# ╔═╡ a76ba211-2106-40b2-a326-cac15b4545c4
-#LinearAlgebra.pinv(M::UnitfulMatrix) = pinv(M.data) * inv(oneunit(first(M)))
-
-# ╔═╡ e00d78a4-0d5c-4e63-b0de-e2a5cac79abd
-UnitfulMatrix(H * px/m) |> pinv
-
 # ╔═╡ 05fd4f82-3e37-4f50-83ed-66474a8f3003
 let H_=copy(H), alphaidx=1, fault_indices=[1, 2]
 H = H_*px/m |> UnitfulMatrix
@@ -404,6 +360,12 @@ H = H_*px/m |> UnitfulMatrix
 end
 
 # ╔═╡ 41d7ef29-0a65-488e-9a28-1d625c61703c
+"""
+Computes the Worst-Case Failure Mode Slope (g) for a given state and fault subset.
+Ref: Equation (32) in Joerger et al. 2014.
+
+g² = (s₀ᵀ A) (Aᵀ P A)⁻¹ (Aᵀ s₀)
+"""
 function compute_slope(alphaidx, fault_indices, H_)
 	H = H_*px/m |> UnitfulMatrix
 	# 1. Define extraction vector s₀ for the state of interest (alpha)
@@ -702,10 +664,6 @@ end
 # ╠═a530d3e4-22db-4744-8b39-5947be16772c
 # ╠═683af497-4a84-40dd-87e8-0e06ba04d6a3
 # ╠═6e3438b3-81b1-4055-87f9-28731bd674c2
-# ╠═532e4b44-f7f6-47b6-bb49-58257d2b1157
-# ╠═fe706472-f0f1-49cd-94db-ca4537012491
-# ╠═a76ba211-2106-40b2-a326-cac15b4545c4
-# ╠═e00d78a4-0d5c-4e63-b0de-e2a5cac79abd
 # ╠═05fd4f82-3e37-4f50-83ed-66474a8f3003
 # ╠═41d7ef29-0a65-488e-9a28-1d625c61703c
 # ╠═c208ce81-b980-405e-8698-f632e1898630
