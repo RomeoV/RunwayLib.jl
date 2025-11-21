@@ -641,6 +641,172 @@ let
 end
 
 
+# ╔═╡ 5c6760d3-7aed-4a17-a5e6-5dbf420fc6e1
+md"# Refactored visualization"
+
+# ╔═╡ 25348c41-f099-459c-9b19-250a66a01cab
+begin
+function setup_ui(fig, _ctx)
+    # Slider Grid
+    slg = Makie.SliderGrid(
+        fig[3, 1:2],
+        (label="perturbation dir 1: ", range=-100:0.5:100, startvalue=0.0),
+        (label="perturbation dir 2:", range=-100:0.5:100, startvalue=0.0),
+        (label="random pertubation: ", range=-100:0.5:100, startvalue=0.0),
+        (label="worst case pertubation: ", range=-10:0.05:10, startvalue=0.0),
+    )
+    sl1, sl2, sl3, sl4 = slg.sliders
+
+    # Control Layout Area
+    control_layout = GridLayout(fig[2, 1:2])
+
+    # Corner Selections
+    (; gl, cbs, axismenu) = setup_corner_selections(control_layout[1, 1])
+    
+    # Visual Toggle
+    visual_menu = GridLayout(control_layout[1, 2]; tell_width=false)
+    Label(visual_menu[1, 1], text="Show Runway")
+    show_runway = Checkbox(visual_menu[1, 2], checked=false)
+
+    return (; sl1, sl2, sl3, sl4, cbs, axismenu, show_runway, control_layout)
+end
+
+# 2. Computations (The Pipeline)
+function do_computations(ui, ctx)
+	(; Q, px, drand, H, true_observations, noisy_observations, runway_corners) = ctx
+    (; sl1, sl2, sl3, sl4, cbs, axismenu) = ui
+    cb1, cb2, cb3, cb4 = cbs
+
+    # Helper Logic
+    fi_indices = @lift let
+        idx = findall([$(cb1.checked), $(cb2.checked), $(cb3.checked), $(cb4.checked)])
+        sort([(1:2:8)[idx]; (2:2:8)[idx]])
+    end
+
+    alphaidx = @lift Dict(1=>1, 2=>2, 3=>3, 4=>6, 5=>5, 6=>4)[$(axismenu.i_selected)]
+    
+    # Points Calculations
+    yobs_pts = Point2.(true_observations)
+    yperturb = @lift Q' * [$(sl1.value); $(sl2.value)]
+    yperturb_pts = @lift ProjectionPoint.(eachcol(reshape($yperturb, 2, :))) * px
+    yrand_pts = @lift ProjectionPoint.(eachcol(reshape($(sl3.value) * drand, 2, :))) * px
+    
+    f_i = @lift computefi($alphaidx, $fi_indices, H)
+    yfi_pts = @lift let sl4val = $(sl4.value)
+        ProjectionPoint.(eachcol(reshape(sign(sl4val)*exp(abs(sl4val)) * $f_i, 2, :))) * px
+    end
+
+    # Summation and Pose Estimation
+    perturbed_observations = @lift noisy_observations .+ $yperturb_pts .+ $yrand_pts .+ $yfi_pts
+    
+    cam_pose_est_pert = @lift estimatepose6dof(
+        PointFeatures(runway_corners, $perturbed_observations)
+    )
+    cam_pos_pert = @lift $(cam_pose_est_pert).pos
+    cam_rot_pert = @lift $(cam_pose_est_pert).rot
+
+    # Integrity Check
+    passed = @lift compute_integrity_statistic(
+        $(cam_pose_est_pert)[(:pos, :rot)]...,
+        runway_corners,
+        $perturbed_observations, 
+        2.0*I(length(runway_corners)*2)
+    ).p_value > 0.05
+
+    return (; yobs_pts, yperturb_pts, yrand_pts, yfi_pts, 
+              perturbed_observations, cam_pose_est_pert, 
+              cam_pos_pert, cam_rot_pert, passed)
+end
+
+# 3. Visualization
+function setup_plots(fig, ui, data, ctx)
+	(; cam_pos_est, cam_rot_est, aircraft_model, runway_corners, true_observations) = ctx
+    colors = Makie.wong_colors()
+    c1, c4, c7 = colors[1], colors[4], colors[7]
+    
+    # --- Text Labels (Delta) ---
+    # Note: Layout is inserted into the control_layout passed from UI
+    pose_delta_layout = GridLayout(ui.control_layout[1, 0])
+    Label(pose_delta_layout[0, 0:1], text="Pose Delta", font=:bold)
+    Label(pose_delta_layout[1, 0], text="x = \ny = \nz = ")
+    
+    Label(pose_delta_layout[1, 1], text=@lift(let 
+        diff = (cam_pos_est - $(data.cam_pos_pert))
+        s = repr("text/plain", round.([typeof(1.0m)], diff; digits=2))
+        split(s, '\n')[2:end] |> x->join(x, '\n')
+    end), halign=:right)
+    
+    rowgap!(pose_delta_layout, 0); colgap!(pose_delta_layout, 0)
+    
+    Label(pose_delta_layout[0, 2:4], text="Attitude Delta", font=:bold)
+    Label(pose_delta_layout[1, 2], text="roll\npitch\nyaw", justification=:left)
+    Label(pose_delta_layout[1, 3], text="=\n=\n=", justification=:left)
+    
+    Label(pose_delta_layout[1, 4], text=@lift(let 
+        diff = params($(data.cam_rot_pert)) - params(cam_rot_est)
+        s = repr("text/plain", round.([typeof(1.0°)], reverse(rad2deg.(diff.*rad)); digits=1))
+        split(s, '\n')[2:end] |> x->join(x, '\n')
+    end), halign=:right)
+
+    # --- 3D Pose View ---
+    ax3 = Axis3(fig[1, 1]; title="Pose Estimate", aspect=:data,
+                xlabel="x [m]", ylabel="y [m]", zlabel="z [m]")
+    
+    meshargs = (; marker=aircraft_model, markersize=@lift($(ui.show_runway.checked) ? 3 : 1/3))
+    
+    meshscatter!(ax3, [cam_pos_est .|> _ustrip(m)];
+                 color=c1, label="Reference", rotation=to_corrected_quat(cam_rot_est),
+                 meshargs...)
+                 
+    meshscatter!(ax3, @lift([$(data.cam_pos_pert) .|> _ustrip(m)]);
+                 color=@lift(($(data.passed) ? :green : :red, 1.0)),
+                 label="Perturbed", rotation=@lift(to_corrected_quat($(data.cam_rot_pert))),
+                 meshargs...)
+                 
+    axislegend(ax3)
+    poly!(ax3, [pt .|> _ustrip(m) for pt in cycle(runway_corners)], visible=ui.show_runway.checked)
+
+    # Trigger limit resets
+    on(_ -> reset_limits!(ax3), data.cam_pos_pert)
+    on(_ -> reset_limits!(ax3), ui.show_runway.checked)
+
+    # --- 2D Projection View ---
+    ax = Axis(fig[1, 2]; yreversed=true, title="Perturbed Observations", aspect=DataAspect())
+    
+    scatterlines!(ax, [obs .|> _ustrip(px) for obs in cycle(true_observations)])
+    
+    # Dashed total perturbation
+    scatterlines!(ax, @lift([obs .|> _ustrip(px) for obs in cycle(
+        data.yobs_pts .+ $(data.yperturb_pts) .+ $(data.yrand_pts) .+ $(data.yfi_pts))]);
+        color=(:yellow, 0.5), linestyle=:dash)
+
+    # Incremental arrows
+    arrows2d!(ax, [obs .|> _ustrip(px) for obs in data.yobs_pts], 
+              data.yperturb_pts; color=:red)
+              
+    arrows2d!(ax, @lift([obs .|> _ustrip(px) for obs in (data.yobs_pts .+ $(data.yperturb_pts))]),
+              data.yrand_pts; color=c7)
+              
+    arrows2d!(ax, @lift([obs .|> _ustrip(px) for obs in (data.yobs_pts .+ $(data.yperturb_pts) .+ $(data.yrand_pts))]),
+              data.yfi_pts; color=c4)
+
+    on(_ -> reset_limits!(ax), data.yperturb_pts)
+    on(_ -> reset_limits!(ax), data.yrand_pts)
+    on(_ -> reset_limits!(ax), data.yfi_pts)
+end
+context = (; Q, px, drand, H, true_observations, noisy_observations, runway_corners, cam_pos_est, cam_rot_est, aircraft_model)
+# 4. Main Orchestrator
+with_theme(theme_black()) do
+	fig = Figure(; size=(1200, 600))
+	
+	ui = setup_ui(fig, context)
+	data = do_computations(ui, context)
+	setup_plots(fig, ui, data, context)
+	
+	fig
+end
+end
+
 # ╔═╡ Cell order:
 # ╠═46af6473-88bf-49b9-8dc9-0a72e995f784
 # ╠═b5b8f3c8-c4dc-11f0-82e6-e3e1218a8fd8
@@ -674,3 +840,5 @@ end
 # ╠═df5a6bf7-3f5b-4804-99de-291bdabeacdb
 # ╠═5aaf7a5a-6cf9-4a1e-9825-e8fc2d6e3d75
 # ╠═a5214c33-0e64-4ac2-8484-ca03bbf660ad
+# ╠═5c6760d3-7aed-4a17-a5e6-5dbf420fc6e1
+# ╠═25348c41-f099-459c-9b19-250a66a01cab
