@@ -13,6 +13,7 @@ begin
 	using WGLMakie
 	using BracketingNonlinearSolve  # line search
 	using Unitful.DefaultSymbols, Rotations
+	import Rotations: params
 	using Unitful
     import RunwayLib: px, _ustrip
 	using LinearAlgebra
@@ -120,7 +121,7 @@ function setup_corner_selections(figpos)
 	axismenu = Menu(gl[1, 0], 
 					options = [
 						"alongtrack", "crosstrack", "altitude",
-						"yaw", "pitch", "roll",
+						"roll", "pitch", "yaw",
 					],
 					default = "alongtrack", tellwidth=true, width=100)
 	
@@ -202,7 +203,7 @@ with_theme(theme_black()) do
 	show_runway = Checkbox(visual_menu[1, 2], checked=false)
 	
 	#alphaidx = @lift findfirst(==($(axismenu.selection)), $(axismenu.options))
-	alphaidx = axismenu.i_selected
+	alphaidx = @lift Dict(1=>1, 2=>2, 3=>3, 4=>6, 5=>5, 6=>4)[$(axismenu.i_selected)]  # roll pitch yaw representation is reversed
 	yobs_pts = Point2.(true_observations)
 	yperturb = @lift Q' * [$(sl1.value); $(sl2.value)]
 	yperturb_pts = @lift ProjectionPoint.(eachcol(reshape($yperturb, 2, :)))*px
