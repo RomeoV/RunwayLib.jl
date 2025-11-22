@@ -24,6 +24,7 @@ begin
 	import Random
 	using Distributions
 	using UnitfulLinearAlgebra
+	using PlutoUI
 end
 
 # ╔═╡ 46af6473-88bf-49b9-8dc9-0a72e995f784
@@ -62,6 +63,12 @@ HTML("""
 	</script>
 </div>
 """)
+
+# ╔═╡ c3018bf9-35fc-4234-bb52-53a627c2accf
+PlutoUI.TableOfContents()
+
+# ╔═╡ fe109e18-f485-40e8-8af6-034fb0990463
+md"# Setup Problem"
 
 # ╔═╡ ddee502b-6245-45eb-b4cc-ce4a4f749fcf
 runway_corners = [
@@ -148,6 +155,12 @@ function to_corrected_quat(R::Rotation{3})
 	quat = QuatRotation(R * RotZ(1/4 * τ))
 	Quaternion(quat.x, quat.y, quat.z, quat.w)
 end
+
+# ╔═╡ 61a7fd31-94a6-43a2-9089-6dc7398d14d6
+md"# First visualization"
+
+# ╔═╡ f73e286b-261f-42cc-bc06-8d269709e615
+md"### `computefi`"
 
 # ╔═╡ 683af497-4a84-40dd-87e8-0e06ba04d6a3
 function computefi(alphaidx, fault_indices, H; normalize=true, sixdof=true)
@@ -359,6 +372,9 @@ H = H_*px/m |> UnitfulMatrix
 
 end
 
+# ╔═╡ bd87625c-6487-4e70-91fb-e381cb52a72f
+md"### `compute_slope`"
+
 # ╔═╡ 41d7ef29-0a65-488e-9a28-1d625c61703c
 """
 Computes the Worst-Case Failure Mode Slope (g) for a given state and fault subset.
@@ -493,7 +509,7 @@ begin
 	experimental_max_error = (cam_pose_est_faulty.pos - cam_pos_est)[alphaidx]
 
 	md"""
-	### Experimental Verification
+	## Experimental Verification
 	Found the detection boundary via line search:
 	
 	*   **Fault Magnitude at Boundary:** $(round(ø_at_boundary, digits=2)) px
@@ -642,7 +658,12 @@ end
 
 
 # ╔═╡ 5c6760d3-7aed-4a17-a5e6-5dbf420fc6e1
-md"# Refactored visualization"
+	md"# Refactored visualization"
+
+# ╔═╡ 76ad9899-7dd2-4795-b1b6-b44e34b747af
+md"""
+Integrity check threshold is set such that we tolerate 5% false alarm rate.
+"""
 
 # ╔═╡ 25348c41-f099-459c-9b19-250a66a01cab
 begin
