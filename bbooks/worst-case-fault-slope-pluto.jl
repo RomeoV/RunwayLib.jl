@@ -166,6 +166,7 @@ md"### `computefi`"
 
 # ╔═╡ 683af497-4a84-40dd-87e8-0e06ba04d6a3
 function computefi(alphaidx, fault_indices, H; normalize=true, sixdof=true)
+    H = (sixdof ? H : H[:, 1:3])
     α = let alpha = zeros(sixdof ? 6 : 3); alpha[alphaidx] = 1; alpha end
     S_0 = pinv(H)
     s_0 = S_0' * α
@@ -176,7 +177,8 @@ function computefi(alphaidx, fault_indices, H; normalize=true, sixdof=true)
 	A_i = sparse(collect(fault_indices), 1:nf, ones(nf), n, nf)
     # Compute worst-case fault direction
     proj_parity = I - H * S_0
-    f_i = A_i * ((A_i' * proj_parity * A_i) \ (A_i' * s_0))
+	visibility_matrix = A_i' * proj_parity * A_i
+    f_i = A_i * (visibility_matrix \ (A_i' * s_0))
     
     normalize && normalize!(f_i)
     f_i
@@ -474,8 +476,43 @@ function get_experimental_max_error(alphaidx, fi_indices, H, noisy_observations,
 		experimental_max_error
 	end |> sort
 end
+
+# ╔═╡ ef5eb470-af13-4491-a5a4-d634e41bf6f6
+begin
+	alphaidx = 1
+	#fi_indices = [5, 6, 3, 4]
+	fi_indices = [3, 4]
+	# 1. Compute the Slope g [meters / pixel]
+	# This tells us: for every 1 unit of detectable parity noise, how much position error occurs?
+	slope_g = compute_slope(alphaidx, fi_indices, H)
+	
+	# 2. Determine the Detection Threshold (T)
+	# The monitor checks if SSE < T². 
+	# We need the T corresponding to our p-value requirement (alpha=0.05).
+	dof = size(H, 1) - size(H, 2) # Degrees of Freedom = Measurements - States
+	T_chisq = quantile(Chisq(dof), 0.95)  # [px^2 / std_px^2]
+	
+	# 3. Calculate Analytic Max Error
+	# Max Error = Slope * Sigma * sqrt(Threshold)
+	# Sigma = sqrt(2.0) because we passed 2.0*I as covariance
+	sigma_val = px_std
+	
+	analytic_max_error = slope_g * sigma_val * sqrt(T_chisq)
+	                   # [m/px]  *  [std_px] * sqrt([px^2 / std_px^2])
+	
+	md"""
+	## Analytic Results
+	Based on Eq (32) and the Chi-Squared threshold:
+	
+	*   **Failure Mode Slope ($g_{Fi}$):** $(round(typeof(1.0*m/px), slope_g, digits=4))
+	*   **$\chi^2$ Threshold ($T^2$):** $(round(T_chisq, digits=2))
+	*   **Worst Case Error (Analytic):** $(round(typeof(1.0m), analytic_max_error, digits=4))
+	"""
+end
+
+
 # ╔═╡ df5a6bf7-3f5b-4804-99de-291bdabeacdb
-lines(-100:1:100, ø->integrity_root_objective(ø, (; alphaidx=3, fi_indices=[1, 2], H, noisy_observations)))
+lines(-100:1:100, ø->integrity_root_objective(ø, (; alphaidx, fi_indices, H, noisy_observations)) ; axis=(; xlabel="slider", ylabel="p value"))
 
 # ╔═╡ 5aaf7a5a-6cf9-4a1e-9825-e8fc2d6e3d75
 begin
@@ -484,20 +521,22 @@ begin
 	
 	# Perform Line Search
 	# We look for a root between 0 and 100 pixels of fault magnitude
-	tspan = (0.0, 100.0)
-	ps = (; alphaidx, fi_indices, H, noisy_observations)
-	prob = IntervalNonlinearProblem(integrity_root_objective, tspan, ps)
-	sol = solve(prob)
-	@assert BracketingNonlinearSolve.SciMLBase.successful_retcode(sol)
-	ø_at_boundary = sol.u*px
-	
-	# Calculate the actual Position Error at this boundary magnitude
-	# Error = Slope * Magnitude * Direction_Projection? 
-	# Easier to just re-calculate the bias using the linear model: s₀ᵀ f
-	
-	# Re-compute f vector at the boundary magnitude
-	cam_pose_est_faulty, _ = estimate_pose_with_faultmagnitude(ø_at_boundary, ps)
-	experimental_max_error = (cam_pose_est_faulty.pos - cam_pos_est)[alphaidx]
+	experimental_max_error_tpl = map([
+				(0.0, 100.0),
+				(-100.0, 0.0)
+			]) do tspan
+		ps = (; alphaidx, fi_indices, H, noisy_observations)
+		prob = IntervalNonlinearProblem(integrity_root_objective, tspan, ps)
+		sol = solve(prob)
+		@assert BracketingNonlinearSolve.SciMLBase.successful_retcode(sol)
+		ø_at_boundary = sol.u*px
+		
+		# Calculate the actual Position Error at this boundary magnitude
+		cam_pose_est_faulty, _ = estimate_pose_with_faultmagnitude(ø_at_boundary, ps)
+		experimental_max_error = abs((cam_pose_est_faulty.pos - cam_pos_est)[alphaidx])
+		(; experimental_max_error, ø_at_boundary)
+	end
+	experimental_max_error, ø_at_boundary = sort(experimental_max_error_tpl; by=first) |> last
 
 	md"""
 	## Experimental Verification
@@ -594,8 +633,8 @@ let
 	# --- Run Experiment ---
 	
 	# Setup: Select Crosstrack (2) to verify linearity match
-	target_alphaidx = 1
-	target_fi_indices = [1, 2] 
+	target_alphaidx = 3
+	target_fi_indices = [1, 2, 3, 4, 5] 
 	
 	# Get Jacobian at nominal estimate
 	H_6dof = RunwayLib.compute_H(cam_pos_est, cam_rot_est, runway_corners)
@@ -635,7 +674,7 @@ let
 
 	# --- Output Results ---
 	md"""
-	### 3-DOF Verification (Locked Rotation)
+	## 3-DOF Verification (Locked Rotation)
 	
 	This experiment isolates the position states. We expect **Cross-track (2)** to match perfectly (Linear), 
 	while **Along-track (1)** maintains a discrepancy (Perspective Nonlinearity).
@@ -677,17 +716,37 @@ function setup_ui(fig, _ctx)
     
     # Visual Toggle
     visual_menu = GridLayout(control_layout[1, 2]; tell_width=false)
-    Label(visual_menu[1, 1], text="Show Runway")
-    show_runway = Checkbox(visual_menu[1, 2], checked=false)
+    Label(visual_menu[1, 1], text="Show Runway", halign=:right)
+    show_runway = Toggle(visual_menu[1, 2], active=false)
+    Label(visual_menu[2, 1], text="Estimate Rotation")
+    do_estimate_rot = Toggle(visual_menu[2, 2], active=true)
 
-    return (; sl1, sl2, sl3, sl4, cbs, axismenu, show_runway, control_layout)
+    return (; sl1, sl2, sl3, sl4, cbs, axismenu, show_runway, do_estimate_rot, control_layout)
 end
 
 # 2. Computations (The Pipeline)
 function do_computations(ui, ctx)
 	(; Q, px, drand, H, true_observations, noisy_observations, runway_corners) = ctx
-    (; sl1, sl2, sl3, sl4, cbs, axismenu) = ui
+    (; sl1, sl2, sl3, sl4, cbs, axismenu, do_estimate_rot) = ui
     cb1, cb2, cb3, cb4 = cbs
+
+
+    # First we do the regulary noisy pose estimation, either 3 or 6 dof
+    cam_pose_est_noisy = @lift if $(ui.do_estimate_rot.active)
+        estimatepose6dof(
+            PointFeatures(ctx.runway_corners, ctx.noisy_observations)
+        )
+    else
+        estimatepose3dof(
+            PointFeatures(ctx.runway_corners, ctx.noisy_observations),
+            NO_LINES,
+            ctx.cam_rot
+        )
+    end
+    cam_pos_est_noisy = @lift $(cam_pose_est_noisy).pos
+    cam_rot_est_noisy = @lift $(cam_pose_est_noisy).rot
+
+    H = @lift RunwayLib.compute_H($cam_pos_est_noisy, $cam_rot_est_noisy, ctx.runway_corners)
 
     # Helper Logic
     fi_indices = @lift let
@@ -703,59 +762,78 @@ function do_computations(ui, ctx)
     yperturb_pts = @lift ProjectionPoint.(eachcol(reshape($yperturb, 2, :))) * px
     yrand_pts = @lift ProjectionPoint.(eachcol(reshape($(sl3.value) * drand, 2, :))) * px
     
-    f_i = @lift computefi($alphaidx, $fi_indices, H)
-    yfi_pts = @lift let sl4val = $(sl4.value)
-        ProjectionPoint.(eachcol(reshape(sign(sl4val)*exp(abs(sl4val)) * $f_i, 2, :))) * px
+    f_i = @lift computefi($alphaidx, $fi_indices, $H; sixdof=$(ui.do_estimate_rot.active))
+    yfi_pts = @lift let sl4val = sign($(sl4.value))*exp(abs($(sl4.value)))
+        # we have an exponential "gain" on this slider
+        ProjectionPoint.(eachcol(reshape( sl4val * $f_i, 2, :))) * px
     end
 
     # Summation and Pose Estimation
-    perturbed_observations = @lift noisy_observations .+ $yperturb_pts .+ $yrand_pts .+ $yfi_pts
+    perturbed_observations = @lift ctx.noisy_observations .+ $yperturb_pts .+ $yrand_pts .+ $yfi_pts
     
-    cam_pose_est_pert = @lift estimatepose6dof(
-        PointFeatures(runway_corners, $perturbed_observations)
-    )
-    cam_pos_pert = @lift $(cam_pose_est_pert).pos
-    cam_rot_pert = @lift $(cam_pose_est_pert).rot
+    cam_pose_est_pert = @lift if $(ui.do_estimate_rot.active)
+        estimatepose6dof(
+            PointFeatures(ctx.runway_corners, $perturbed_observations)
+        )
+    else
+        estimatepose3dof(
+            PointFeatures(ctx.runway_corners, $perturbed_observations),
+            NO_LINES,
+            ctx.cam_rot
+        )
+    end
+    cam_pos_est_pert = @lift $(cam_pose_est_pert).pos
+    cam_rot_est_pert = @lift $(cam_pose_est_pert).rot
+
+    on(ui.do_estimate_rot.active) do _
+		println(cam_rot_est_noisy - cam_rot_est_pert)
+    end
 
     # Integrity Check
     passed = @lift compute_integrity_statistic(
-        $(cam_pose_est_pert)[(:pos, :rot)]...,
-        runway_corners,
-        $perturbed_observations, 
-        2.0*I(length(runway_corners)*2)
+        $(cam_pos_est_pert), $(cam_rot_est_pert),
+        ctx.runway_corners,
+        $(perturbed_observations), 
+        2.0*I(length(ctx.runway_corners)*2)
     ).p_value > 0.05
+
+	analytic_worst_case = @lift get_analytic_max_error($alphaidx, $fi_indices, $H, ctx.px_std)
+	experimental_worst_case = @lift get_experimental_max_error($alphaidx, $fi_indices, $H, ctx.noisy_observations, $cam_pos_est_noisy)
 
     return (; yobs_pts, yperturb_pts, yrand_pts, yfi_pts, 
               perturbed_observations, cam_pose_est_pert, 
-              cam_pos_pert, cam_rot_pert, passed)
+              cam_pos_est_noisy, cam_rot_est_noisy,
+              cam_pos_est_pert, cam_rot_est_pert, passed, analytic_worst_case, experimental_worst_case)
 end
 
 # 3. Visualization
 function setup_plots(fig, ui, data, ctx)
-	(; cam_pos_est, cam_rot_est, aircraft_model, runway_corners, true_observations) = ctx
+	(; aircraft_model, runway_corners, true_observations) = ctx
     colors = Makie.wong_colors()
     c1, c4, c7 = colors[1], colors[4], colors[7]
     
     # --- Text Labels (Delta) ---
     # Note: Layout is inserted into the control_layout passed from UI
+    ## POSE
     pose_delta_layout = GridLayout(ui.control_layout[1, 0])
     Label(pose_delta_layout[0, 0:1], text="Pose Delta", font=:bold)
     Label(pose_delta_layout[1, 0], text="x = \ny = \nz = ")
     
     Label(pose_delta_layout[1, 1], text=@lift(let 
-        diff = (cam_pos_est - $(data.cam_pos_pert))
+        diff = ($(data.cam_pos_est_pert) - cam_pos_est)
         s = repr("text/plain", round.([typeof(1.0m)], diff; digits=2))
         split(s, '\n')[2:end] |> x->join(x, '\n')
     end), halign=:right)
     
     rowgap!(pose_delta_layout, 0); colgap!(pose_delta_layout, 0)
     
+    ## ATTITUDE
     Label(pose_delta_layout[0, 2:4], text="Attitude Delta", font=:bold)
     Label(pose_delta_layout[1, 2], text="roll\npitch\nyaw", justification=:left)
     Label(pose_delta_layout[1, 3], text="=\n=\n=", justification=:left)
     
     Label(pose_delta_layout[1, 4], text=@lift(let 
-        diff = params($(data.cam_rot_pert)) - params(cam_rot_est)
+        diff = params($(data.cam_rot_est_pert)) - params($(data.cam_rot_est_noisy))
         s = repr("text/plain", round.([typeof(1.0°)], reverse(rad2deg.(diff.*rad)); digits=1))
         split(s, '\n')[2:end] |> x->join(x, '\n')
     end), halign=:right)
@@ -778,23 +856,23 @@ function setup_plots(fig, ui, data, ctx)
     ax3 = Axis3(fig[1, 1]; title="Pose Estimate", aspect=:data,
                 xlabel="x [m]", ylabel="y [m]", zlabel="z [m]")
     
-    meshargs = (; marker=aircraft_model, markersize=@lift($(ui.show_runway.checked) ? 3 : 1/3))
+    meshargs = (; marker=aircraft_model, markersize=@lift($(ui.show_runway.active) ? 3 : 1/3))
     
-    meshscatter!(ax3, [cam_pos_est .|> _ustrip(m)];
-                 color=c1, label="Reference", rotation=to_corrected_quat(cam_rot_est),
+    meshscatter!(ax3, @lift([$(data.cam_pos_est_noisy) .|> _ustrip(m)]);
+                 color=c1, label="Reference", rotation=@lift(to_corrected_quat($(data.cam_rot_est_noisy))),
                  meshargs...)
                  
-    meshscatter!(ax3, @lift([$(data.cam_pos_pert) .|> _ustrip(m)]);
+    meshscatter!(ax3, @lift([$(data.cam_pos_est_pert) .|> _ustrip(m)]);
                  color=@lift(($(data.passed) ? :green : :red, 1.0)),
-                 label="Perturbed", rotation=@lift(to_corrected_quat($(data.cam_rot_pert))),
+                 label="Perturbed", rotation=@lift(to_corrected_quat($(data.cam_rot_est_pert))),
                  meshargs...)
                  
     axislegend(ax3)
-    poly!(ax3, [pt .|> _ustrip(m) for pt in cycle(runway_corners)], visible=ui.show_runway.checked)
+    poly!(ax3, [pt .|> _ustrip(m) for pt in cycle(runway_corners)], visible=ui.show_runway.active)
 
     # Trigger limit resets
-    on(_ -> reset_limits!(ax3), data.cam_pos_pert)
-    on(_ -> reset_limits!(ax3), ui.show_runway.checked)
+    on(_ -> reset_limits!(ax3), data.cam_pos_est_pert)
+    on(_ -> reset_limits!(ax3), ui.show_runway.active)
 
     # --- 2D Projection View ---
     ax = Axis(fig[1, 2]; yreversed=true, title="Perturbed Observations", aspect=DataAspect())
@@ -820,7 +898,7 @@ function setup_plots(fig, ui, data, ctx)
     on(_ -> reset_limits!(ax), data.yrand_pts)
     on(_ -> reset_limits!(ax), data.yfi_pts)
 end
-context = (; Q, px, drand, H, true_observations, noisy_observations, runway_corners, cam_pos_est, cam_rot_est, aircraft_model)
+context = (; Q, px, drand, H, true_observations, noisy_observations, runway_corners, cam_pos, cam_rot, aircraft_model, px_std)
 # 4. Main Orchestrator
 with_theme(theme_black()) do
 	fig = Figure(; size=(1200, 600))
@@ -838,6 +916,8 @@ end
 # ╠═b5b8f3c8-c4dc-11f0-82e6-e3e1218a8fd8
 # ╟─64d2c0fd-2542-4b2c-80f6-134ed8434c3b
 # ╠═47423636-18d6-42cb-85e6-4a0909dc168d
+# ╠═c3018bf9-35fc-4234-bb52-53a627c2accf
+# ╟─fe109e18-f485-40e8-8af6-034fb0990463
 # ╠═ddee502b-6245-45eb-b4cc-ce4a4f749fcf
 # ╠═2fe79916-81bf-4487-bd21-4656783cc4c6
 # ╠═020be658-c6dc-48a3-abb8-34cf8b1fd449
@@ -853,18 +933,25 @@ end
 # ╠═59a0ab1e-0360-4d24-9320-fb3966062b9d
 # ╠═120a3051-4909-4e65-a35d-82e76b706567
 # ╠═b495605a-ffe7-4783-a490-1d635731da0a
+# ╟─61a7fd31-94a6-43a2-9089-6dc7398d14d6
 # ╠═a530d3e4-22db-4744-8b39-5947be16772c
+# ╟─f73e286b-261f-42cc-bc06-8d269709e615
 # ╠═683af497-4a84-40dd-87e8-0e06ba04d6a3
 # ╠═6e3438b3-81b1-4055-87f9-28731bd674c2
 # ╠═05fd4f82-3e37-4f50-83ed-66474a8f3003
+# ╟─bd87625c-6487-4e70-91fb-e381cb52a72f
 # ╠═41d7ef29-0a65-488e-9a28-1d625c61703c
-# ╠═c208ce81-b980-405e-8698-f632e1898630
 # ╠═f80aee26-b1d2-4183-aec8-2187f9c2cdfe
-# ╠═ef5eb470-af13-4491-a5a4-d634e41bf6f6
 # ╠═58a21d5e-8a66-45b2-8202-aee966463df3
 # ╠═6e9e1c89-01f2-447d-8335-ad26881a6773
+# ╟─09c40df5-f975-4d86-ae81-4a35a67f647b
 # ╠═df5a6bf7-3f5b-4804-99de-291bdabeacdb
+# ╠═18ebe84e-5710-48b7-9849-130b5b55715c
+# ╠═8a4de21a-acbc-4ce0-9315-6cc86376e3b1
+# ╠═ef5eb470-af13-4491-a5a4-d634e41bf6f6
 # ╠═5aaf7a5a-6cf9-4a1e-9825-e8fc2d6e3d75
 # ╠═a5214c33-0e64-4ac2-8484-ca03bbf660ad
 # ╠═5c6760d3-7aed-4a17-a5e6-5dbf420fc6e1
+# ╟─76ad9899-7dd2-4795-b1b6-b44e34b747af
 # ╠═25348c41-f099-459c-9b19-250a66a01cab
+# ╠═29784c6c-c781-4ff6-ae5f-fe4ff5a32b44
