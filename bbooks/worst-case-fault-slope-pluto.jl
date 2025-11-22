@@ -434,6 +434,45 @@ function integrity_root_objective(ø_nounits, (; alphaidx, fi_indices, H, noisy_
 end
 
 
+# ╔═╡ 09c40df5-f975-4d86-ae81-4a35a67f647b
+md"# Analytic vs Experimental Validation"
+
+# ╔═╡ 18ebe84e-5710-48b7-9849-130b5b55715c
+function get_analytic_max_error(alphaidx, fi_indices, H, px_std)
+	slope_g = compute_slope(alphaidx, fi_indices, H)
+	
+	# 2. Determine the Detection Threshold (T)
+	# The monitor checks if SSE < T². 
+	# We need the T corresponding to our p-value requirement (alpha=0.05).
+	dof = size(H, 1) - size(H, 2) # Degrees of Freedom = Measurements - States
+	T_chisq = quantile(Chisq(dof), 0.95)  # [px^2 / std_px^2]
+	
+	# 3. Calculate Analytic Max Error
+	# Max Error = Slope * Sigma * sqrt(Threshold)
+	# Sigma = sqrt(2.0) because we passed 2.0*I as covariance
+	sigma_val = px_std
+	
+	analytic_max_error = slope_g * sigma_val * sqrt(T_chisq)
+end
+
+# ╔═╡ 8a4de21a-acbc-4ce0-9315-6cc86376e3b1
+function get_experimental_max_error(alphaidx, fi_indices, H, noisy_observations, cam_pos_est)
+	experimental_max_error_tpl = map([
+				(0.0, 100.0),
+				(-100.0, 0.0)
+			]) do tspan
+		ps = (; alphaidx, fi_indices, H, noisy_observations)
+		prob = IntervalNonlinearProblem(integrity_root_objective, tspan, ps)
+		sol = solve(prob)
+		@assert BracketingNonlinearSolve.SciMLBase.successful_retcode(sol)
+		ø_at_boundary = sol.u*px
+		
+		# Calculate the actual Position Error at this boundary magnitude
+		cam_pose_est_faulty, _ = estimate_pose_with_faultmagnitude(ø_at_boundary, ps)
+		experimental_max_error = abs((cam_pose_est_faulty.pos - cam_pos_est)[alphaidx])
+		experimental_max_error
+	end |> sort
+end
 # ╔═╡ df5a6bf7-3f5b-4804-99de-291bdabeacdb
 lines(-100:1:100, ø->integrity_root_objective(ø, (; alphaidx=3, fi_indices=[1, 2], H, noisy_observations)))
 
