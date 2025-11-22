@@ -88,11 +88,12 @@ cam_rot = RotZYX(roll=1.5°, pitch=5°, yaw=0°)
 true_observations = [project(cam_pos, cam_rot, p) for p in runway_corners]
 
 # ╔═╡ 3fae75fa-7760-4878-b97f-888ed1dbbf0f
-px_std = sqrt(2)  # this corresponds to the default noise model which has px_var = 2
+#px_std = sqrt(2)  # this corresponds to the default noise model which has px_var = 2
+px_std = 2.0px  # this corresponds to the default noise model which has px_var = 2
 
 # ╔═╡ b377ee57-1d61-4787-bb9d-ed2b760ef23d
 noisy_observations = let; Random.seed!(1)
-	[p + ProjectionPoint(px_std*randn(2)px) for p in true_observations]
+	[p + ProjectionPoint(px_std*randn(2)) for p in true_observations]
 end
 
 # ╔═╡ c6a57e0f-50c7-461a-a6e8-9281991b9e44
