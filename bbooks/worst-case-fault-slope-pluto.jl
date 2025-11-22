@@ -25,6 +25,7 @@ begin
 	using Distributions
 	using UnitfulLinearAlgebra
 	using PlutoUI
+	using IntervalSets
 end
 
 # ╔═╡ 46af6473-88bf-49b9-8dc9-0a72e995f784
@@ -758,6 +759,20 @@ function setup_plots(fig, ui, data, ctx)
         s = repr("text/plain", round.([typeof(1.0°)], reverse(rad2deg.(diff.*rad)); digits=1))
         split(s, '\n')[2:end] |> x->join(x, '\n')
     end), halign=:right)
+
+	## Worst case
+	worst_case_layout = GridLayout(pose_delta_layout[0:1, 5])
+	Label(worst_case_layout[1,1], text="Analytic Worst Case", font=:bold, halign=:left)
+	Label(worst_case_layout[2,1], text=@lift(let
+		worst_case_rnd = round(typeof(1.0m), $(data.analytic_worst_case); sigdigits=2)
+		string(0m±worst_case_rnd)
+	end), valign=:top, halign=:left)
+	Label(worst_case_layout[3,1], text="Line Search Worst Case", font=:bold, halign=:left)
+	Label(worst_case_layout[4,1], text=@lift(let
+		worst_case_tpl = round.(typeof(1.0m), $(data.experimental_worst_case); sigdigits=2)
+		string(worst_case_tpl[1] .. worst_case_tpl[2])
+	end), valign=:top, halign=:left)
+	rowgap!(worst_case_layout, 0)
 
     # --- 3D Pose View ---
     ax3 = Axis3(fig[1, 1]; title="Pose Estimate", aspect=:data,
