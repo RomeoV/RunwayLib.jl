@@ -265,21 +265,6 @@ with_theme(theme_black()) do
 		marker=aircraft_model, 
 		markersize=@lift($(show_runway.checked) ? 3 : 1/3),
 	)
-	#=
-	meshscatter!(ax3, @lift [
-		              cam_pos_est .|> _ustrip(m),
-		              $(cam_pos_pert) .|> _ustrip(m)
-				  ]; 
-				 color=@lift([(c1, 1.0), (($(passed) ? :green : :red), 1.0)]),
-				 marker=aircraft_model, 
-				 #markersize=1/3,
-				 markersize=@lift($(show_runway.checked) ? 3 : 1/3),
-				 rotation=@lift(to_corrected_quat.([
-					 $cam_rot_est, $cam_rot_pert
-				 ])),
-				 label=["a", "b"],
-				)
-	=#
 	meshscatter!(ax3, [cam_pos_est .|> _ustrip(m)];
 			     color=c1, label="Reference", rotation=to_corrected_quat(cam_rot_est),
 				 meshargs...)
@@ -406,49 +391,14 @@ function compute_slope(alphaidx, fault_indices, H_)
 	# The central term (Aᵀ (I - H S₀) A)⁻¹
 	# This measures how "visible" faults in this subspace are to the parity check
 	visibility_matrix = A_i' * proj_parity * A_i
-	
+
 	g_squared = m_Xi' * (visibility_matrix \ m_Xi)
 	return sqrt(g_squared)
 end
 
 
-# ╔═╡ c208ce81-b980-405e-8698-f632e1898630
-pinv(rand(4, 3))*1/m
-
 # ╔═╡ f80aee26-b1d2-4183-aec8-2187f9c2cdfe
 compute_slope(1, [1, 2], H)
-
-# ╔═╡ ef5eb470-af13-4491-a5a4-d634e41bf6f6
-begin
-	alphaidx = 2
-	fi_indices=[1, 2]
-	# 1. Compute the Slope g [meters / pixel]
-	# This tells us: for every 1 unit of detectable parity noise, how much position error occurs?
-	slope_g = compute_slope(alphaidx, fi_indices, H)
-	
-	# 2. Determine the Detection Threshold (T)
-	# The monitor checks if SSE < T². 
-	# We need the T corresponding to our p-value requirement (alpha=0.05).
-	dof = size(H, 1) - size(H, 2) # Degrees of Freedom = Measurements - States
-	T_chisq = quantile(Chisq(dof), 0.95)
-	
-	# 3. Calculate Analytic Max Error
-	# Max Error = Slope * Sigma * sqrt(Threshold)
-	# Sigma = sqrt(2.0) because we passed 2.0*I as covariance
-	sigma_val = sqrt(2.0)*px
-	
-	analytic_max_error = slope_g * sigma_val * sqrt(T_chisq)
-	
-	md"""
-	### Analytic Results
-	Based on Eq (32) and the Chi-Squared threshold:
-	
-	*   **Failure Mode Slope ($g_{Fi}$):** $(round(typeof(1.0*m/px), slope_g, digits=4))
-	*   **$\chi^2$ Threshold ($T^2$):** $(round(T_chisq, digits=2))
-	*   **Worst Case Error (Analytic):** $(round(typeof(1.0m), analytic_max_error, digits=4))
-	"""
-end
-
 
 # ╔═╡ 58a21d5e-8a66-45b2-8202-aee966463df3
 function estimate_pose_with_faultmagnitude(ø, (; alphaidx, fi_indices, H, noisy_observations))
