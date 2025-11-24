@@ -29,15 +29,18 @@ jobs:
       - name: "Install CompatHelper"
         run: |
           import Pkg
-          name = "CompatHelper"
-          uuid = "aa819f21-2bde-4658-8897-bab36330d9b7"
-          version = "3"
-          Pkg.add(; name, uuid, version)
+          url = "https://github.com/RomeoV/CompatHelper.jl"
+          Pkg.add(; url)
         shell: julia --color=yes {0}
       - name: "Run CompatHelper"
         run: |
           import CompatHelper
-          CompatHelper.main(; subdirs=["juliac"])
+          CompatHelper.main(; subdirs=[
+            "juliac",
+            "test",
+            "docs",
+            "bbooks"
+          ], only_update_existing=true)
         shell: julia --color=yes {0}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
