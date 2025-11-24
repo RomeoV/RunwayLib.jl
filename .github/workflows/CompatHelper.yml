@@ -40,7 +40,6 @@ jobs:
             "juliac",
             "test",
             "docs",
-            "bbooks"
           ], only_update_existing=true)
         shell: julia --color=yes {0}
         env:
