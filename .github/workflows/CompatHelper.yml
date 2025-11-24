@@ -37,6 +37,7 @@ jobs:
         run: |
           import CompatHelper
           CompatHelper.main(; subdirs=[
+            "",
             "juliac",
             "test",
             "docs",
