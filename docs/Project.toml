@@ -11,6 +11,7 @@ Typstry = "f0ed7684-a786-439e-b1e3-3b82803b501e"
 Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
 [compat]
+BenchmarkTools = "1.6.3"
 ProfileCanvas = "0.1.7"
 Documenter = "1"
 DocumenterCitations = "1"
