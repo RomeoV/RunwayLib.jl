@@ -30,7 +30,8 @@ jobs:
         run: |
           import Pkg
           url = "https://github.com/RomeoV/CompatHelper.jl"
-          Pkg.add(; url)
+          rev = "only-update-existing"
+          Pkg.add(; url, rev)
         shell: julia --color=yes {0}
       - name: "Run CompatHelper"
         run: |
