@@ -1,3 +1,4 @@
+using SparseArrays
 using LinearAlgebra
 using Distributions
 using Rotations: RotZYX, params
