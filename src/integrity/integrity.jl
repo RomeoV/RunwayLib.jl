@@ -108,3 +108,121 @@ function compute_integrity_statistic(
 
     return (; stat, p_value, dofs, residual_norm)
 end
+
+"""
+    compute_worst_case_fault_direction_and_slope_3dof(...)
+
+Compute worst-case fault direction and failure mode slope for 3-DOF (position only).
+
+# Arguments
+- `alpha_idx::Int`: Parameter index (1=x, 2=y, 3=z)
+- `fault_indices::AbstractVector{Int}`: Measurement indices in fault subset
+- `H::AbstractMatrix`: Jacobian matrix (should have 3 columns for position)
+- `normalize::Bool=true`: Whether to normalize fault direction
+
+# Returns
+- `f_i`: Worst-case fault direction vector
+- `slope_g`: Failure mode slope
+
+References (Eq. 32-33, Joerger et al. 2014):
+Worst-Case Fault Direction (f_i): f_i = (A) (Aᵀ P A)⁻¹ (Aᵀ s₀)
+Worst-Case Failure Mode Slope (g): slope_g² = (s₀ᵀ A) (Aᵀ P A)⁻¹ (Aᵀ s₀)
+"""
+function compute_worst_case_fault_direction_and_slope_3dof(
+    alpha_idx::Int,
+    fault_indices::AbstractVector{Int}, 
+    H::AbstractMatrix; 
+    normalize::Bool=true,
+)
+
+    @assert 1 <= alpha_idx <= 3 "alpha_idx must be 1, 2, or 3 for 3-DOF"
+    @assert size(H, 2) == 3 "H must have exactly 3 columns for 3-DOF"
+
+    return _compute_worst_case_fault_direction_and_slope(
+        alpha_idx, fault_indices, H; normalize=normalize
+    )
+end
+
+
+"""
+    compute_worst_case_fault_direction_and_slope_6dof(...)
+
+Compute worst-case fault direction and failure mode slope for 6-DOF (position and rotation).
+
+# Arguments
+- `alpha_idx::Int`: Parameter index (1=x, 2=y, 3=z, 4=yaw, 5=pitch, 6=roll)
+- `fault_indices::AbstractVector{Int}`: Measurement indices in fault subset
+- `H::AbstractMatrix`: Jacobian matrix (should have 6 columns for position and rotation)
+- `normalize::Bool=true`: Whether to normalize fault direction
+
+# Returns
+- `f_i`: Worst-case fault direction vector
+- `slope_g`: Failure mode slope
+
+References (Eq. 32-33, Joerger et al. 2014):
+Worst-Case Fault Direction (f_i): f_i = (A) (Aᵀ P A)⁻¹ (Aᵀ s₀)
+Worst-Case Failure Mode Slope (g): slope_g² = (s₀ᵀ A) (Aᵀ P A)⁻¹ (Aᵀ s₀)
+"""
+function compute_worst_case_fault_direction_and_slope_6dof(
+    alpha_idx::Int, 
+    fault_indices::AbstractVector{Int}, 
+    H::AbstractMatrix; 
+    normalize::Bool=true,
+)
+
+    @assert 1 <= alpha_idx <= 6 "alpha_idx must be 1-6 for 6-DOF"
+    @assert size(H, 2) == 6 "H must have exactly 6 columns for 6-DOF"
+
+    return _compute_worst_case_fault_direction_and_slope(
+        alpha_idx, fault_indices, H; normalize=normalize
+    )
+end
+
+
+"""
+    _compute_worst_case_fault_direction_and_slope(alpha_idx, fault_indices, H, normalize)
+
+Internal implementation for worst-case fault direction computation.
+"""
+function _compute_worst_case_fault_direction_and_slope(
+    alpha_idx::Int,
+    fault_indices::AbstractVector{Int},
+    H::AbstractMatrix;
+    normalize::Bool=true,
+)
+
+    # Define extraction vector s₀ for the state of interest (alpha)
+    ndof = size(H, 2)
+    α = zeros(ndof)
+    α[alpha_idx] = 1
+
+    # Compute S₀ = (HᵀH)⁻¹Hᵀ
+    S_0 = pinv(H)
+    s_0 = S_0' * α
+
+    # Define Parity Projection Matrix, P = I - H(HᵀH)⁻¹Hᵀ = I - H S₀
+    proj_parity = I - H * S_0
+    
+    # Define Fault Selection Matrix A_i
+    n_measurements = size(H, 1)
+    n_faults = length(fault_indices)
+    A_i = sparse(collect(fault_indices), 1:n_faults, ones(n_faults), n_measurements, n_faults) # |> Matrix
+
+    # Compute the central term, (Aᵀ (I - H S₀) A)⁻¹
+    # This measures how "visible" faults in this subspace are to the parity check
+    visibility_matrix = A_i' * proj_parity * A_i
+
+    # Compute m_Xi = Aᵀ s₀
+    m_Xi = A_i' * s_0
+
+    # Compute worst-case fault direction f_i and normalize
+    f_i = A_i * (visibility_matrix \ m_Xi)
+    normalize && LinearAlgebra.normalize!(f_i)
+
+    # Compute Slope Squared (Eq 32)
+    slope_g_squared = m_Xi' * (visibility_matrix \ m_Xi)
+    slope_g = sqrt(max(0.0, slope_g_squared))
+
+    return f_i, slope_g
+end
+
