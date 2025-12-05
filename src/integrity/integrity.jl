@@ -1,3 +1,4 @@
+using SparseArrays
 using LinearAlgebra
 using Distributions
 using Rotations: RotZYX, params
@@ -108,3 +109,66 @@ function compute_integrity_statistic(
 
     return (; stat, p_value, dofs, residual_norm)
 end
+
+"""
+    compute_worst_case_fault_direction_and_slope_6dof(...)
+
+Compute worst-case fault direction and failure mode slope for 3-DOF or 6-DOF, depending on the columns of `H`.
+
+# Arguments
+- `alpha_idx::Int`: Parameter index (1=x, 2=y, 3=z, 4=yaw, 5=pitch, 6=roll)
+- `fault_indices::AbstractVector{Int}`: Measurement indices in fault subset
+- `H::AbstractMatrix`: Jacobian matrix (should have ndof columns)
+
+# Returns
+- `f_i`: Worst-case fault direction vector
+- `slope_g`: Failure mode slope
+
+References (Eq. 32-33, Joerger et al. 2014):
+Worst-Case Fault Direction (f_i): f_i = (A) (Aᵀ P A)⁻¹ (Aᵀ s₀)
+Worst-Case Failure Mode Slope (g): slope_g² = (s₀ᵀ A) (Aᵀ P A)⁻¹ (Aᵀ s₀)
+"""
+function compute_worst_case_fault_direction_and_slope(
+    alpha_idx::Int,
+    fault_indices::AbstractVector{Int},
+    H::AbstractMatrix,
+)
+
+    @assert 1 <= alpha_idx <= size(H, 2) "alpha_idx must be 1-ndof"
+    @assert all(1 .<= fault_indices .<= size(H, 1)) "fault_indices must in `1:size(H, 1)`"
+
+    # Define extraction vector s₀ for the state of interest (alpha)
+    ndof = size(H, 2)
+    α = zeros(ndof)
+    α[alpha_idx] = 1
+
+    # Compute S₀ = (HᵀH)⁻¹Hᵀ
+    S_0 = pinv(H)
+    s_0 = S_0' * α
+
+    # Define Parity Projection Matrix, P = I - H(HᵀH)⁻¹Hᵀ = I - H S₀
+    proj_parity = I - H * S_0
+    
+    # Define Fault Selection Matrix A_i
+    n_measurements = size(H, 1)
+    n_faults = length(fault_indices)
+    A_i = sparse(collect(fault_indices), 1:n_faults, ones(n_faults), n_measurements, n_faults)
+
+    # Compute the central term, (Aᵀ (I - H S₀) A)⁻¹
+    # This measures how "visible" faults in this subspace are to the parity check
+    visibility_matrix = A_i' * proj_parity * A_i
+
+    # Compute m_Xi = Aᵀ s₀
+    m_Xi = A_i' * s_0
+
+    # Compute worst-case fault direction f_i and normalize
+    f_i = A_i * (visibility_matrix \ m_Xi) |> normalize!
+
+    # Compute Slope Squared (Eq 32)
+    slope_g_squared = m_Xi' * (visibility_matrix \ m_Xi)
+    @assert slope_g_squared >= 0 "Computed negative slope squared, numerical issue?"
+    slope_g = sqrt(slope_g_squared)
+
+    return f_i, slope_g
+end
+
