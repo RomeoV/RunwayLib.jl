@@ -119,7 +119,6 @@ Compute worst-case fault direction and failure mode slope for 3-DOF (position on
 - `alpha_idx::Int`: Parameter index (1=x, 2=y, 3=z)
 - `fault_indices::AbstractVector{Int}`: Measurement indices in fault subset
 - `H::AbstractMatrix`: Jacobian matrix (should have 3 columns for position)
-- `normalize::Bool=true`: Whether to normalize fault direction
 
 # Returns
 - `f_i`: Worst-case fault direction vector
@@ -132,15 +131,14 @@ Worst-Case Failure Mode Slope (g): slope_g² = (s₀ᵀ A) (Aᵀ P A)⁻¹ (Aᵀ
 function compute_worst_case_fault_direction_and_slope_3dof(
     alpha_idx::Int,
     fault_indices::AbstractVector{Int}, 
-    H::AbstractMatrix; 
-    normalize::Bool=true,
+    H::AbstractMatrix,
 )
 
     @assert 1 <= alpha_idx <= 3 "alpha_idx must be 1, 2, or 3 for 3-DOF"
     @assert size(H, 2) == 3 "H must have exactly 3 columns for 3-DOF"
 
     return _compute_worst_case_fault_direction_and_slope(
-        alpha_idx, fault_indices, H; normalize=normalize
+        alpha_idx, fault_indices, H
     )
 end
 
@@ -154,7 +152,6 @@ Compute worst-case fault direction and failure mode slope for 6-DOF (position an
 - `alpha_idx::Int`: Parameter index (1=x, 2=y, 3=z, 4=yaw, 5=pitch, 6=roll)
 - `fault_indices::AbstractVector{Int}`: Measurement indices in fault subset
 - `H::AbstractMatrix`: Jacobian matrix (should have 6 columns for position and rotation)
-- `normalize::Bool=true`: Whether to normalize fault direction
 
 # Returns
 - `f_i`: Worst-case fault direction vector
@@ -167,29 +164,27 @@ Worst-Case Failure Mode Slope (g): slope_g² = (s₀ᵀ A) (Aᵀ P A)⁻¹ (Aᵀ
 function compute_worst_case_fault_direction_and_slope_6dof(
     alpha_idx::Int, 
     fault_indices::AbstractVector{Int}, 
-    H::AbstractMatrix; 
-    normalize::Bool=true,
+    H::AbstractMatrix,
 )
 
     @assert 1 <= alpha_idx <= 6 "alpha_idx must be 1-6 for 6-DOF"
     @assert size(H, 2) == 6 "H must have exactly 6 columns for 6-DOF"
 
     return _compute_worst_case_fault_direction_and_slope(
-        alpha_idx, fault_indices, H; normalize=normalize
+        alpha_idx, fault_indices, H
     )
 end
 
 
 """
-    _compute_worst_case_fault_direction_and_slope(alpha_idx, fault_indices, H, normalize)
+    _compute_worst_case_fault_direction_and_slope(alpha_idx, fault_indices, H)
 
 Internal implementation for worst-case fault direction computation.
 """
 function _compute_worst_case_fault_direction_and_slope(
     alpha_idx::Int,
     fault_indices::AbstractVector{Int},
-    H::AbstractMatrix;
-    normalize::Bool=true,
+    H::AbstractMatrix,
 )
 
     # Define extraction vector s₀ for the state of interest (alpha)
@@ -217,8 +212,7 @@ function _compute_worst_case_fault_direction_and_slope(
     m_Xi = A_i' * s_0
 
     # Compute worst-case fault direction f_i and normalize
-    f_i = A_i * (visibility_matrix \ m_Xi)
-    normalize && LinearAlgebra.normalize!(f_i)
+    f_i = A_i * (visibility_matrix \ m_Xi) |> normalize!
 
     # Compute Slope Squared (Eq 32)
     slope_g_squared = m_Xi' * (visibility_matrix \ m_Xi)
