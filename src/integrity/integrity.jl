@@ -222,7 +222,8 @@ function _compute_worst_case_fault_direction_and_slope(
 
     # Compute Slope Squared (Eq 32)
     slope_g_squared = m_Xi' * (visibility_matrix \ m_Xi)
-    slope_g = sqrt(max(0.0, slope_g_squared))
+    @assert slope_g_squared >= 0 "Computed negative slope squared, numerical issue?"
+    slope_g = sqrt(slope_g_squared)
 
     return f_i, slope_g
 end
