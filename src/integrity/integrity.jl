@@ -111,7 +111,11 @@ function compute_integrity_statistic(
 end
 
 """
-    compute_worst_case_fault_direction_and_slope_6dof(...)
+    compute_worst_case_fault_direction_and_slope(
+        alpha_idx::Int,
+        fault_indices::AbstractVector{Int},
+        H::AbstractMatrix,
+    )
 
 Compute worst-case fault direction and failure mode slope for 3-DOF or 6-DOF, depending on the columns of `H`.
 
@@ -139,8 +143,12 @@ function compute_worst_case_fault_direction_and_slope(
 
     # Define extraction vector s₀ for the state of interest (alpha)
     ndof = size(H, 2)
-    α = zeros(ndof)
-    α[alpha_idx] = 1
+    α = let
+        α = @MVector zeros(ndof)
+        α[alpha_idx] = 1
+        SVector(α)
+    end
+    
 
     # Compute S₀ = (HᵀH)⁻¹Hᵀ
     S_0 = pinv(H)
@@ -152,7 +160,9 @@ function compute_worst_case_fault_direction_and_slope(
     # Define Fault Selection Matrix A_i
     n_measurements = size(H, 1)
     n_faults = length(fault_indices)
-    A_i = sparse(collect(fault_indices), 1:n_faults, ones(n_faults), n_measurements, n_faults)
+    A_i = (
+        sparse(collect(fault_indices), 1:n_faults, ones(n_faults), n_measurements, n_faults)
+    ) |> SMatrix{n_measurements, n_faults}
 
     # Compute the central term, (Aᵀ (I - H S₀) A)⁻¹
     # This measures how "visible" faults in this subspace are to the parity check
@@ -162,7 +172,7 @@ function compute_worst_case_fault_direction_and_slope(
     m_Xi = A_i' * s_0
 
     # Compute worst-case fault direction f_i and normalize
-    f_i = A_i * (visibility_matrix \ m_Xi) |> normalize!
+    f_i = A_i * (visibility_matrix \ m_Xi) |> normalize
 
     # Compute Slope Squared (Eq 32)
     slope_g_squared = m_Xi' * (visibility_matrix \ m_Xi)
