@@ -359,6 +359,28 @@ end
         end
     end
 
+    @testset "6. Static Array Return Types" begin
+        # Test that compute_worst_case_fault_direction_and_slope returns static arrays
+        (; runway_corners) = create_runway_scenario()
+
+        # Create a simple Jacobian matrix for testing
+        H_ = randn(8, 6)  # 4 corners * 2 coords, 6 DOF
+
+        @testset "Return values are StaticArrays" begin
+            f_dir, g_slope = RunwayLib.compute_worst_case_fault_direction_and_slope(4, SA[1], H_)
+
+            # Check types
+            @test f_dir isa StaticArray
+            @test g_slope isa Real
+
+            # Check properties
+            @test length(f_dir) == size(H_, 1)  # Should match number of measurements
+            @test isfinite(g_slope)
+            @test g_slope >= 0  # Slope should be non-negative
+            @test norm(f_dir) ≈ 1.0  # Fault direction should be normalized
+        end
+    end
+
     @testset "Non-Default Camera Matrix Integration" begin
         # Test integrity monitoring with a custom camera matrix (like Python tests use)
         custom_camera_matrix = CameraMatrix{:offset}(
