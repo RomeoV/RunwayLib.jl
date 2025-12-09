@@ -361,20 +361,27 @@ end
 
     @testset "6. Static Array Return Types" begin
         # Test that compute_worst_case_fault_direction_and_slope returns static arrays
-        (; runway_corners) = create_runway_scenario()
+        (; runway_corners, true_pos, true_rot) = create_runway_scenario()
 
-        # Create a simple Jacobian matrix for testing
-        H_ = randn(8, 6)  # 4 corners * 2 coords, 6 DOF
+        # Compute Jacobian matrix using compute_H
+        H_ = RunwayLib.compute_H(true_pos, true_rot, runway_corners)
 
-        @testset "Return values are StaticArrays" begin
-            f_dir, g_slope = RunwayLib.compute_worst_case_fault_direction_and_slope(4, SA[1], H_)
+        @testset for ndof in [3, 6]
+            # Slice H to get appropriate columns, then convert to SMatrix
+            # (indexing into SMatrix returns Matrix, so we need to convert back)
+            H_static = SMatrix{8, ndof}(H_[:, 1:ndof])
+
+            # Use alpha_idx that's valid for this ndof
+            alpha_idx = min(4, ndof)  # 4 for 6-DOF (yaw), 2 or 3 for 3-DOF
+
+            f_dir, g_slope = RunwayLib.compute_worst_case_fault_direction_and_slope(alpha_idx, SA[1], H_static)
 
             # Check types
             @test f_dir isa StaticArray
             @test g_slope isa Real
 
             # Check properties
-            @test length(f_dir) == size(H_, 1)  # Should match number of measurements
+            @test length(f_dir) == size(H_static, 1)  # Should match number of measurements
             @test isfinite(g_slope)
             @test g_slope >= 0  # Slope should be non-negative
             @test norm(f_dir) ≈ 1.0  # Fault direction should be normalized

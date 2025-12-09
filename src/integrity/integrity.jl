@@ -143,11 +143,7 @@ function compute_worst_case_fault_direction_and_slope(
 
     # Define extraction vector s₀ for the state of interest (alpha)
     ndof = size(H, 2)
-    α = let
-        α = @MVector zeros(ndof)
-        α[alpha_idx] = 1
-        SVector(α)
-    end
+    α = SVector(ntuple(i -> i == alpha_idx ? 1.0 : 0.0, Val(ndof)))
     
 
     # Compute S₀ = (HᵀH)⁻¹Hᵀ
