@@ -10,11 +10,12 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 Typstry = "f0ed7684-a786-439e-b1e3-3b82803b501e"
 Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
+[sources.ProfileCanvas]
+rev = "bump-json"
+url = "https://github.com/RomeoV/ProfileCanvas.jl"
+
 [compat]
-ProfileCanvas = "0.1.7"
 Documenter = "1"
 DocumenterCitations = "1"
-Typstry = "0.6"
-
-[sources]
-ProfileCanvas = {rev = "bump-json", url = "https://github.com/RomeoV/ProfileCanvas.jl"}
+ProfileCanvas = "0.1.7"
+Typstry = "0.6, 0.7"
