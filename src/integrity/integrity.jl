@@ -130,8 +130,8 @@ Compute worst-case fault direction and failure mode slope for 3-DOF or 6-DOF, de
 - `slope_g`: Failure mode slope
 
 References (Eq. 32-33, Joerger et al. 2014):
-Worst-Case Fault Direction (f_i): f_i = (A) (Aᵀ P A)⁻¹ (Aᵀ s₀)
-Worst-Case Failure Mode Slope (g): slope_g² = (s₀ᵀ A) (Aᵀ P A)⁻¹ (Aᵀ s₀)
+- Worst-Case Fault Direction: f_i = A_i (A_iᵀ P A_i)⁻¹ (A_iᵀ s₀)
+- Worst-Case Failure Mode Slope: slope_g² = (s₀ᵀ A_i) (A_iᵀ P A_i)⁻¹ (A_iᵀ s₀)
 """
 function compute_worst_case_fault_direction_and_slope(
     alpha_idx::Int,
