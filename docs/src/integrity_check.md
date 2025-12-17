@@ -35,6 +35,42 @@ where the subscript ``i`` identifies a specific **fault subset** (specified by `
 
 Thus ``\mathbf{f}_i`` represents the worst-case fault direction **for the specific combination of fault subset and monitored parameter**.
 
+### Usage Example
+
+```julia
+using RunwayLib
+using StaticArrays
+
+# Create a pose estimation scenario
+(; runway_corners, true_pos, true_rot) = create_runway_scenario()
+
+# Compute Jacobian matrix using compute_H
+H_ = compute_H(true_pos, true_rot, runway_corners)
+
+# Ndof can be 3 (for position only) or 6 (for position and rotation)
+ndof = 6
+
+# Slice H to get appropriate columns, then convert to SMatrix
+# (indexing into SMatrix returns Matrix, so we need to convert back)
+H_static = SMatrix{8, ndof}(H_[:, 1:ndof])
+
+# Monitor the z-position parameter (index 3: 1=x, 2=y, 3=z, 4=yaw, 5=pitch, 6=roll)
+alpha_idx = 3
+
+# Consider a potential fault in the first measurement
+fault_indices = SA[1]
+
+# Compute worst-case fault direction and slope
+f_dir, g_slope = compute_worst_case_fault_direction_and_slope(
+    alpha_idx,
+    fault_indices,
+    H_static,
+)
+
+# f_dir is a normalized static vector indicating the worst-case fault direction
+# g_slope quantifies the sensitivity (higher = more sensitive to faults)
+```
+
 ### API Reference
 
 ```@docs; canonical = false
