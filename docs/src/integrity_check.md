@@ -27,11 +27,13 @@ The **failure mode slope** ``g`` quantifies the sensitivity of a monitored param
 g^2 = \mathbf{s}_0^T \mathbf{A}_i (\mathbf{A}_i^T \mathbf{P} \mathbf{A}_i)^{-1} \mathbf{A}_i^T \mathbf{s}_0
 ```
 
-where:
+where the subscript ``i`` identifies a specific **fault subset** (specified by `fault_indices`) and monitored **parameter** (specified by `alpha_idx`):
 - ``\mathbf{P} = \mathbf{I} - \mathbf{H}(\mathbf{H}^T \mathbf{H})^{-1}\mathbf{H}^T`` is the parity projection matrix
-- ``\mathbf{A}_i`` is the fault selection matrix identifying which measurements may be faulty
-- ``\mathbf{s}_0`` is the extraction vector for the parameter of interest
+- ``\mathbf{A}_i`` is the fault selection matrix that selects the measurements in `fault_indices` (e.g., if `fault_indices = [1,3]`, then ``\mathbf{A}_i`` picks out measurements 1 and 3)
+- ``\mathbf{s}_0`` is the extraction vector for the parameter `alpha_idx` (e.g., if `alpha_idx = 3` for z-position, then ``\mathbf{s}_0`` extracts the z-component from the state estimate)
 - ``\mathbf{H}`` is the Jacobian matrix relating measurement errors to pose parameter errors
+
+Thus ``\mathbf{f}_i`` represents the worst-case fault direction **for the specific combination of fault subset and monitored parameter**.
 
 ### API Reference
 
