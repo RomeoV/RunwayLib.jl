@@ -33,6 +33,8 @@ jobs:
 
       - name: Build executable
         working-directory: juliac
+        env:
+          JULIA_CPU_TARGET: "generic"
         run: |
           make
 
