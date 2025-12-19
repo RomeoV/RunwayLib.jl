@@ -7,7 +7,7 @@ PackageCompiler = "9b87118b-4619-50d2-8e1e-99f35a4d4d9d"
 
 [compat]
 JuliaC = "=0.2.0, =0.2.2"
-PackageCompiler = "2 - 2.2.3"
+PackageCompiler = "2.0.0 - 2.2.3"
 
 [preferences.LinearSolve]
 LoadMKL_JLL = false
