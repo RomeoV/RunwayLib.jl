@@ -117,21 +117,28 @@ end
         H::AbstractMatrix,
     )
 
-Compute worst-case fault direction and failure mode slope for 3-DOF or 6-DOF, depending on the columns of `H`.
+Computes the worst-case fault direction and corresponding failure mode slope
+for a selected pose parameter and fault subset.
 
 # Arguments
-- `alpha_idx::Int`: Parameter index (1=x, 2=y, 3=z, 4=yaw, 5=pitch, 6=roll)
-- `fault_indices::AbstractVector{Int}`: Measurement indices in fault subset
-- `H::AbstractMatrix`: Jacobian matrix (should have ndof columns)
+- `alpha_idx::Int`: Monitored parameter index
+  - 1 = along-track position
+  - 2 = cross-track position
+  - 3 = height above runway
+  - 4 = yaw
+  - 5 = pitch
+  - 6 = roll
+- `fault_indices::AbstractVector{Int}`: Indices of measurements in fault subset
+- `H::AbstractMatrix`: Jacobian matrix (ndof columns)
 - `noise_cov::AbstractMatrix`: Measurement noise covariance matrix
 
 # Returns
-- `f_i`: Worst-case fault direction vector
-- `slope_g`: Failure mode slope
+- `f_dir`: Worst-case fault direction (normalized vector)
+- `g_slope`: Failure mode slope (quantifies sensitivity to faults in this direction)
 
-References (Eq. 32-33, Joerger et al. 2014):
-- Worst-Case Fault Direction: f_i = A_i (A_iᵀ P A_i)⁻¹ (A_iᵀ s₀)
-- Worst-Case Failure Mode Slope: slope_g² = (s₀ᵀ A_i) (A_iᵀ P A_i)⁻¹ (A_iᵀ s₀)
+!!! note
+    The Jacobian `H` must have the correct number of columns for the degrees of
+    freedom (3 for position-only, 6 for full pose estimation).
 """
 function compute_worst_case_fault_direction_and_slope(
     alpha_idx::Int,
@@ -174,14 +181,14 @@ function compute_worst_case_fault_direction_and_slope(
     # Compute m_Xi = Aᵀ s₀
     m_Xi = A_i' * s_0
 
-    # Compute worst-case fault direction f_i and normalize
-    f_i = A_i * (visibility_matrix \ m_Xi) |> normalize
+    # Compute worst-case fault direction f_dir and normalize
+    f_dir = A_i * (visibility_matrix \ m_Xi) |> normalize
 
     # Compute Slope Squared (Eq 32)
-    slope_g_squared = m_Xi' * (visibility_matrix \ m_Xi)
-    @assert slope_g_squared >= 0 "Computed negative slope squared, numerical issue?"
-    slope_g = sqrt(slope_g_squared)
+    g_slope_squared = m_Xi' * (visibility_matrix \ m_Xi)
+    @assert g_slope_squared >= 0 "Computed negative slope squared, numerical issue?"
+    g_slope = sqrt(g_slope_squared)
 
-    return f_i, slope_g
+    return f_dir, g_slope
 end
 
