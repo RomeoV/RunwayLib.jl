@@ -9,6 +9,7 @@ import Pkg; Pkg.activate(".")
 
 # ╔═╡ 47423636-18d6-42cb-85e6-4a0909dc168d
 begin
+	using Revise
 	using RunwayLib
 	using WGLMakie
 	using BracketingNonlinearSolve  # line search
@@ -26,6 +27,7 @@ begin
 	using UnitfulLinearAlgebra
 	using PlutoUI
 	using IntervalSets
+	using RunwayLib.StaticArrays
 end
 
 # ╔═╡ 46af6473-88bf-49b9-8dc9-0a72e995f784
@@ -161,30 +163,6 @@ end
 # ╔═╡ 61a7fd31-94a6-43a2-9089-6dc7398d14d6
 md"# First visualization"
 
-# ╔═╡ f73e286b-261f-42cc-bc06-8d269709e615
-md"### `computefi`"
-
-# ╔═╡ 683af497-4a84-40dd-87e8-0e06ba04d6a3
-function computefi(alphaidx, fault_indices, H; normalize=true, sixdof=true)
-    H = (sixdof ? H : H[:, 1:3])
-    α = let alpha = zeros(sixdof ? 6 : 3); alpha[alphaidx] = 1; alpha end
-    S_0 = pinv(H)
-    s_0 = S_0' * α
-    
-    # Create selection matrix for dual fault
-    n = size(H, 1)
-	nf = length(fault_indices)
-	A_i = sparse(collect(fault_indices), 1:nf, ones(nf), n, nf)
-    # Compute worst-case fault direction
-    proj_parity = I - H * S_0
-	visibility_matrix = A_i' * proj_parity * A_i
-    f_i = A_i * (visibility_matrix \ (A_i' * s_0))
-    
-    normalize && normalize!(f_i)
-    f_i
-end
-
-
 # ╔═╡ a530d3e4-22db-4744-8b39-5947be16772c
 with_theme(theme_black()) do
 	c1, c2, c3, c4, c5, c6, c7 = Makie.wong_colors()
@@ -219,7 +197,9 @@ with_theme(theme_black()) do
 	yperturb = @lift Q' * [$(sl1.value); $(sl2.value)]
 	yperturb_pts = @lift ProjectionPoint.(eachcol(reshape($yperturb, 2, :)))*px
 	yrand_pts = @lift ProjectionPoint.(eachcol(reshape($(sl3.value) * drand, 2, :)))*px
-	f_i = @lift computefi($alphaidx, $fi_indices, H)
+	
+	f_i = @lift RunwayLib.compute_worst_case_fault_direction_and_slope($alphaidx, $fi_indices, H)[1]
+	
 	yfi_pts = @lift let sl4val = $(sl4.value)
 		ProjectionPoint.(eachcol(reshape(sign(sl4val)*exp(abs(sl4val)) * $f_i, 2, :)))*px
 	end
@@ -313,25 +293,8 @@ with_theme(theme_black()) do
 	fig
 end
 
-# ╔═╡ 6e3438b3-81b1-4055-87f9-28731bd674c2
-function get_pvalue(ø, (; threshold, std, alphaidx, H))
-    f = computefi(alphaidx, H)
-    noisy_observations_with_error = noisy_observations .+ [
-        ø*ProjectionPoint(f[i], f[i+1])px for i in 1:2:length(f)
-    ]
-
-    (cam_pos, cam_rot) = estimatepose6dof(
-        PointFeatures(runway_corners, noisy_observations_with_error)
-    )[(:pos, :rot)]
-
-    p = compute_integrity_statistic(
-        cam_pos, cam_rot,
-        runway_corners,
-        noisy_observations_with_error,
-        std*I(length(runway_corners)*2)
-    ).p_value
-    p - threshold
-end
+# ╔═╡ f73e286b-261f-42cc-bc06-8d269709e615
+md"### `compute_worst_case_fault_direction_and_slope`"
 
 # ╔═╡ 05fd4f82-3e37-4f50-83ed-66474a8f3003
 let H_=copy(H), alphaidx=1, fault_indices=[1, 2]
@@ -356,57 +319,18 @@ H = H_*px/m |> UnitfulMatrix
 	
 	# The central term (Aᵀ (I - H S₀) A)⁻¹
 	# This measures how "visible" faults in this subspace are to the parity check
-	 	visibility_matrix = A_i' * proj_parity * A_i
-
-
-end
-
-# ╔═╡ bd87625c-6487-4e70-91fb-e381cb52a72f
-md"### `compute_slope`"
-
-# ╔═╡ 41d7ef29-0a65-488e-9a28-1d625c61703c
-"""
-Computes the Worst-Case Failure Mode Slope (g) for a given state and fault subset.
-Ref: Equation (32) in Joerger et al. 2014.
-
-g² = (s₀ᵀ A) (Aᵀ P A)⁻¹ (Aᵀ s₀)
-"""
-function compute_slope(alphaidx, fault_indices, H_)
-	H = H_*px/m |> UnitfulMatrix
-	# 1. Define extraction vector s₀ for the state of interest (alpha)
-	α = let alpha = zeros(6); alpha[alphaidx] = 1; alpha end
-	S_0 = pinv(H)
-	s_0 = S_0' * α
-	
-	# 2. Define Parity Projection Matrix P
-	# P = I - H(HᵀH)⁻¹Hᵀ = I - H S₀
-	proj_parity = I - H * S_0
-
-	# 3. Define Fault Selection Matrix A
-	n = size(H, 1)
-	nf = length(fault_indices)
-	A_i = sparse(collect(fault_indices), 1:nf, ones(nf), n, nf) |> Matrix
-
-	# 4. Compute Slope Squared (Eq 32)
-	# The term m_Xi in the paper is Aᵀ s₀
-	m_Xi = A_i' * s_0
-	
-	# The central term (Aᵀ (I - H S₀) A)⁻¹
-	# This measures how "visible" faults in this subspace are to the parity check
 	visibility_matrix = A_i' * proj_parity * A_i
 
-	g_squared = m_Xi' * (visibility_matrix \ m_Xi)
-	return sqrt(g_squared)
+
 end
 
-
 # ╔═╡ f80aee26-b1d2-4183-aec8-2187f9c2cdfe
-compute_slope(1, [1, 2], H)
+g = RunwayLib.compute_worst_case_fault_direction_and_slope(1, [1, 2], H)[2] * m / px
 
 # ╔═╡ 58a21d5e-8a66-45b2-8202-aee966463df3
 function estimate_pose_with_faultmagnitude(ø, (; alphaidx, fi_indices, H, noisy_observations))
 	# Get the worst case direction vector (normalized)
-	f_dir = computefi(alphaidx, fi_indices, H; normalize=true)
+	f_dir = RunwayLib.compute_worst_case_fault_direction_and_slope(alphaidx, fi_indices, H)[1]
 	
 	# Apply fault: f = mag * direction
 	fault_vector_px = ø * f_dir
@@ -442,7 +366,8 @@ md"# Analytic vs Experimental Validation"
 
 # ╔═╡ 18ebe84e-5710-48b7-9849-130b5b55715c
 function get_analytic_max_error(alphaidx, fi_indices, H, px_std)
-	slope_g = compute_slope(alphaidx, fi_indices, H)
+	
+	slope_g = RunwayLib.compute_worst_case_fault_direction_and_slope(alphaidx, fi_indices, H)[2] * m / px
 	
 	# 2. Determine the Detection Threshold (T)
 	# The monitor checks if SSE < T². 
@@ -482,9 +407,10 @@ begin
 	alphaidx = 1
 	#fi_indices = [5, 6, 3, 4]
 	fi_indices = [3, 4]
+	
 	# 1. Compute the Slope g [meters / pixel]
 	# This tells us: for every 1 unit of detectable parity noise, how much position error occurs?
-	slope_g = compute_slope(alphaidx, fi_indices, H)
+	slope_g = RunwayLib.compute_worst_case_fault_direction_and_slope(alphaidx, fi_indices, H)[2] * m / px
 	
 	# 2. Determine the Detection Threshold (T)
 	# The monitor checks if SSE < T². 
@@ -582,39 +508,13 @@ let
 		return (; sse, p_value=p_val, dof)
 	end
 
-	# 2. Custom 3-DOF Analytic Slope Calculation
-	#    Uses UnitfulMatrix to handle units correctly (consistent with notebook)
-	function compute_slope_3dof(alphaidx, fi_indices, H_full_ref)
-		# Attach units: Position cols are px/m
-		H3 = H_full_ref[:, 1:3] * px/m |> UnitfulMatrix
-		
-		# Extraction Vector s0
-		alpha = zeros(3); alpha[alphaidx] = 1
-		S0 = pinv(H3)
-		s0 = S0' * alpha
-		
-		# Parity Matrix P
-		P = I - H3 * S0
-		
-		# Fault Matrix A
-		n = size(H3, 1)
-		nf = length(fi_indices)
-		A = sparse(collect(fi_indices), 1:nf, ones(nf), n, nf) |> Matrix
-		
-		# Slope Squared (g^2)
-		m_vec = A' * s0
-		vis_mat = A' * P * A
-		g2 = m_vec' * (vis_mat \ m_vec)
-		return sqrt(g2)
-	end
-
 	# 3. Optimization Objective for Line Search
 	function integrity_objective_3dof(ø_val, params)
 		(; alphaidx, fi_indices, H_ref_3, obs_ref, rot_fixed, corners) = params
 		
 		# A. Construct Fault Vector
 		#    (Use 3-DOF H for worst-case direction)
-		f_dir = computefi(alphaidx, fi_indices, H_ref_3; normalize=true, sixdof=false)
+		f_dir = RunwayLib.compute_worst_case_fault_direction_and_slope(alphaidx, fi_indices, H_ref_3)[1]
 		f_vec = ø_val * f_dir * px
 		
 		# B. Inject Fault
@@ -640,11 +540,11 @@ let
 	H_6dof = RunwayLib.compute_H(cam_pos_est, cam_rot_est, runway_corners)
 	H_3dof_ref = H_6dof[:, 1:3]
 	
-	# 1. Calculate Analytic Max Error
-	slope_3 = compute_slope_3dof(target_alphaidx, target_fi_indices, H_6dof)
+	slope_3 = RunwayLib.compute_worst_case_fault_direction_and_slope(target_alphaidx, target_fi_indices, H_3dof_ref)[2] * m / px
+	
 	dof_3 = length(runway_corners)*2 - 3
 	T_chisq_3 = quantile(Chisq(dof_3), 0.95)
-	sigma_val = sqrt(2.0)*px 
+	sigma_val = sqrt(2.0)*px
 	
 	analytic_max_error_3 = slope_3 * sigma_val * sqrt(T_chisq_3)
 	
@@ -664,7 +564,7 @@ let
 	mag_boundary_3 = sol_3.u
 	
 	# Measure error at boundary
-	f_dir_3 = computefi(target_alphaidx, target_fi_indices, H_3dof_ref; normalize=true, sixdof=false)
+	f_dir_3 = RunwayLib.compute_worst_case_fault_direction_and_slope(target_alphaidx, target_fi_indices, H_3dof_ref)[1]
 	f_vec_final = mag_boundary_3 * f_dir_3 * px
 	obs_final_3 = noisy_observations .+ [ProjectionPoint(f_vec_final[i], f_vec_final[i+1]) for i in 1:2:length(f_vec_final)]
 	
@@ -761,8 +661,8 @@ function do_computations(ui, ctx)
     yperturb = @lift Q' * [$(sl1.value); $(sl2.value)]
     yperturb_pts = @lift ProjectionPoint.(eachcol(reshape($yperturb, 2, :))) * px
     yrand_pts = @lift ProjectionPoint.(eachcol(reshape($(sl3.value) * drand, 2, :))) * px
-    
-    f_i = @lift computefi($alphaidx, $fi_indices, $H; sixdof=$(ui.do_estimate_rot.active))
+    f_i = @lift RunwayLib.compute_worst_case_fault_direction_and_slope($alphaidx, $fi_indices, $H)[1]
+	
     yfi_pts = @lift let sl4val = sign($(sl4.value))*exp(abs($(sl4.value)))
         # we have an exponential "gain" on this slider
         ProjectionPoint.(eachcol(reshape( sl4val * $f_i, 2, :))) * px
@@ -911,6 +811,21 @@ with_theme(theme_black()) do
 end
 end
 
+# ╔═╡ 3c32bf9d-a030-4a72-a202-371a480f588e
+H_ = SMatrix{8,6}(H)
+
+# ╔═╡ 690e2430-c79c-4415-be5e-64ad1264f3b6
+let
+	f_i_test, g_slope_test = RunwayLib.compute_worst_case_fault_direction_and_slope(4, SA[1], H_)
+	@assert f_i_test isa StaticArray
+	# #@assert g_slope_test isa SMatrix
+	# println(f_i_test)
+	println(typeof(g_slope_test))
+end
+
+# ╔═╡ 769f2646-e4a2-4535-9abd-c3009f458437
+H_[SA[1,2], :]
+
 # ╔═╡ Cell order:
 # ╠═46af6473-88bf-49b9-8dc9-0a72e995f784
 # ╠═b5b8f3c8-c4dc-11f0-82e6-e3e1218a8fd8
@@ -935,12 +850,8 @@ end
 # ╠═b495605a-ffe7-4783-a490-1d635731da0a
 # ╟─61a7fd31-94a6-43a2-9089-6dc7398d14d6
 # ╠═a530d3e4-22db-4744-8b39-5947be16772c
-# ╟─f73e286b-261f-42cc-bc06-8d269709e615
-# ╠═683af497-4a84-40dd-87e8-0e06ba04d6a3
-# ╠═6e3438b3-81b1-4055-87f9-28731bd674c2
+# ╠═f73e286b-261f-42cc-bc06-8d269709e615
 # ╠═05fd4f82-3e37-4f50-83ed-66474a8f3003
-# ╟─bd87625c-6487-4e70-91fb-e381cb52a72f
-# ╠═41d7ef29-0a65-488e-9a28-1d625c61703c
 # ╠═f80aee26-b1d2-4183-aec8-2187f9c2cdfe
 # ╠═58a21d5e-8a66-45b2-8202-aee966463df3
 # ╠═6e9e1c89-01f2-447d-8335-ad26881a6773
@@ -954,4 +865,6 @@ end
 # ╠═5c6760d3-7aed-4a17-a5e6-5dbf420fc6e1
 # ╟─76ad9899-7dd2-4795-b1b6-b44e34b747af
 # ╠═25348c41-f099-459c-9b19-250a66a01cab
-# ╠═29784c6c-c781-4ff6-ae5f-fe4ff5a32b44
+# ╠═3c32bf9d-a030-4a72-a202-371a480f588e
+# ╠═690e2430-c79c-4415-be5e-64ad1264f3b6
+# ╠═769f2646-e4a2-4535-9abd-c3009f458437
