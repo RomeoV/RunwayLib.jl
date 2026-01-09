@@ -1,6 +1,6 @@
 # Camera Model
 
-We use the [pinhole camera model](https://en.wikipedia.org/wiki/Pinhole_camera_model "Wikipedia") without any distortion.
+We use the [pinhole camera model](https://en.wikipedia.org/wiki/Pinhole_camera_model) (Wikipedia) without any distortion.
 We implement two projection plane reference frames: `:centered` and `:offset`, which are defined as illustrated here:
 
 ```@eval
