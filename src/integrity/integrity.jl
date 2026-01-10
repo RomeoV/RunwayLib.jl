@@ -123,6 +123,7 @@ Compute worst-case fault direction and failure mode slope for 3-DOF or 6-DOF, de
 - `alpha_idx::Int`: Parameter index (1=x, 2=y, 3=z, 4=yaw, 5=pitch, 6=roll)
 - `fault_indices::AbstractVector{Int}`: Measurement indices in fault subset
 - `H::AbstractMatrix`: Jacobian matrix (should have ndof columns)
+- `noise_cov::AbstractMatrix`: Measurement noise covariance matrix
 
 # Returns
 - `f_i`: Worst-case fault direction vector
@@ -136,6 +137,7 @@ function compute_worst_case_fault_direction_and_slope(
     alpha_idx::Int,
     fault_indices::AbstractVector{Int},
     H::AbstractMatrix,
+    noise_cov::AbstractMatrix,
 )
 
     @assert 1 <= alpha_idx <= size(H, 2) "alpha_idx must be 1-ndof"
@@ -145,13 +147,18 @@ function compute_worst_case_fault_direction_and_slope(
     ndof = size(H, 2)
     α = SVector(ntuple(i -> i == alpha_idx ? 1.0 : 0.0, Val(ndof)))
     
-
     # Compute S₀ = (HᵀH)⁻¹Hᵀ
     S_0 = pinv(H)
     s_0 = S_0' * α
 
+    # Whiten residuals using noise covariance
+    # For χ² test: r_whitened = L^(-T) * r where LL^T = Σ
+    L, _ = cholesky(noise_cov)
+    Linv = inv(L)
+
     # Define Parity Projection Matrix, P = I - H(HᵀH)⁻¹Hᵀ = I - H S₀
     proj_parity = I - H * S_0
+    proj_parity_Linv = proj_parity * Linv
     
     # Define Fault Selection Matrix A_i
     n_measurements = size(H, 1)
@@ -162,7 +169,7 @@ function compute_worst_case_fault_direction_and_slope(
 
     # Compute the central term, (Aᵀ (I - H S₀) A)⁻¹
     # This measures how "visible" faults in this subspace are to the parity check
-    visibility_matrix = A_i' * proj_parity * A_i
+    visibility_matrix = A_i' * proj_parity_Linv * proj_parity_Linv' * A_i
 
     # Compute m_Xi = Aᵀ s₀
     m_Xi = A_i' * s_0
