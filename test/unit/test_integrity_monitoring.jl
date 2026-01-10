@@ -362,6 +362,9 @@ end
     @testset "6. Static Array Return Types" begin
         # Test that compute_worst_case_fault_direction_and_slope returns static arrays
         (; runway_corners, true_pos, true_rot) = create_runway_scenario()
+        noise_level = 1.5
+        sigmas = noise_level * ones(length(runway_corners))
+        noise_cov = Diagonal(repeat(sigmas .^ 2, inner=2))
 
         # Compute Jacobian matrix using compute_H
         H_ = RunwayLib.compute_H(true_pos, true_rot, runway_corners)
@@ -374,7 +377,7 @@ end
             # Use alpha_idx that's valid for this ndof
             alpha_idx = min(4, ndof)  # 4 for 6-DOF (yaw), 2 or 3 for 3-DOF
 
-            f_dir, g_slope = RunwayLib.compute_worst_case_fault_direction_and_slope(alpha_idx, SA[1], H_static)
+            f_dir, g_slope = RunwayLib.compute_worst_case_fault_direction_and_slope(alpha_idx, SA[1], H_static, noise_cov)
 
             # Check types
             @test f_dir isa StaticArray
