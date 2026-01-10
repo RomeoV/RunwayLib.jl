@@ -27,6 +27,10 @@ runway_corners = [
 cam_pos = WorldPoint(-2000.0m, 12m, 150m)
 cam_rot = RotZYX(roll=1.5°, pitch=5°, yaw=0°)
 
+noise_level = 2.0
+sigmas = noise_level * ones(length(runway_corners))
+noise_cov = Diagonal(repeat(sigmas .^ 2, inner=2))
+
 H = RunwayLib.compute_H(cam_pos, cam_rot, runway_corners)
 
 alpha_idx = 3           # monitor height error
@@ -38,6 +42,7 @@ f_dir, g_slope = RunwayLib.compute_worst_case_fault_direction_and_slope(
     alpha_idx,
     fault_indices,
     H,
+    noise_cov,
 )
 ```
 
@@ -57,19 +62,20 @@ parameter while remaining undetectable by the integrity test. Following Joerger
 et al. [joerger2014solution](@cite), we compute it as:
 
 ```math
-\mathbf{f}_i = \mathbf{A}_i (\mathbf{A}_i^T \mathbf{P} \mathbf{A}_i)^{-1} (\mathbf{A}_i^T \mathbf{s}_0)
+\mathbf{f}_i = \mathbf{A}_i (\mathbf{A}_i^T \mathbf{P} \mathbf{P}^T \mathbf{A}_i)^{-1} (\mathbf{A}_i^T \mathbf{s}_0)
 ```
 
 #### Failure mode slope
 The **failure mode slope** ``g`` quantifies how rapidly the monitored parameter error grows relative to the detection statistic along the worst-case fault direction. Larger values of ``g`` indicate greater vulnerability: small undetected faults can induce large state estimation errors. It is defined as the ratio of the squared mean estimate error to the non-centrality parameter of the test statistic:
 
 ```math
-g^2 = \mathbf{s}_0^T \mathbf{A}_i (\mathbf{A}_i^T \mathbf{P} \mathbf{A}_i)^{-1} \mathbf{A}_i^T \mathbf{s}_0
+g^2 = \mathbf{s}_0^T \mathbf{A}_i (\mathbf{A}_i^T \mathbf{P} \mathbf{P}^T \mathbf{A}_i)^{-1} \mathbf{A}_i^T \mathbf{s}_0
 ```
 
 #### Definitions
 - ``\mathbf{H}`` is the Jacobian matrix relating changes in measurements to changes in pose parameters
-- ``\mathbf{P} = \mathbf{I} - \mathbf{H}(\mathbf{H}^T \mathbf{H})^{-1}\mathbf{H}^T`` is the parity projection matrix
+- ``\mathbf{P} = (\mathbf{I} - \mathbf{H}(\mathbf{H}^T \mathbf{H})^{-1}\mathbf{H}^T) * L^{-1}`` is the parity projection matrix
+- ``\mathbf{\Sigma} = LL^T`` is the noise covariance
 - ``\mathbf{A}_i`` is the fault selection matrix corresponding to the measurement indices specified by `fault_indices`
 - ``\mathbf{s}_0`` is the extraction vector for the monitored parameter specified by `alpha_idx`
 
