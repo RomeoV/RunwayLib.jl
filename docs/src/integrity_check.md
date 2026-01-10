@@ -14,7 +14,7 @@ If a set of measurements and estimated pose passes the integrity check, we next 
 
 ### Usage Example
 
-```julia
+```@example
 using RunwayLib, Unitful.DefaultSymbols, Rotations, LinearAlgebra
 	
 runway_corners = [
