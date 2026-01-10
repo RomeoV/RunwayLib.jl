@@ -65,7 +65,7 @@ The reference frame `S` can either be `:offset` or `:centered`.
 See [Camera Model](@ref) for more explanation.
 
 !!! note
-    Notably it is the users responsibility to construct the matrix such that
+    Notably it is the user's responsibility to construct the matrix such that
     the axes are aligned correctly, i.e., for `S=:offset` the first two offdiagonal
     elements must be negative.
 
