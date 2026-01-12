@@ -6,7 +6,7 @@ import Rotations: params
 using LinearAlgebra
 using Unitful, Unitful.DefaultSymbols
 using StaticArrays
-include("../test_utils.jl")
+using Random
 
 @testset "Pose Estimation" begin
     @testset "Static Array Support" begin
@@ -88,39 +88,38 @@ include("../test_utils.jl")
         end
 
         @testset "Lines Improve Accuracy" begin
-            TestUtils.retry_test(1) do
-                # Add noise to point observations
-                noisy_projections = [
-                    proj + ProjectionPoint(2.0px * randn(2))
-                    for proj in [project(true_pos, true_rot, c) for c in runway_corners]
-                ]
+            rng = MersenneTwister(123)
+            # Add noise to point observations
+            noisy_projections = [
+                proj + ProjectionPoint(2.0px * randn(rng, 2))
+                for proj in [project(true_pos, true_rot, c) for c in runway_corners]
+            ]
 
-                guess_pos = [true_pos.x + 100.0m, true_pos.y - 20.0m, true_pos.z + 30.0m]
-                guess_rot = [true_rot.theta1 + 0.05, true_rot.theta2 - 0.08, true_rot.theta3 + 0.03]rad
+            guess_pos = [true_pos.x + 100.0m, true_pos.y - 20.0m, true_pos.z + 30.0m]
+            guess_rot = [true_rot.theta1 + 0.05, true_rot.theta2 - 0.08, true_rot.theta3 + 0.03]rad
 
-                # Points-only estimation
-                point_noise = SMatrix{8,8}(diagm(fill(2.0^2, 8)))
-                point_features = PointFeatures(runway_corners, noisy_projections,
-                    CAMERA_CONFIG_OFFSET, point_noise)
-                result_points = estimatepose3dof(point_features, RunwayLib.NO_LINES,
-                    true_rot; initial_guess_pos=guess_pos)
+            # Points-only estimation
+            point_noise = SMatrix{8,8}(diagm(fill(2.0^2, 8)))
+            point_features = PointFeatures(runway_corners, noisy_projections,
+                CAMERA_CONFIG_OFFSET, point_noise)
+            result_points = estimatepose3dof(point_features, RunwayLib.NO_LINES,
+                true_rot; initial_guess_pos=guess_pos)
 
-                # Points + perfect lines estimation
-                line_noise = SMatrix{6,6}(diagm(fill(0.5^2, 6)))
-                line_features = LineFeatures(
-                    runway_lines, observed_lines,
-                    CAMERA_CONFIG_OFFSET, line_noise
-                )
-                result_combined = estimatepose3dof(
-                    point_features, line_features, true_rot;
-                    initial_guess_pos=guess_pos)
+            # Points + perfect lines estimation
+            line_noise = SMatrix{6,6}(diagm(fill(0.5^2, 6)))
+            line_features = LineFeatures(
+                runway_lines, observed_lines,
+                CAMERA_CONFIG_OFFSET, line_noise
+            )
+            result_combined = estimatepose3dof(
+                point_features, line_features, true_rot;
+                initial_guess_pos=guess_pos)
 
-                # Combined should be more accurate in crosstrack and height.
-                # sidelines dont't give much information about alongtrack.
-                err_points = norm(result_points.pos[2:3] - true_pos[2:3])
-                err_combined = norm(result_combined.pos[2:3] - true_pos[2:3])
-                @test err_combined < err_points
-            end
+            # Combined should be more accurate in crosstrack and height.
+            # sidelines dont't give much information about alongtrack.
+            err_points = norm(result_points.pos[2:3] - true_pos[2:3])
+            err_combined = norm(result_combined.pos[2:3] - true_pos[2:3])
+            @test err_combined < err_points
         end
     end
 

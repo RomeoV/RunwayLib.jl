@@ -3,6 +3,7 @@ using RunwayLib
 using StaticArrays
 using Unitful
 using Distributions
+using Random
 
 @testset "End-to-End Integration" begin
     @testset "Complete Pipeline" begin
@@ -40,9 +41,10 @@ using Distributions
         @test all(isfinite(ustrip(corner.x)) && isfinite(ustrip(corner.y)) for corner in projected_corners)
 
         # 5. Add realistic noise to observations with units
+        rng = MersenneTwister(201)
         pixel_noise_std = 2.0 * 1pixel
-        noisy_corners = SA[ProjectionPoint(corner.x + pixel_noise_std * randn(),
-            corner.y + pixel_noise_std * randn())
+        noisy_corners = SA[ProjectionPoint(corner.x + pixel_noise_std * randn(rng),
+            corner.y + pixel_noise_std * randn(rng))
                            for corner in projected_corners]
 
         @test length(noisy_corners) == 4
@@ -144,10 +146,11 @@ using Distributions
         true_projections = SA[project(true_pos, true_rot, corner, CAMERA_CONFIG_OFFSET) for corner in runway_corners]
 
         # Generate Monte Carlo samples using StaticArrays
+        rng = MersenneTwister(202)
         noisy_projection_samples = []
         for _ in 1:n_monte_carlo
-            noisy_sample = SA[ProjectionPoint(proj.x + input_pixel_std * randn(),
-                proj.y + input_pixel_std * randn())
+            noisy_sample = SA[ProjectionPoint(proj.x + input_pixel_std * randn(rng),
+                proj.y + input_pixel_std * randn(rng))
                               for proj in true_projections]
             push!(noisy_projection_samples, noisy_sample)
         end

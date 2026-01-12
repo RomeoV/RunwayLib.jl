@@ -7,6 +7,7 @@ using Unitful
 using Unitful.DefaultSymbols
 using JET
 using LinearAlgebra: I
+using Random
 
 @testset "C API" begin
     # Test data
@@ -21,8 +22,9 @@ using LinearAlgebra: I
     true_rot = RotZYX(roll=0.01, pitch=0.01, yaw=-0.01)
     camconfig = CAMERA_CONFIG_OFFSET
 
+    rng = MersenneTwister(401)
     projections = [
-        project(true_pos, true_rot, corner, camconfig) + ProjectionPoint(1 * randn(2)) * px
+        project(true_pos, true_rot, corner, camconfig) + ProjectionPoint(1 * randn(rng, 2)) * px
         for corner in runway_corners
     ]
 

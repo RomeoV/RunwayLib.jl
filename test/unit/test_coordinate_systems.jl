@@ -4,6 +4,7 @@ using StaticArrays
 using Rotations
 using LinearAlgebra
 using Unitful
+using Random
 
 @testset "Coordinate Systems" begin
     @testset "Coordinate Transformations" begin
@@ -68,7 +69,8 @@ using Unitful
         @test proj_near.y ≈ proj_far.y atol = 1.0e-6 * 1pixel
 
         # Test coordinate conversion (identity for same coordinate system)
-        p = ProjectionPoint(:offset, rand(2)px...)
+        rng = MersenneTwister(101)
+        p = ProjectionPoint(:offset, rand(rng, 2)px...)
         p′ = convertcamconf(CAMERA_CONFIG_OFFSET, CAMERA_CONFIG_OFFSET, p)
         @test p ≈ p′  # Should be identity since both are :offset
     end

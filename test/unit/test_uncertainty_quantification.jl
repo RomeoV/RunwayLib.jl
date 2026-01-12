@@ -3,6 +3,8 @@ using RunwayPoseEstimation
 using Distributions
 using LinearAlgebra
 using ProbabilisticParameterEstimators
+using Random
+using Statistics
 
 @testset "Uncertainty Quantification" begin
     @testset "Noise Model Construction" begin
@@ -117,19 +119,20 @@ using ProbabilisticParameterEstimators
     
     @testset "Calibration Assessment" begin
         # Test calibration checking for uncertainty estimates
-        
+
         # Mock predicted distributions and ground truth values
+        rng = MersenneTwister(501)
         n_samples = 100
-        true_values = randn(n_samples)
-        
+        true_values = randn(rng, n_samples)
+
         # Well-calibrated predictions (correct uncertainty)
-        predicted_dists_good = [Normal(val, 1.0) for val in true_values .+ 0.1*randn(n_samples)]
-        
+        predicted_dists_good = [Normal(val, 1.0) for val in true_values .+ 0.1*randn(rng, n_samples)]
+
         # Under-confident predictions (too much uncertainty)
-        predicted_dists_overconf = [Normal(val, 0.5) for val in true_values .+ 0.1*randn(n_samples)]
-        
-        # Over-confident predictions (too little uncertainty)  
-        predicted_dists_underconf = [Normal(val, 2.0) for val in true_values .+ 0.1*randn(n_samples)]
+        predicted_dists_overconf = [Normal(val, 0.5) for val in true_values .+ 0.1*randn(rng, n_samples)]
+
+        # Over-confident predictions (too little uncertainty)
+        predicted_dists_underconf = [Normal(val, 2.0) for val in true_values .+ 0.1*randn(rng, n_samples)]
         
         @test length(predicted_dists_good) == n_samples
         @test all(isa.(predicted_dists_good, Normal))
