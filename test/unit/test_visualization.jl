@@ -1,5 +1,7 @@
 using Test
 using RunwayPoseEstimation
+using Random
+using Statistics
 
 @testset "Visualization" begin
     @testset "Plotting Setup" begin
@@ -185,9 +187,10 @@ using RunwayPoseEstimation
     
     @testset "Diagnostic Visualization" begin
         # Test diagnostic plot data structures
-        
+
         # Mock residual analysis data
-        residuals = randn(100)  # Random residuals
+        rng = MersenneTwister(301)
+        residuals = randn(rng, 100)
         standardized_residuals = residuals ./ std(residuals)
         
         @test length(standardized_residuals) == length(residuals)
@@ -210,7 +213,7 @@ using RunwayPoseEstimation
         @test leverage_threshold < 1  # Should be reasonable fraction
         
         # Mock leverage values
-        leverage_values = rand(n_obs) * 0.5  # Random leverage values
+        leverage_values = rand(rng, n_obs) * 0.5
         high_leverage = leverage_values .> leverage_threshold
         
         @test all(0 .<= leverage_values .<= 1)
