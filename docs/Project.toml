@@ -15,6 +15,3 @@ ProfileCanvas = "0.1.7"
 Documenter = "1"
 DocumenterCitations = "1"
 Typstry = "0.6"
-
-[sources]
-ProfileCanvas = {rev = "bump-json", url = "https://github.com/RomeoV/ProfileCanvas.jl"}
