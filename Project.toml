@@ -28,6 +28,7 @@ PrecompileTools = "aea7be01-6a6a-4083-8856-8a6e6704d82a"
 ProbabilisticParameterEstimators = "0098cf3f-3e1e-4f11-b01c-dd9dec1b3374"
 Rotations = "6038ab10-8711-5258-84ad-4b1120ba62dc"
 SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 StaticArraysCore = "1e83bf80-4336-4d27-bf5d-d5a4f845583c"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
@@ -36,9 +37,6 @@ Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
 [weakdeps]
 PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
-
-[sources]
-NonlinearSolveBase = {rev="master", url="https://github.com/SciML/NonlinearSolve.jl", subdir="lib/NonlinearSolveBase"}
 
 [extensions]
 PythonCallExt = "PythonCall"
@@ -55,7 +53,7 @@ DocStringExtensions = "0.9.5"
 ForwardDiff = "1.2.2"
 LightSumTypes = "5.2.1"
 LinearAlgebra = "1.11.0"
-LinearSolve = "3.25.0 - 3.44.0"
+LinearSolve = "3.25.0 - 3.45.0"
 Moshi = "0.3.7"
 NonlinearSolveBase = "1.13.0,2"
 NonlinearSolveFirstOrder = "1.8.0"
@@ -66,6 +64,7 @@ ProbabilisticParameterEstimators = "0.8.3"
 PythonCall = "0.9"
 Rotations = "1"
 SciMLBase = "2.102.1"
+SparseArrays = "1.12.0"
 StaticArrays = "1"
 StaticArraysCore = "1.4.4"
 StatsBase = "0.34.5"

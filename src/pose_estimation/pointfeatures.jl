@@ -17,12 +17,20 @@ struct PointFeatures{
     cov::M
     Linv::M′
 end
-function PointFeatures(runway_corners, observed_corners, camconfig=CAMERA_CONFIG_OFFSET, noisemodel::NoiseModel=_defaultnoisemodel_points(runway_corners))
+function PointFeatures(
+    runway_corners::AbstractVector{<:WorldPoint{<:WithDims(m)}},
+    observed_corners::AbstractVector{<:ProjectionPoint{<:WithDims(px)}},
+    camconfig=CAMERA_CONFIG_OFFSET,
+    noisemodel::NoiseModel=_defaultnoisemodel_points(runway_corners)
+)
     n = length(runway_corners)
     cov = covmatrix(noisemodel) |> (runway_corners isa StaticArray ? SMatrix{2n,2n} : Matrix)
     return PointFeatures(runway_corners, observed_corners, camconfig, cov)
 end
-function PointFeatures(runway_corners, observed_corners, camconfig, cov::AbstractMatrix)
+function PointFeatures(
+    runway_corners::AbstractVector{<:WorldPoint{<:WithDims(m)}},
+    observed_corners::AbstractVector{<:ProjectionPoint{<:WithDims(px)}},
+    camconfig, cov::AbstractMatrix)
     U = cholesky(cov).U
     Linv = inv(U')  # Preserve static array type if input is static
     return PointFeatures(runway_corners, observed_corners, camconfig, cov, Linv)
