@@ -9,6 +9,78 @@ This figure provides a brief illustration, with more details in [valentin2025pre
 compute_integrity_statistic
 ```
 
+### Usage Example
+
+```@example
+using RunwayLib, Unitful.DefaultSymbols, Rotations, LinearAlgebra
+
+# Define runway corners in world coordinates
+runway_corners = [
+    WorldPoint(0.0m, 50m, 0m),     # near left
+    WorldPoint(3000.0m, 50m, 0m),  # far left
+    WorldPoint(3000.0m, -50m, 0m), # far right
+    WorldPoint(0.0m, -50m, 0m),    # near right
+]
+
+# True camera pose
+cam_pos = WorldPoint(-2000.0m, 12m, 150m)
+cam_rot = RotZYX(roll=1.5°, pitch=5°, yaw=0°)
+
+# Project corners to image (with small noise for realism)
+observed_corners = [project(cam_pos, cam_rot, pt) for pt in runway_corners]
+
+# Create point features with noise model
+noise_model = UncorrGaussianNoiseModel([Normal(0, 2.0) for _ in 1:8])
+pf = PointFeatures(runway_corners, observed_corners, CAMERA_CONFIG_OFFSET, noise_model)
+
+# Compute integrity statistic (points only)
+result = compute_integrity_statistic(cam_pos, cam_rot, pf)
+println("Integrity statistic: $(result.stat)")
+println("P-value: $(result.p_value)")
+println("Degrees of freedom: $(result.dofs)")
+```
+
+When observations match the model well (low noise, correct pose), we expect a high p-value.
+A low p-value (e.g., < 0.05) suggests the measurements are inconsistent with the pose estimate.
+
+#### With Line Features
+
+The integrity check also supports line observations for increased redundancy:
+
+```@example
+using RunwayLib, Unitful.DefaultSymbols, Rotations, LinearAlgebra
+
+runway_corners = [
+    WorldPoint(0.0m, 50m, 0m),
+    WorldPoint(3000.0m, 50m, 0m),
+    WorldPoint(3000.0m, -50m, 0m),
+    WorldPoint(0.0m, -50m, 0m),
+]
+cam_pos = WorldPoint(-2000.0m, 12m, 150m)
+cam_rot = RotZYX(roll=1.5°, pitch=5°, yaw=0°)
+
+# Point features
+observed_corners = [project(cam_pos, cam_rot, pt) for pt in runway_corners]
+pf = PointFeatures(runway_corners, observed_corners)
+
+# Line features (runway edges)
+line_endpoints = [
+    (runway_corners[1], runway_corners[2]),  # left edge
+    (runway_corners[3], runway_corners[4]),  # right edge
+]
+observed_lines = [
+    let p1 = project(cam_pos, cam_rot, ep[1]), p2 = project(cam_pos, cam_rot, ep[2])
+        getline(p1, p2)
+    end
+    for ep in line_endpoints
+]
+lf = LineFeatures(line_endpoints, observed_lines)
+
+# Compute integrity with both points and lines
+result = compute_integrity_statistic(cam_pos, cam_rot, pf, lf)
+println("With lines - DOFs: $(result.dofs), p-value: $(result.p_value)")
+```
+
 ## Worst-Case Fault Analysis
 If a set of measurements and estimated pose passes the integrity check, we next want to determine the **protection level**, which is the maximum deviation in pose from our estimate that could go undetected. This is computed using worst-case fault direction and failure mode slope analysis, which identifies the measurement error patterns most likely to cause unacceptably large positioning errors without triggering the integrity check.
 
@@ -16,7 +88,7 @@ If a set of measurements and estimated pose passes the integrity check, we next 
 
 ```@example
 using RunwayLib, Unitful.DefaultSymbols, Rotations, LinearAlgebra
-	
+
 runway_corners = [
     WorldPoint(0.0m, 50m, 0m),     # near left
     WorldPoint(3000.0m, 50m, 0m),  # far left
@@ -57,8 +129,8 @@ This section formalizes the worst-case fault analysis used to compute protection
 
 #### Worst-case fault direction
 The **worst-case fault direction** ``\mathbf{f}_i`` is the measurement error
-pattern within a specified fault subset that maximizes error in the monitored 
-parameter while remaining undetectable by the integrity test. Following Joerger 
+pattern within a specified fault subset that maximizes error in the monitored
+parameter while remaining undetectable by the integrity test. Following Joerger
 et al. [joerger2014solution](@cite), we compute it as:
 
 ```math

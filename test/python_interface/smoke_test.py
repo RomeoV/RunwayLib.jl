@@ -55,4 +55,23 @@ rot = np.asarray(res_jl.rot)
 # Smoke test assertions
 assert pos.shape == (3,), f"Expected position shape (3,), got {pos.shape}"
 assert rot.shape == (3, 3), f"Expected rotation shape (3, 3), got {rot.shape}"
-print(f"✓ Smoke test passed! Position: {pos}, Rotation shape: {rot.shape}")
+print(f"✓ Pose estimation test passed! Position: {pos}, Rotation shape: {rot.shape}")
+
+# === Integrity Monitoring Test ===
+# Use the estimated pose to compute integrity statistic
+pf = jl.PointFeatures(points3d, points2d, camconf)
+lf = jl.LineFeatures(line_pts, observed_lines, camconf)
+
+# Test with points only
+integrity_result = jl.compute_integrity_statistic(res_jl.pos, res_jl.rot, pf)
+assert hasattr(integrity_result, 'stat'), "Expected 'stat' field in integrity result"
+assert hasattr(integrity_result, 'p_value'), "Expected 'p_value' field in integrity result"
+assert hasattr(integrity_result, 'dofs'), "Expected 'dofs' field in integrity result"
+print(f"✓ Integrity (points only) - stat: {integrity_result.stat:.4f}, p-value: {integrity_result.p_value:.4f}, dofs: {integrity_result.dofs}")
+
+# Test with points and lines
+integrity_result_combined = jl.compute_integrity_statistic(res_jl.pos, res_jl.rot, pf, lf)
+assert integrity_result_combined.dofs > integrity_result.dofs, "Expected more DOFs with lines"
+print(f"✓ Integrity (points+lines) - stat: {integrity_result_combined.stat:.4f}, p-value: {integrity_result_combined.p_value:.4f}, dofs: {integrity_result_combined.dofs}")
+
+print("✓ All smoke tests passed!")

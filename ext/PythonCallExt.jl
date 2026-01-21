@@ -1,7 +1,8 @@
 module PythonCallExt
 using RunwayLib
 import RunwayLib: estimatepose3dof, estimatepose6dof, AbstractCameraConfig,
-    CAMERA_CONFIG_OFFSET, _defaultnoisemodel, WithDims, CameraMatrix, px, PointFeatures, LineFeatures
+    CAMERA_CONFIG_OFFSET, _defaultnoisemodel, WithDims, CameraMatrix, px, PointFeatures, LineFeatures,
+    compute_integrity_statistic, NO_LINES
 import StaticArrays: SMatrix
 
 function estimatepose6dof(
@@ -78,5 +79,12 @@ LineFeatures(world_line_endpoints::AbstractVector, observed_lines::AbstractVecto
         camconfig,
         noise
     )
+
+# Integrity monitoring wrappers
+compute_integrity_statistic(cam_pos, cam_rot, pf::PointFeatures) =
+    compute_integrity_statistic(cam_pos, cam_rot, pf, NO_LINES)
+
+compute_integrity_statistic(cam_pos, cam_rot, pf::PointFeatures, lf::LineFeatures) =
+    RunwayLib.compute_integrity_statistic(cam_pos, cam_rot, pf, lf)
 
 end
