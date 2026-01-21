@@ -1,7 +1,7 @@
 """
 Integrity Monitoring Tests
 
-This test suite validates the RAIM (Receiver Autonomous Integrity Monitoring) 
+This test suite validates the RAIM (Receiver Autonomous Integrity Monitoring)
 functionality for runway pose estimation. The tests cover:
 
 ## Core Functionality Tests
@@ -17,7 +17,7 @@ functionality for runway pose estimation. The tests cover:
    - Proper handling of different noise covariance structures
 
 ## Robustness and Edge Cases
-6. **Geometric Configuration Effects**: 
+6. **Geometric Configuration Effects**:
    - Well-conditioned vs poorly-conditioned corner geometries
    - Effect of observation geometry on integrity performance
    - Near-singular cases and numerical stability
@@ -36,6 +36,7 @@ functionality for runway pose estimation. The tests cover:
 
 using Test
 using RunwayLib
+import RunwayLib: PointFeatures, LineFeatures, compute_H, compute_parity_residual
 using Distributions
 using LinearAlgebra
 using Rotations
@@ -105,6 +106,45 @@ const CAMERA_CONFIGS = [
     ("CameraConfig :offset", CAMERA_CONFIG_OFFSET),
     ("CameraMatrix :offset", CameraMatrix(CAMERA_CONFIG_OFFSET))
 ]
+
+"""
+Create a test scenario with runway lines (edges of the runway).
+"""
+function create_line_scenario(;
+    true_pos=WorldPoint(-800.0m, 5.0m, 120.0m),
+    true_rot=RotZYX(0.02, 0.05, 0.01),
+)
+    # Runway corners for creating lines
+    corners = [
+        WorldPoint(0.0m, -25.0m, 0.0m),
+        WorldPoint(0.0m, 25.0m, 0.0m),
+        WorldPoint(1500.0m, -25.0m, 0.0m),
+        WorldPoint(1500.0m, 25.0m, 0.0m)
+    ]
+
+    # Define runway edge lines (left edge, right edge)
+    world_line_endpoints = [
+        (corners[1], corners[3]),  # left edge
+        (corners[2], corners[4]),  # right edge
+    ]
+
+    # Generate clean observed lines
+    clean_observed_lines = [
+        let p1 = project(true_pos, true_rot, endpoints[1], CAMERA_CONFIG_OFFSET),
+            p2 = project(true_pos, true_rot, endpoints[2], CAMERA_CONFIG_OFFSET)
+            getline(p1, p2)
+        end
+        for endpoints in world_line_endpoints
+    ]
+
+    return (;
+        corners,
+        world_line_endpoints,
+        true_pos,
+        true_rot,
+        clean_observed_lines,
+    )
+end
 
 """
 Validate p-value distribution against uniform distribution.
@@ -420,6 +460,80 @@ end
             @test stats.dofs == 2  # 4 points * 2 coords - 6 DOF = 2
             @test stats.stat >= 0
             @test isfinite(stats.stat)
+        end
+    end
+
+    @testset "7. Line-Based Integrity Functions" begin
+        (; corners, world_line_endpoints, true_pos, true_rot, clean_observed_lines) = create_line_scenario()
+
+        @testset "compute_H with PointFeatures" begin
+            point_features = PointFeatures(corners, [
+                project(true_pos, true_rot, c, CAMERA_CONFIG_OFFSET) for c in corners
+            ], CAMERA_CONFIG_OFFSET)
+
+            H = compute_H(true_pos, true_rot, point_features)
+
+            @test size(H) == (8, 6)  # 4 points * 2 coords, 6 DOF
+            @test all(isfinite, H)
+        end
+
+        @testset "compute_H with LineFeatures" begin
+            line_cov = SMatrix{6,6}(1.0I)
+            line_features = LineFeatures(world_line_endpoints, clean_observed_lines,
+                CAMERA_CONFIG_OFFSET, line_cov)
+
+            H = compute_H(true_pos, true_rot, line_features)
+
+            @test size(H) == (6, 6)  # 2 lines * 3 residuals, 6 DOF
+            @test all(isfinite, H)
+        end
+
+        @testset "compute_H with combined features" begin
+            observed_corners = [project(true_pos, true_rot, c, CAMERA_CONFIG_OFFSET) for c in corners]
+            point_features = PointFeatures(corners, observed_corners, CAMERA_CONFIG_OFFSET)
+            line_cov = SMatrix{6,6}(1.0I)
+            line_features = LineFeatures(world_line_endpoints, clean_observed_lines,
+                CAMERA_CONFIG_OFFSET, line_cov)
+
+            H = compute_H(true_pos, true_rot, point_features, line_features)
+
+            @test size(H) == (14, 6)  # 8 point + 6 line residuals, 6 DOF
+            @test all(isfinite, H)
+        end
+
+        @testset "compute_parity_residual with PointFeatures" begin
+            observed_corners = [project(true_pos, true_rot, c, CAMERA_CONFIG_OFFSET) for c in corners]
+            point_features = PointFeatures(corners, observed_corners, CAMERA_CONFIG_OFFSET)
+
+            r = compute_parity_residual(true_pos, true_rot, point_features)
+
+            @test length(r) == 8  # 4 points * 2 coords
+            # At true pose with no noise, parity residual should be near zero
+            @test all(abs.(ustrip.(r)) .< 1e-10)
+        end
+
+        @testset "compute_parity_residual with LineFeatures" begin
+            line_cov = SMatrix{6,6}(1.0I)
+            line_features = LineFeatures(world_line_endpoints, clean_observed_lines,
+                CAMERA_CONFIG_OFFSET, line_cov)
+
+            r = compute_parity_residual(true_pos, true_rot, line_features)
+
+            @test length(r) == 6  # 2 lines * 3 residuals
+            # At true pose with no noise, parity residual should be near zero
+            @test all(abs.(r) .< 1e-10)
+        end
+
+        @testset "compute_parity_residual with combined features" begin
+            observed_corners = [project(true_pos, true_rot, c, CAMERA_CONFIG_OFFSET) for c in corners]
+            point_features = PointFeatures(corners, observed_corners, CAMERA_CONFIG_OFFSET)
+            line_cov = SMatrix{6,6}(1.0I)
+            line_features = LineFeatures(world_line_endpoints, clean_observed_lines,
+                CAMERA_CONFIG_OFFSET, line_cov)
+
+            r = compute_parity_residual(true_pos, true_rot, point_features, line_features)
+
+            @test length(r) == 14  # 8 point + 6 line residuals
         end
     end
 
