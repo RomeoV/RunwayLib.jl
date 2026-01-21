@@ -24,7 +24,46 @@ function compute_H(cam_pos::WorldPoint, cam_rot::RotZYX, pts::AbstractVector{<:W
     H = [H_pos H_rot]
 end
 
-function compute_residual(
+function compute_H(cam_pos::WorldPoint, cam_rot::RotZYX, pf::PointFeatures)
+    compute_H(cam_pos, cam_rot, pf.runway_corners, pf.camconfig)
+end
+
+function compute_H(cam_pos::WorldPoint, cam_rot::RotZYX, lf::LineFeatures)
+    backend = AutoForwardDiff()
+
+    function line_residual(cam_pos_, cam_rot_, endpoints, obs_line)
+        p1 = project(cam_pos_, cam_rot_, endpoints[1], lf.camconfig)
+        p2 = project(cam_pos_, cam_rot_, endpoints[2], lf.camconfig)
+        pred_line = getline(p1, p2)
+        comparelines(pred_line, obs_line)
+    end
+
+    H_pos = reduce(vcat,
+        [jacobian(
+            cam_pos_ -> line_residual(WorldPoint(cam_pos_) * m, cam_rot, endpoints, obs_line),
+            backend,
+            cam_pos |> SVector .|> _ustrip(m))
+         for (endpoints, obs_line) in zip(lf.world_line_endpoints, lf.observed_lines)]
+    )
+
+    H_rot = reduce(vcat,
+        [jacobian(
+            cam_rot_ -> line_residual(cam_pos, RotZYX(cam_rot_...), endpoints, obs_line),
+            backend,
+            params(cam_rot))
+         for (endpoints, obs_line) in zip(lf.world_line_endpoints, lf.observed_lines)]
+    )
+
+    [H_pos H_rot]
+end
+
+function compute_H(cam_pos::WorldPoint, cam_rot::RotZYX, pf::PointFeatures, lf::LineFeatures)
+    H_points = compute_H(cam_pos, cam_rot, pf)
+    H_lines = compute_H(cam_pos, cam_rot, lf)
+    vcat(H_points, H_lines)
+end
+
+function compute_parity_residual(
     cam_pos::WorldPoint, cam_rot::RotZYX,
     world_pts::AbstractVector{<:WorldPoint},
     observed_pts::AbstractVector{<:ProjectionPoint},
@@ -43,6 +82,35 @@ function compute_residual(
     delta_zs = (observed_pts .- predicted_pts) |> _reduce(vcat)
     r = (I - H * pinv(H)) * delta_zs
     return r
+end
+
+function compute_parity_residual(cam_pos::WorldPoint, cam_rot::RotZYX, pf::PointFeatures)
+    predicted_pts = [project(cam_pos, cam_rot, pt, pf.camconfig) for pt in pf.runway_corners]
+    H = compute_H(cam_pos, cam_rot, pf)
+    delta_zs = (pf.observed_corners .- predicted_pts) |> _reduce(vcat)
+    (I - H * pinv(H)) * delta_zs
+end
+
+function compute_parity_residual(cam_pos::WorldPoint, cam_rot::RotZYX, lf::LineFeatures)
+    # Project line endpoints and compute predicted lines
+    predicted_lines = [
+        let p1 = project(cam_pos, cam_rot, endpoints[1], lf.camconfig),
+            p2 = project(cam_pos, cam_rot, endpoints[2], lf.camconfig)
+            getline(p1, p2)
+        end
+        for endpoints in lf.world_line_endpoints
+    ]
+
+    H = compute_H(cam_pos, cam_rot, lf)
+    # comparelines returns unitless residuals (r in px, cos/sin unitless)
+    delta_zs = reduce(vcat, [comparelines(pred, obs) for (pred, obs) in zip(predicted_lines, lf.observed_lines)])
+    (I - H * pinv(H)) * delta_zs
+end
+
+function compute_parity_residual(cam_pos::WorldPoint, cam_rot::RotZYX, pf::PointFeatures, lf::LineFeatures)
+    r_points = compute_parity_residual(cam_pos, cam_rot, pf)
+    r_lines = compute_parity_residual(cam_pos, cam_rot, lf)
+    vcat(r_points, r_lines)
 end
 
 compute_integrity_statistic(
@@ -92,8 +160,8 @@ function compute_integrity_statistic(
 
     dofs = n_observations - n_parameters
 
-    # Compute residual vector
-    r_raw = compute_residual(cam_pos, cam_rot, world_pts, observed_pts, camconfig)
+    # Compute parity residual vector
+    r_raw = compute_parity_residual(cam_pos, cam_rot, world_pts, observed_pts, camconfig)
     residual_norm = sqrt(sum(abs2, r_raw))
 
     # Whiten residuals using noise covariance
@@ -153,7 +221,7 @@ function compute_worst_case_fault_direction_and_slope(
     # Define extraction vector s₀ for the state of interest (alpha)
     ndof = size(H, 2)
     α = SVector(ntuple(i -> i == alpha_idx ? 1.0 : 0.0, Val(ndof)))
-    
+
     # Compute S₀ = (HᵀH)⁻¹Hᵀ
     S_0 = pinv(H)
     s_0 = S_0' * α
@@ -166,7 +234,7 @@ function compute_worst_case_fault_direction_and_slope(
     # Define Parity Projection Matrix, P = I - H(HᵀH)⁻¹Hᵀ = I - H S₀
     proj_parity = I - H * S_0
     proj_parity_Linv = proj_parity * Linv
-    
+
     # Define Fault Selection Matrix A_i
     n_measurements = size(H, 1)
     n_faults = length(fault_indices)
