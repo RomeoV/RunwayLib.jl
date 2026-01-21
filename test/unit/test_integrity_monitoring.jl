@@ -535,6 +535,33 @@ end
 
             @test length(r) == 14  # 8 point + 6 line residuals
         end
+
+        @testset "compute_integrity_statistic with PointFeatures" begin
+            observed_corners = [project(true_pos, true_rot, c, CAMERA_CONFIG_OFFSET) for c in corners]
+            point_features = PointFeatures(corners, observed_corners, CAMERA_CONFIG_OFFSET)
+
+            stats = compute_integrity_statistic(true_pos, true_rot, point_features)
+
+            @test stats.dofs == 2  # 8 observations - 6 parameters
+            @test stats.stat >= 0
+            @test 0 <= stats.p_value <= 1
+            @test isfinite(stats.stat)
+        end
+
+        @testset "compute_integrity_statistic with PointFeatures + LineFeatures" begin
+            observed_corners = [project(true_pos, true_rot, c, CAMERA_CONFIG_OFFSET) for c in corners]
+            point_features = PointFeatures(corners, observed_corners, CAMERA_CONFIG_OFFSET)
+            line_cov = SMatrix{6,6}(1.0I)
+            line_features = LineFeatures(world_line_endpoints, clean_observed_lines,
+                CAMERA_CONFIG_OFFSET, line_cov)
+
+            stats = compute_integrity_statistic(true_pos, true_rot, point_features, line_features)
+
+            @test stats.dofs == 8  # 14 observations - 6 parameters
+            @test stats.stat >= 0
+            @test 0 <= stats.p_value <= 1
+            @test isfinite(stats.stat)
+        end
     end
 
 end

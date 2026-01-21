@@ -179,6 +179,78 @@ function compute_integrity_statistic(
 end
 
 """
+    compute_integrity_statistic(cam_pos, cam_rot, pf::PointFeatures, lf::LineFeatures; n_parameters=6)
+
+Compute integrity statistic for combined point and line features.
+
+# Arguments
+- `cam_pos`: Camera position (WorldPoint)
+- `cam_rot`: Camera rotation (RotZYX)
+- `pf`: Point features with observations and covariance
+- `lf`: Line features with observations and covariance
+- `n_parameters`: Number of pose parameters (default 6 for full 6-DOF)
+
+# Returns
+Same as the base `compute_integrity_statistic` function.
+"""
+function compute_integrity_statistic(
+    cam_pos::WorldPoint, cam_rot::RotZYX,
+    pf::PointFeatures, lf::LineFeatures;
+    n_parameters::Int=6
+)
+    n_point_obs = 2 * length(pf.runway_corners)
+    n_line_obs = 3 * length(lf.world_line_endpoints)
+    n_observations = n_point_obs + n_line_obs
+
+    @assert n_observations > n_parameters "Need more observations than parameters for integrity monitoring"
+
+    dofs = n_observations - n_parameters
+
+    # Compute parity residuals separately for correct unit handling
+    r_points_raw = compute_parity_residual(cam_pos, cam_rot, pf)
+    r_lines_raw = compute_parity_residual(cam_pos, cam_rot, lf)
+
+    # Whiten each set of residuals with its own Linv (from feature structs)
+    r_points_whitened = (pf.Linv * r_points_raw) ./ px .|> _ustrip(NoUnits)
+    r_lines_whitened = lf.Linv * r_lines_raw .|> _ustrip(NoUnits)
+    r_whitened = vcat(r_points_whitened, r_lines_whitened)
+
+    # Compute residual norm (after stripping units for consistency)
+    residual_norm = sqrt(sum(abs2, r_points_whitened) + sum(abs2, r_lines_whitened))
+
+    # Compute chi-squared test statistic
+    stat = dot(r_whitened, r_whitened)
+
+    # Compute p-value using chi-squared distribution
+    p_value = ccdf(Chisq(dofs), stat)
+
+    return (; stat, p_value, dofs, residual_norm)
+end
+
+# Convenience: points-only with PointFeatures
+function compute_integrity_statistic(
+    cam_pos::WorldPoint, cam_rot::RotZYX,
+    pf::PointFeatures;
+    n_parameters::Int=6
+)
+    n_observations = 2 * length(pf.runway_corners)
+    @assert n_observations > n_parameters "Need more observations than parameters for integrity monitoring"
+
+    dofs = n_observations - n_parameters
+
+    r_raw = compute_parity_residual(cam_pos, cam_rot, pf)
+    residual_norm = sqrt(sum(abs2, r_raw))
+
+    L, U = cholesky(pf.cov)
+    r_whitened = U' \ r_raw / px .|> _ustrip(NoUnits)
+
+    stat = dot(r_whitened, r_whitened)
+    p_value = ccdf(Chisq(dofs), stat)
+
+    return (; stat, p_value, dofs, residual_norm)
+end
+
+"""
     compute_worst_case_fault_direction_and_slope(
         alpha_idx::Int,
         fault_indices::AbstractVector{Int},
