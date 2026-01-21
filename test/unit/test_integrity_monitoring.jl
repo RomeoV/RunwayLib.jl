@@ -36,7 +36,7 @@ functionality for runway pose estimation. The tests cover:
 
 using Test
 using RunwayLib
-import RunwayLib: PointFeatures, LineFeatures, compute_H, compute_parity_residual
+import RunwayLib: PointFeatures, LineFeatures, NO_LINES, compute_H, compute_parity_residual, compute_whitened_parity_residual
 using Distributions
 using LinearAlgebra
 using Rotations
@@ -524,16 +524,26 @@ end
             @test all(abs.(r) .< 1e-10)
         end
 
-        @testset "compute_parity_residual with combined features" begin
+        @testset "compute_whitened_parity_residual" begin
             observed_corners = [project(true_pos, true_rot, c, CAMERA_CONFIG_OFFSET) for c in corners]
             point_features = PointFeatures(corners, observed_corners, CAMERA_CONFIG_OFFSET)
             line_cov = SMatrix{6,6}(1.0I)
             line_features = LineFeatures(world_line_endpoints, clean_observed_lines,
                 CAMERA_CONFIG_OFFSET, line_cov)
 
-            r = compute_parity_residual(true_pos, true_rot, point_features, line_features)
+            r_points = compute_whitened_parity_residual(true_pos, true_rot, point_features)
+            r_lines = compute_whitened_parity_residual(true_pos, true_rot, line_features)
 
-            @test length(r) == 14  # 8 point + 6 line residuals
+            @test length(r_points) == 8  # 4 points * 2 coords
+            @test length(r_lines) == 6   # 2 lines * 3 residuals
+            @test eltype(r_points) <: Real  # Should be unitless
+            @test eltype(r_lines) <: Real
+        end
+
+        @testset "NO_LINES returns empty" begin
+            @test length(compute_H(true_pos, true_rot, NO_LINES)) == 0
+            @test length(compute_parity_residual(true_pos, true_rot, NO_LINES)) == 0
+            @test length(compute_whitened_parity_residual(true_pos, true_rot, NO_LINES)) == 0
         end
 
         @testset "compute_integrity_statistic with PointFeatures" begin
