@@ -91,8 +91,14 @@ cam_rot = RotZYX(roll=1.5°, pitch=5°, yaw=0°)
 true_observations = [project(cam_pos, cam_rot, p) for p in runway_corners]
 
 # ╔═╡ 3fae75fa-7760-4878-b97f-888ed1dbbf0f
-#px_std = sqrt(2)  # this corresponds to the default noise model which has px_var = 2
-px_std = 2.0px  # this corresponds to the default noise model which has px_var = 2
+px_std = sqrt(2.0)px  # this corresponds to the default noise model which has px_var = 4
+
+# ╔═╡ e2debdf2-3c03-473f-9f09-8bb9a145e245
+begin
+	noise_level = sqrt(2.0)
+	sigmas = noise_level * ones(length(runway_corners))
+	noise_cov = Diagonal(repeat(sigmas .^ 2, inner=2))
+end
 
 # ╔═╡ b377ee57-1d61-4787-bb9d-ed2b760ef23d
 noisy_observations = let; Random.seed!(1)
@@ -198,7 +204,7 @@ with_theme(theme_black()) do
 	yperturb_pts = @lift ProjectionPoint.(eachcol(reshape($yperturb, 2, :)))*px
 	yrand_pts = @lift ProjectionPoint.(eachcol(reshape($(sl3.value) * drand, 2, :)))*px
 	
-	f_i = @lift RunwayLib.compute_worst_case_fault_direction_and_slope($alphaidx, $fi_indices, H)[1]
+	f_i = @lift RunwayLib.compute_worst_case_fault_direction_and_slope($alphaidx, $fi_indices, H, noise_cov)[1]
 	
 	yfi_pts = @lift let sl4val = $(sl4.value)
 		ProjectionPoint.(eachcol(reshape(sign(sl4val)*exp(abs(sl4val)) * $f_i, 2, :)))*px
@@ -233,7 +239,7 @@ with_theme(theme_black()) do
         $(cam_pose_est_pert)[(:pos, :rot)]...,
         runway_corners,
         $perturbed_observations, 
-        2.0*I(length(runway_corners)*2)
+        noise_cov
     ).p_value > 0.05
 
 	# POSE VIEW
@@ -325,12 +331,27 @@ H = H_*px/m |> UnitfulMatrix
 end
 
 # ╔═╡ f80aee26-b1d2-4183-aec8-2187f9c2cdfe
-g = RunwayLib.compute_worst_case_fault_direction_and_slope(1, [1, 2], H)[2] * m / px
+begin
+	f_wo_noise, g_wo_noise = RunwayLib.compute_worst_case_fault_direction_and_slope_wo_noise(1, [1, 2], H)
+	g_wo_noise = g_wo_noise * m / px
+	
+	f_w_noise, g_w_noise = RunwayLib.compute_worst_case_fault_direction_and_slope(1, [1, 2], H, noise_cov)
+	g_w_noise = g_w_noise * m
+	
+	@show  g_wo_noise * px_std, g_w_noise
+	@assert isapprox(g_wo_noise * px_std, g_w_noise; rtol=1e-4)
+
+	@show  f_wo_noise, f_w_noise
+	@assert isapprox(f_wo_noise, f_w_noise; rtol=1e-4)
+end
+
+# ╔═╡ cec1de54-e52a-4db1-98bb-3cde27699672
+Revise.retry()
 
 # ╔═╡ 58a21d5e-8a66-45b2-8202-aee966463df3
 function estimate_pose_with_faultmagnitude(ø, (; alphaidx, fi_indices, H, noisy_observations))
 	# Get the worst case direction vector (normalized)
-	f_dir = RunwayLib.compute_worst_case_fault_direction_and_slope(alphaidx, fi_indices, H)[1]
+	f_dir = RunwayLib.compute_worst_case_fault_direction_and_slope(alphaidx, fi_indices, H, noise_cov)[1]
 	
 	# Apply fault: f = mag * direction
 	fault_vector_px = ø * f_dir
@@ -346,6 +367,12 @@ function estimate_pose_with_faultmagnitude(ø, (; alphaidx, fi_indices, H, noisy
 	cam_pose_est_faulty, faulty_observations
 end
 
+# ╔═╡ 74da0f12-790e-419c-9ffd-3bde66b13de8
+2.0*I(length(runway_corners)*2)
+
+# ╔═╡ 9b3596e1-e006-44b1-a2d2-75eeaae9fa24
+noise_cov
+
 # ╔═╡ 6e9e1c89-01f2-447d-8335-ad26881a6773
 function integrity_root_objective(ø_nounits, (; alphaidx, fi_indices, H, noisy_observations))
 	cam_pose_est_faulty, faulty_observations = estimate_pose_with_faultmagnitude(ø_nounits*px, (; alphaidx, fi_indices, H, noisy_observations))
@@ -355,7 +382,7 @@ function integrity_root_objective(ø_nounits, (; alphaidx, fi_indices, H, noisy_
 		cam_pose_est_faulty[(:pos, :rot)]..., # linearized around current est is fine for H checks
 		runway_corners,
 		faulty_observations,
-		2.0*I(length(runway_corners)*2)
+		noise_cov #2.0*I(length(runway_corners)*2)
 	)
 	return result.p_value - 0.05
 end
@@ -367,7 +394,8 @@ md"# Analytic vs Experimental Validation"
 # ╔═╡ 18ebe84e-5710-48b7-9849-130b5b55715c
 function get_analytic_max_error(alphaidx, fi_indices, H, px_std)
 	
-	slope_g = RunwayLib.compute_worst_case_fault_direction_and_slope(alphaidx, fi_indices, H)[2] * m / px
+	slope_g = RunwayLib.compute_worst_case_fault_direction_and_slope(alphaidx, fi_indices, H, noise_cov)[2] * m
+	g_wo_noise = RunwayLib.compute_worst_case_fault_direction_and_slope_wo_noise(1, [1, 2], H)[2] * m / px
 	
 	# 2. Determine the Detection Threshold (T)
 	# The monitor checks if SSE < T². 
@@ -377,10 +405,10 @@ function get_analytic_max_error(alphaidx, fi_indices, H, px_std)
 	
 	# 3. Calculate Analytic Max Error
 	# Max Error = Slope * Sigma * sqrt(Threshold)
-	# Sigma = sqrt(2.0) because we passed 2.0*I as covariance
+	# Sigma = sqrt(4.0) because we passed 4.0*I as covariance
 	sigma_val = px_std
-	
-	analytic_max_error = slope_g * sigma_val * sqrt(T_chisq)
+	@assert isapprox(slope_g * sqrt(T_chisq), g_wo_noise * sigma_val * sqrt(T_chisq); rtol=1e-4)
+	analytic_max_error = slope_g * sqrt(T_chisq)
 end
 
 # ╔═╡ 8a4de21a-acbc-4ce0-9315-6cc86376e3b1
@@ -402,6 +430,9 @@ function get_experimental_max_error(alphaidx, fi_indices, H, noisy_observations,
 	end |> sort
 end
 
+# ╔═╡ 200f9f96-cd3f-46dc-a52e-9a80c8f2f7ce
+Revise.retry()
+
 # ╔═╡ ef5eb470-af13-4491-a5a4-d634e41bf6f6
 begin
 	alphaidx = 1
@@ -410,8 +441,9 @@ begin
 	
 	# 1. Compute the Slope g [meters / pixel]
 	# This tells us: for every 1 unit of detectable parity noise, how much position error occurs?
-	slope_g = RunwayLib.compute_worst_case_fault_direction_and_slope(alphaidx, fi_indices, H)[2] * m / px
-	
+	# Note that since we include the noise cov, this is weighted by the standard pixel deviation, so we get [m] = [m / px] * px
+	slope_g = RunwayLib.compute_worst_case_fault_direction_and_slope(alphaidx, fi_indices, H, noise_cov)[2] * m
+
 	# 2. Determine the Detection Threshold (T)
 	# The monitor checks if SSE < T². 
 	# We need the T corresponding to our p-value requirement (alpha=0.05).
@@ -419,21 +451,20 @@ begin
 	T_chisq = quantile(Chisq(dof), 0.95)  # [px^2 / std_px^2]
 	
 	# 3. Calculate Analytic Max Error
-	# Max Error = Slope * Sigma * sqrt(Threshold)
-	# Sigma = sqrt(2.0) because we passed 2.0*I as covariance
-	sigma_val = px_std
-	
-	analytic_max_error = slope_g * sigma_val * sqrt(T_chisq)
-	                   # [m/px]  *  [std_px] * sqrt([px^2 / std_px^2])
+	# Max Error = Slope * sqrt(Threshold)
+	analytic_max_error = slope_g * sqrt(T_chisq)
+	                   # [m] * sqrt([px^2 / std_px^2])
+
 	
 	md"""
 	## Analytic Results
 	Based on Eq (32) and the Chi-Squared threshold:
 	
-	*   **Failure Mode Slope ($g_{Fi}$):** $(round(typeof(1.0*m/px), slope_g, digits=4))
+	*   **Failure Mode Slope ($g_{Fi}$):** $(round(typeof(1.0*m), slope_g, digits=4))
 	*   **$\chi^2$ Threshold ($T^2$):** $(round(T_chisq, digits=2))
 	*   **Worst Case Error (Analytic):** $(round(typeof(1.0m), analytic_max_error, digits=4))
 	"""
+
 end
 
 
@@ -482,7 +513,7 @@ let
 
 	# 1. Custom 3-DOF Integrity Statistic
 	#    Calculates q^2 (SSE) for a fixed-rotation scenario
-	function compute_integrity_statistic_3dof(pos, rot, corners, obs, cov_scalar=2.0)
+	function compute_integrity_statistic_3dof(pos, rot, corners, obs, cov_scalar=4.0)
 		# A. Compute 3-column Jacobian H (Position only)
 		H_full = RunwayLib.compute_H(pos, rot, corners)
 		H3 = H_full[:, 1:3] # Take first 3 cols (px/m)
@@ -514,7 +545,10 @@ let
 		
 		# A. Construct Fault Vector
 		#    (Use 3-DOF H for worst-case direction)
-		f_dir = RunwayLib.compute_worst_case_fault_direction_and_slope(alphaidx, fi_indices, H_ref_3)[1]
+		f_dir = RunwayLib.compute_worst_case_fault_direction_and_slope(alphaidx, fi_indices, H_ref_3, noise_cov)[1]
+		f_wo_noise = RunwayLib.compute_worst_case_fault_direction_and_slope_wo_noise(alphaidx, fi_indices, H_ref_3)[1]
+		@assert isapprox(f_dir, f_wo_noise; rtol=1e-4)
+
 		f_vec = ø_val * f_dir * px
 		
 		# B. Inject Fault
@@ -525,7 +559,7 @@ let
 		pos_new = estimatepose3dof(PointFeatures(corners, obs_faulty), NO_LINES, rot_fixed).pos
 		
 		# D. Check Integrity
-		res = compute_integrity_statistic_3dof(pos_new, rot_fixed, corners, obs_faulty, 2.0)
+		res = compute_integrity_statistic_3dof(pos_new, rot_fixed, corners, obs_faulty, 4.0)
 		
 		return res.p_value - 0.05
 	end
@@ -540,13 +574,17 @@ let
 	H_6dof = RunwayLib.compute_H(cam_pos_est, cam_rot_est, runway_corners)
 	H_3dof_ref = H_6dof[:, 1:3]
 	
-	slope_3 = RunwayLib.compute_worst_case_fault_direction_and_slope(target_alphaidx, target_fi_indices, H_3dof_ref)[2] * m / px
-	
+	slope_3 = RunwayLib.compute_worst_case_fault_direction_and_slope(target_alphaidx, target_fi_indices, H_3dof_ref, noise_cov)[2] * m
+	slope_3_wo_noise = RunwayLib.compute_worst_case_fault_direction_and_slope_wo_noise(target_alphaidx, target_fi_indices, H_3dof_ref)[2] * m / px
+
 	dof_3 = length(runway_corners)*2 - 3
 	T_chisq_3 = quantile(Chisq(dof_3), 0.95)
-	sigma_val = sqrt(2.0)*px
+	old_sigma_val = sqrt(2.0)*px
 	
-	analytic_max_error_3 = slope_3 * sigma_val * sqrt(T_chisq_3)
+	analytic_max_error_3 = slope_3 * sqrt(T_chisq_3)
+	new_sigma_val = 2.0*px
+	@assert isapprox(analytic_max_error_3, slope_3_wo_noise * px_std * sqrt(T_chisq_3); rtol=1e-4)
+	@show slope_3_wo_noise * new_sigma_val * sqrt(T_chisq_3), slope_3_wo_noise * old_sigma_val * sqrt(T_chisq_3)
 	
 	# 2. Calculate Experimental Max Error
 	search_params = (; 
@@ -564,7 +602,10 @@ let
 	mag_boundary_3 = sol_3.u
 	
 	# Measure error at boundary
-	f_dir_3 = RunwayLib.compute_worst_case_fault_direction_and_slope(target_alphaidx, target_fi_indices, H_3dof_ref)[1]
+	f_dir_3 = RunwayLib.compute_worst_case_fault_direction_and_slope(target_alphaidx, target_fi_indices, H_3dof_ref, noise_cov)[1]
+	f_wo_noise_3 = RunwayLib.compute_worst_case_fault_direction_and_slope_wo_noise(target_alphaidx, target_fi_indices, H_3dof_ref)[1]
+	@assert isapprox(f_dir_3, f_wo_noise_3; rtol=1e-4)
+	
 	f_vec_final = mag_boundary_3 * f_dir_3 * px
 	obs_final_3 = noisy_observations .+ [ProjectionPoint(f_vec_final[i], f_vec_final[i+1]) for i in 1:2:length(f_vec_final)]
 	
@@ -661,7 +702,7 @@ function do_computations(ui, ctx)
     yperturb = @lift Q' * [$(sl1.value); $(sl2.value)]
     yperturb_pts = @lift ProjectionPoint.(eachcol(reshape($yperturb, 2, :))) * px
     yrand_pts = @lift ProjectionPoint.(eachcol(reshape($(sl3.value) * drand, 2, :))) * px
-    f_i = @lift RunwayLib.compute_worst_case_fault_direction_and_slope($alphaidx, $fi_indices, $H)[1]
+    f_i = @lift RunwayLib.compute_worst_case_fault_direction_and_slope($alphaidx, $fi_indices, $H, noise_cov)[1]
 	
     yfi_pts = @lift let sl4val = sign($(sl4.value))*exp(abs($(sl4.value)))
         # we have an exponential "gain" on this slider
@@ -694,7 +735,7 @@ function do_computations(ui, ctx)
         $(cam_pos_est_pert), $(cam_rot_est_pert),
         ctx.runway_corners,
         $(perturbed_observations), 
-        2.0*I(length(ctx.runway_corners)*2)
+        noise_cov
     ).p_value > 0.05
 
 	analytic_worst_case = @lift get_analytic_max_error($alphaidx, $fi_indices, $H, ctx.px_std)
@@ -816,7 +857,7 @@ H_ = SMatrix{8,6}(H)
 
 # ╔═╡ 690e2430-c79c-4415-be5e-64ad1264f3b6
 let
-	f_i_test, g_slope_test = RunwayLib.compute_worst_case_fault_direction_and_slope(4, SA[1], H_)
+	f_i_test, g_slope_test = RunwayLib.compute_worst_case_fault_direction_and_slope(4, SA[1], H_, noise_cov)
 	@assert f_i_test isa StaticArray
 	# #@assert g_slope_test isa SMatrix
 	# println(f_i_test)
@@ -832,12 +873,13 @@ H_[SA[1,2], :]
 # ╟─64d2c0fd-2542-4b2c-80f6-134ed8434c3b
 # ╠═47423636-18d6-42cb-85e6-4a0909dc168d
 # ╠═c3018bf9-35fc-4234-bb52-53a627c2accf
-# ╟─fe109e18-f485-40e8-8af6-034fb0990463
+# ╠═fe109e18-f485-40e8-8af6-034fb0990463
 # ╠═ddee502b-6245-45eb-b4cc-ce4a4f749fcf
 # ╠═2fe79916-81bf-4487-bd21-4656783cc4c6
 # ╠═020be658-c6dc-48a3-abb8-34cf8b1fd449
 # ╠═951488bb-bf5a-434e-8251-8664ca58ee7d
 # ╠═3fae75fa-7760-4878-b97f-888ed1dbbf0f
+# ╠═e2debdf2-3c03-473f-9f09-8bb9a145e245
 # ╠═b377ee57-1d61-4787-bb9d-ed2b760ef23d
 # ╠═c6a57e0f-50c7-461a-a6e8-9281991b9e44
 # ╠═b027b7ad-098e-4048-97d1-f4ce311c5ac4
@@ -853,12 +895,16 @@ H_[SA[1,2], :]
 # ╠═f73e286b-261f-42cc-bc06-8d269709e615
 # ╠═05fd4f82-3e37-4f50-83ed-66474a8f3003
 # ╠═f80aee26-b1d2-4183-aec8-2187f9c2cdfe
+# ╠═cec1de54-e52a-4db1-98bb-3cde27699672
 # ╠═58a21d5e-8a66-45b2-8202-aee966463df3
+# ╠═74da0f12-790e-419c-9ffd-3bde66b13de8
+# ╠═9b3596e1-e006-44b1-a2d2-75eeaae9fa24
 # ╠═6e9e1c89-01f2-447d-8335-ad26881a6773
 # ╟─09c40df5-f975-4d86-ae81-4a35a67f647b
 # ╠═df5a6bf7-3f5b-4804-99de-291bdabeacdb
 # ╠═18ebe84e-5710-48b7-9849-130b5b55715c
 # ╠═8a4de21a-acbc-4ce0-9315-6cc86376e3b1
+# ╠═200f9f96-cd3f-46dc-a52e-9a80c8f2f7ce
 # ╠═ef5eb470-af13-4491-a5a4-d634e41bf6f6
 # ╠═5aaf7a5a-6cf9-4a1e-9825-e8fc2d6e3d75
 # ╠═a5214c33-0e64-4ac2-8484-ca03bbf660ad
