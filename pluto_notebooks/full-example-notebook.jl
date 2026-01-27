@@ -16,9 +16,6 @@ macro bind(def, element)
     #! format: on
 end
 
-# ╔═╡ d1e1b774-fa53-11f0-adba-f7a8012cedf9
-import Pkg; Pkg.activate(".")
-
 # ╔═╡ b4fee6f9-7344-4d8c-b16e-33eff1cede68
 begin
 	using Revise
@@ -531,7 +528,6 @@ end
 # ╟─f6bfcc72-21f3-4de4-b50f-b044b20d6e76
 # ╟─e56ca9f7-9c84-4985-89a9-a6f3d60111aa
 # ╟─1821382b-4378-4e78-88e9-0cd4a4a699c8
-# ╟─d1e1b774-fa53-11f0-adba-f7a8012cedf9
 # ╠═b4fee6f9-7344-4d8c-b16e-33eff1cede68
 # ╟─9612a518-b17a-467a-a6c8-6661aff7a1d8
 # ╟─09c592ab-17a5-4829-a646-6edb2cb9541e
