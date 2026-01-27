@@ -41,7 +41,7 @@ jobs:
           GROUP: ${{ matrix.group }}
 
   python-smoke-test:
-    name: Python Interface Smoke Test
+    name: Python Interface Smoke Test - Julia ${{ matrix.version }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: true
@@ -58,7 +58,16 @@ jobs:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
       - uses: julia-actions/cache@v2
+      # Use micromamba to get Python with OpenSSL 3.5+
+      # Required because Julia 1.12 needs OpenSSL 3.5, but uv's Python has 3.0.x
+      # See: https://github.com/JuliaPy/PythonCall.jl/issues/682
+      - uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: test
+          create-args: python=3.13 openssl>=3.5
       - uses: astral-sh/setup-uv@v5
       - name: Run Python smoke test
         working-directory: test/python_interface
-        run: uv run smoke_test.py
+        run: |
+          export UV_PYTHON="$MAMBA_ROOT_PREFIX/envs/test/bin/python"
+          uv run smoke_test.py  # installs env automatically
