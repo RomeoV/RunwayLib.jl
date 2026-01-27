@@ -71,3 +71,21 @@ jobs:
         run: |
           export UV_PYTHON="$MAMBA_ROOT_PREFIX/envs/test/bin/python"
           uv run smoke_test.py  # installs env automatically
+
+  pluto-notebooks:
+    name: Pluto Notebooks
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.13'
+          include-all-prereleases: true
+      - uses: julia-actions/cache@v2
+      - name: Install Pluto
+        run: julia -e 'using Pkg; Pkg.add("Pluto")'
+      - name: Run Pluto notebook tests
+        run: julia test/pluto_notebooks/run_notebook_tests.jl
+        env:
+          RUNWAYLIB_PKGDIR: ${{ github.workspace }}
