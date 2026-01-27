@@ -19,16 +19,16 @@ noisy_observations = [p + ProjectionPoint(2.0*randn(2)px) for p in true_observat
 )[(:pos, :rot)]
 
 cam_pos_est</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">3-element WorldPoint{Float64{m}} with indices SOneTo(3):
- -1997.741375773645 m
- 12.6455560415592 m
- 148.30534342404076 m</code></pre><p>We can extract roll-pitch-yaw as</p><pre><code class="language-julia hljs">import Rotations: params
+ -2000.4358313342918 m
+ 14.014946764175388 m
+ 149.00720788927634 m</code></pre><p>We can extract roll-pitch-yaw as</p><pre><code class="language-julia hljs">import Rotations: params
 (yaw, pitch, roll) = params(cam_rot_est)
 @show rad2deg(roll*rad)
 @show rad2deg(pitch*rad)
 @show rad2deg(yaw*rad)
-;</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">rad2deg(roll * rad) = 1.2562561709157192°
-rad2deg(pitch * rad) = 4.969206635206768°
-rad2deg(yaw * rad) = -0.008252737058407726°</code></pre><h2 id="Using-Line-Features"><a class="docs-heading-anchor" href="#Using-Line-Features">Using Line Features</a><a id="Using-Line-Features-1"></a><a class="docs-heading-anchor-permalink" href="#Using-Line-Features" title="Permalink"></a></h2><p>Besides point features we can additionally include line features which can typically improve our altitude and crosstrack estimations, but usually can&#39;t improve our alongtrack estimation much because the line projections are constant along the glidepath. See <a href="camera_model/#Line-Projections">Line Projections</a> for more information on the line parameterization.</p><pre><code class="language-julia hljs">line_pts = [
+;</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">rad2deg(roll * rad) = 1.289100929412288°
+rad2deg(pitch * rad) = 4.9632748520528995°
+rad2deg(yaw * rad) = -0.05192868637471859°</code></pre><h2 id="Using-Line-Features"><a class="docs-heading-anchor" href="#Using-Line-Features">Using Line Features</a><a id="Using-Line-Features-1"></a><a class="docs-heading-anchor-permalink" href="#Using-Line-Features" title="Permalink"></a></h2><p>Besides point features we can additionally include line features which can typically improve our altitude and crosstrack estimations, but usually can&#39;t improve our alongtrack estimation much because the line projections are constant along the glidepath. See <a href="camera_model/#Line-Projections">Line Projections</a> for more information on the line parameterization.</p><pre><code class="language-julia hljs">line_pts = [
     (runway_corners[1], runway_corners[2]),
     (runway_corners[3], runway_corners[4]),
 ]
@@ -52,6 +52,6 @@ observed_lines = [
 )[(:pos, :rot)]
 
 cam_pos_est</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">3-element WorldPoint{Float64{m}} with indices SOneTo(3):
- -2010.850920060839 m
- 12.985323085885804 m
- 150.2233914467876 m</code></pre></article><nav class="docs-footer"><a class="docs-footer-nextpage" href="camera_model/">Camera Model »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Monday 12 January 2026 20:11">Monday 12 January 2026</span>. Using Julia version 1.12.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+ -2006.346399328923 m
+ 12.740289785774777 m
+ 149.93609487879715 m</code></pre></article><nav class="docs-footer"><a class="docs-footer-nextpage" href="camera_model/">Camera Model »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Tuesday 27 January 2026 19:57">Tuesday 27 January 2026</span>. Using Julia version 1.12.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
