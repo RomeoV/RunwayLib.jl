@@ -12,7 +12,7 @@ compute_integrity_statistic
 ### Usage Example
 
 ```@example
-using RunwayLib, Unitful.DefaultSymbols, Rotations, LinearAlgebra
+using RunwayLib, Unitful.DefaultSymbols, Rotations, LinearAlgebra, Distributions
 
 # Define runway corners in world coordinates
 runway_corners = [
