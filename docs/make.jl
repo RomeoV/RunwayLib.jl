@@ -33,7 +33,7 @@ makedocs(
     sitename="RunwayLib",
     format=Documenter.HTML(
         assets=String["assets/citations.css"],
-        size_threshold_ignore=["benchmarks.md"],
+        size_threshold_ignore=["benchmarks.md", "test_container.md"],
     ),
     modules=[RunwayLib],
     repo=Remotes.GitHub("RomeoV", "RunwayLib.jl"),
@@ -48,6 +48,9 @@ makedocs(
         "performance_tips.md",
         "benchmarks.md",
         "uncertainty_predictions.md",
+        "Experiments" => [
+            "test_container.md",
+        ],
         "api_reference.md",
     ],
     plugins=[bib, links]
