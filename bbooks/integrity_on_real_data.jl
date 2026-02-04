@@ -4,6 +4,18 @@
 using Markdown
 using InteractiveUtils
 
+# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
+macro bind(def, element)
+    #! format: off
+    return quote
+        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
+        local el = $(esc(element))
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
+        el
+    end
+    #! format: on
+end
+
 # ╔═╡ 3745f4fa-fbfa-11f0-8bbf-cd24cef3b17f
 import Pkg; Pkg.activate(".")
 
@@ -15,6 +27,7 @@ begin
     using Distributions: Normal, Chisq, quantile
     # Explicit imports to resolve ambiguity with Makie and for integrity functions
     import RunwayLib: px, compute_H, compute_worst_case_fault_direction_and_slope
+	using PlutoUI
 end
 
 # ╔═╡ a1b2c3d4-0002-0000-0000-000000000002
@@ -85,10 +98,6 @@ md"""
 The CSV provides confidence scores (0-1) for each keypoint. We construct per-point
 standard deviations as `sigma = global_sigma * confidence`.
 """
-
-# ╔═╡ a1b2c3d4-0008-0002-0000-000000000002
-# Global sigma multiplier - tune this parameter
-global_sigma = 10.0  # pixels
 
 # ╔═╡ a1b2c3d4-0008-0003-0000-000000000003
 # Build noise model from confidence scores (same order as corners)
@@ -170,18 +179,6 @@ end
 # Extract observed keypoints
 observed_corners = extract_observed_corners(row)
 
-# ╔═╡ a1b2c3d4-0014-0000-0000-000000000014
-# Build noise model from confidence scores
-noise_model = make_noise_model(row, global_sigma)
-
-# ╔═╡ a1b2c3d4-0014-0001-0000-000000000001
-# Run pose estimation using PointFeatures with noise model
-result = estimatepose6dof(PointFeatures(runway_corners, observed_corners, CAMERA_CONFIG_OFFSET, noise_model))
-
-# ╔═╡ a1b2c3d4-0015-0000-0000-000000000015
-# Extract estimated pose
-cam_pos_est, cam_rot_est = result[:pos], result[:rot]
-
 # ╔═╡ a1b2c3d4-0016-0000-0000-000000000016
 md"""
 ## Comparison to Ground Truth
@@ -212,28 +209,6 @@ pipeline = (
     error = parse_num(row.along_track_error_m),
 )
 
-# ╔═╡ a1b2c3d4-0019-0000-0000-000000000019
-# Our estimate
-est = (
-    along_track = ustrip(m, cam_pos_est.x),
-    cross_track = ustrip(m, cam_pos_est.y),
-    height = ustrip(m, cam_pos_est.z),
-)
-
-# ╔═╡ a1b2c3d4-0020-0000-0000-000000000020
-# Position comparison
-let
-    println("=== Position Comparison ===")
-    println("                  Along-track    Cross-track    Height")
-    println("Ground Truth:     $(round(gt.along_track, digits=1))m    $(round(gt.cross_track, digits=1))m    $(round(gt.height, digits=1))m")
-    println("Pipeline Pred:    $(round(pipeline.along_track, digits=1))m    $(round(pipeline.cross_track, digits=1))m    $(round(pipeline.height, digits=1))m")
-    println("Our Estimate:     $(round(est.along_track, digits=1))m    $(round(est.cross_track, digits=1))m    $(round(est.height, digits=1))m")
-    println()
-    println("=== Errors ===")
-    println("Pipeline error:   $(round(pipeline.error, digits=2))m")
-    println("Our error:        $(round(est.along_track - gt.along_track, digits=2))m (along-track)")
-end
-
 # ╔═╡ a1b2c3d4-0021-0000-0000-000000000021
 md"""
 ### Rotation Comparison
@@ -242,20 +217,6 @@ Note: Rotation conventions between the CSV ground truth and RunwayLib may differ
 The CSV uses a specific aircraft/navigation convention while RunwayLib uses RotZYX.
 Further investigation needed to establish exact mapping.
 """
-
-# ╔═╡ a1b2c3d4-0022-0000-0000-000000000022
-# Rotation comparison (convention mapping TBD)
-let
-    import Rotations: params
-    (yaw, pitch, roll) = params(cam_rot_est) .|> rad2deg
-
-    println("=== Rotation Comparison ===")
-    println("                  Pitch       Roll        Yaw")
-    println("Ground Truth:     $(round(gt.pitch, digits=2))°    $(round(gt.roll, digits=2))°    $(round(gt.yaw, digits=2))°")
-    println("Our Estimate:     $(round(pitch, digits=2))°    $(round(roll, digits=2))°    $(round(yaw, digits=2))°")
-    println()
-    println("Note: Rotation convention mapping needs verification")
-end
 
 # ╔═╡ a1b2c3d4-0023-0000-0000-000000000001
 md"""
@@ -348,10 +309,6 @@ function process_trajectory(df_traj, global_sigma; compute_integrity=true)
     return results
 end
 
-# ╔═╡ a1b2c3d4-0023-0000-0000-000000000004
-# Process a subset of the trajectory (first 500 good rows for speed)
-trajectory_results = process_trajectory(df_good[1:min(500, nrow(df_good)), :], global_sigma)
-
 # ╔═╡ a1b2c3d4-0023-0000-0000-000000000005
 md"""
 ### Error Plots
@@ -359,6 +316,73 @@ md"""
 Showing alongtrack, crosstrack, and altitude errors as we approach the runway.
 The x-axis represents frame index (time progression toward runway).
 """
+
+# ╔═╡ a1b2c3d4-0025-0000-0000-000000000001
+md"""
+## Integrity Monitoring Plots
+
+These plots show the protection level bounds computed from worst-case fault analysis.
+- **Shaded band**: Protection level bounds `[estimate - PL, estimate + PL]`
+- **Line**: Estimated value
+- **Dots**: Ground truth (to validate if within bounds)
+- **Color**: Green = integrity passes, Red = integrity fails
+"""
+
+# ╔═╡ a1b2c3d4-0008-0002-0000-000000000002
+# Global sigma multiplier - tune this parameter
+md"global sigma: $(@bind global_sigma  Slider(1:10; show_value=true))"
+
+# ╔═╡ a1b2c3d4-0014-0000-0000-000000000014
+# Build noise model from confidence scores
+noise_model = make_noise_model(row, global_sigma)
+
+# ╔═╡ a1b2c3d4-0014-0001-0000-000000000001
+# Run pose estimation using PointFeatures with noise model
+result = estimatepose6dof(PointFeatures(runway_corners, observed_corners, CAMERA_CONFIG_OFFSET, noise_model))
+
+# ╔═╡ a1b2c3d4-0015-0000-0000-000000000015
+# Extract estimated pose
+cam_pos_est, cam_rot_est = result[:pos], result[:rot]
+
+# ╔═╡ a1b2c3d4-0019-0000-0000-000000000019
+# Our estimate
+est = (
+    along_track = ustrip(m, cam_pos_est.x),
+    cross_track = ustrip(m, cam_pos_est.y),
+    height = ustrip(m, cam_pos_est.z),
+)
+
+# ╔═╡ a1b2c3d4-0020-0000-0000-000000000020
+# Position comparison
+let
+    println("=== Position Comparison ===")
+    println("                  Along-track    Cross-track    Height")
+    println("Ground Truth:     $(round(gt.along_track, digits=1))m    $(round(gt.cross_track, digits=1))m    $(round(gt.height, digits=1))m")
+    println("Pipeline Pred:    $(round(pipeline.along_track, digits=1))m    $(round(pipeline.cross_track, digits=1))m    $(round(pipeline.height, digits=1))m")
+    println("Our Estimate:     $(round(est.along_track, digits=1))m    $(round(est.cross_track, digits=1))m    $(round(est.height, digits=1))m")
+    println()
+    println("=== Errors ===")
+    println("Pipeline error:   $(round(pipeline.error, digits=2))m")
+    println("Our error:        $(round(est.along_track - gt.along_track, digits=2))m (along-track)")
+end
+
+# ╔═╡ a1b2c3d4-0022-0000-0000-000000000022
+# Rotation comparison (convention mapping TBD)
+let
+    import Rotations: params
+    (yaw, pitch, roll) = params(cam_rot_est) .|> rad2deg
+
+    println("=== Rotation Comparison ===")
+    println("                  Pitch       Roll        Yaw")
+    println("Ground Truth:     $(round(gt.pitch, digits=2))°    $(round(gt.roll, digits=2))°    $(round(gt.yaw, digits=2))°")
+    println("Our Estimate:     $(round(pitch, digits=2))°    $(round(roll, digits=2))°    $(round(yaw, digits=2))°")
+    println()
+    println("Note: Rotation convention mapping needs verification")
+end
+
+# ╔═╡ a1b2c3d4-0023-0000-0000-000000000004
+# Process a subset of the trajectory (first 500 good rows for speed)
+trajectory_results = process_trajectory(df_good[1:min(1500, nrow(df_good)), :], global_sigma)
 
 # ╔═╡ a1b2c3d4-0023-0000-0000-000000000006
 # Create stacked error plots
@@ -390,17 +414,6 @@ let
 
     fig
 end
-
-# ╔═╡ a1b2c3d4-0025-0000-0000-000000000001
-md"""
-## Integrity Monitoring Plots
-
-These plots show the protection level bounds computed from worst-case fault analysis.
-- **Shaded band**: Protection level bounds `[estimate - PL, estimate + PL]`
-- **Line**: Estimated value
-- **Dots**: Ground truth (to validate if within bounds)
-- **Color**: Green = integrity passes, Red = integrity fails
-"""
 
 # ╔═╡ a1b2c3d4-0025-0000-0000-000000000002
 # Integrity statistics summary
@@ -467,6 +480,11 @@ let
     hidexdecorations!(ax1, grid=false)
     hidexdecorations!(ax2, grid=false)
 
+    # Force equal row heights
+    for i in 1:3
+        rowsize!(fig.layout, i, Relative(1/3))
+    end
+
     # Legend
     Legend(fig[1, 2], ax1, framevisible=false)
     Label(fig[2, 2], "Green = passes\nRed = fails", fontsize=10)
@@ -532,7 +550,6 @@ end
 # ╠═a1b2c3d4-0007-0000-0000-000000000007
 # ╠═a1b2c3d4-0008-0000-0000-000000000008
 # ╟─a1b2c3d4-0008-0001-0000-000000000001
-# ╠═a1b2c3d4-0008-0002-0000-000000000002
 # ╠═a1b2c3d4-0008-0003-0000-000000000003
 # ╠═a1b2c3d4-0024-0000-0000-000000000001
 # ╟─a1b2c3d4-0009-0000-0000-000000000009
@@ -558,6 +575,7 @@ end
 # ╠═a1b2c3d4-0023-0000-0000-000000000006
 # ╟─a1b2c3d4-0025-0000-0000-000000000001
 # ╠═a1b2c3d4-0025-0000-0000-000000000002
+# ╠═a1b2c3d4-0008-0002-0000-000000000002
 # ╠═a1b2c3d4-0025-0000-0000-000000000003
 # ╟─a1b2c3d4-0025-0000-0000-000000000004
 # ╠═a1b2c3d4-0025-0000-0000-000000000005
