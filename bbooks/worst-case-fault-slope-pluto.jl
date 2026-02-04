@@ -112,22 +112,10 @@ end
 )[(:pos, :rot)]
 
 # ╔═╡ b027b7ad-098e-4048-97d1-f4ce311c5ac4
-H = RunwayLib.compute_H(cam_pos, cam_rot, runway_corners)
-
-# ╔═╡ 128eddd5-1607-4188-b824-747c34ad5572
-Q = let
-	Qt = nullspace(H')
-	Qt'
-end
+H0 = RunwayLib.compute_H(cam_pos, cam_rot, runway_corners)
 
 # ╔═╡ 36e1df5f-9cf1-43d1-a2a4-9e63c56ae7c8
 cycle(xs::AbstractVector) = xs[[eachindex(xs); first(eachindex(xs))]]
-
-# ╔═╡ 49755fa4-babc-43a7-86db-2afcc96b18f7
-Makie.wong_colors();
-
-# ╔═╡ 56e87bb5-b7e6-45c1-a2cb-95e0aaf2a000
-drand = normalize(randn(8))
 
 # ╔═╡ 59a0ab1e-0360-4d24-9320-fb3966062b9d
 aircraft_model = load(joinpath("assets", "A320NeoV2_lowpoly.stl"));
@@ -167,185 +155,6 @@ function to_corrected_quat(R::Rotation{3})
 	Quaternion(quat.x, quat.y, quat.z, quat.w)
 end
 
-# ╔═╡ 61a7fd31-94a6-43a2-9089-6dc7398d14d6
-md"# First visualization"
-
-# ╔═╡ a530d3e4-22db-4744-8b39-5947be16772c
-with_theme(theme_black()) do
-	c1, c2, c3, c4, c5, c6, c7 = Makie.wong_colors()
-
-	fig = Figure(; size=(1200, 600))
-	slg = Makie.SliderGrid(
-		fig[3, 1:2],
-		(label="perturbation dir 1: ", range=-100:0.5:100, startvalue=0.0),
-		(label="perturbation dir 2:", range=-100:0.5:100, startvalue=0.0),
-		(label="random pertubation: ", range=-100:0.5:100, startvalue=0.0),
-		(label="worst case pertubation: ", range=-10:0.05:10, startvalue=0.0),
-	)
-	sl1, sl2, sl3, sl4 = slg.sliders;
-
-	control_menu = GridLayout(fig[2, 1:2])
-
-	(; gl, cbs, axismenu) = setup_corner_selections(control_menu[1, 1])
-	cb1, cb2, cb3, cb4 = cbs
-	fi_indices = @lift let
-		idx = findall([$(cb1.checked), $(cb2.checked), $(cb3.checked), $(cb4.checked)])
-		[(1:2:8)[idx];
-		 (2:2:8)[idx]]
-	end
-
-	visual_menu = GridLayout(control_menu[1,2]; tell_width=false)
-	Label(visual_menu[1, 1], text="Show Runway")
-	show_runway = Checkbox(visual_menu[1, 2], checked=false)
-	
-	#alphaidx = @lift findfirst(==($(axismenu.selection)), $(axismenu.options))
-	alphaidx = @lift Dict(1=>1, 2=>2, 3=>3, 4=>6, 5=>5, 6=>4)[$(axismenu.i_selected)]  # roll pitch yaw representation is reversed
-	yobs_pts = Point2.(true_observations)
-	yperturb = @lift Q' * [$(sl1.value); $(sl2.value)]
-	yperturb_pts = @lift ProjectionPoint.(eachcol(reshape($yperturb, 2, :)))*px
-	yrand_pts = @lift ProjectionPoint.(eachcol(reshape($(sl3.value) * drand, 2, :)))*px
-	
-	f_i = @lift RunwayLib.compute_worst_case_fault_direction_and_slope($alphaidx, $fi_indices, H, noise_cov)[1]
-	
-	yfi_pts = @lift let sl4val = $(sl4.value)
-		ProjectionPoint.(eachcol(reshape(sign(sl4val)*exp(abs(sl4val)) * $f_i, 2, :)))*px
-	end
-
-	perturbed_observations = @lift noisy_observations .+ $yperturb_pts .+ $yrand_pts .+ $yfi_pts
-	cam_pose_est_pert = @lift estimatepose6dof(
-	    PointFeatures(runway_corners, $perturbed_observations)
-	)
-	cam_pos_pert = @lift $(cam_pose_est_pert).pos
-	cam_rot_pert = @lift $(cam_pose_est_pert).rot
-
-	pose_delta_layout = GridLayout(control_menu[1,0])
-	Label(pose_delta_layout[0, 0:1], text="Pose Delta", font=:bold)
-	Label(pose_delta_layout[1, 0], text="x = \ny = \nz = ")
-	Label(pose_delta_layout[1, 1], text=@lift(let 
-		s = repr("text/plain", round.([typeof(1.0m)], (cam_pos_est - $cam_pos_pert); digits=2))
-		split(s, '\n')[2:end] |> x->join(x, '\n')
-	end), halign=:right)
-	rowgap!(pose_delta_layout, 0)
-	colgap!(pose_delta_layout, 0)
-	Label(pose_delta_layout[0, 2:4], text="Attitude Delta", font=:bold)
-	Label(pose_delta_layout[1, 2], text="roll\npitch\nyaw", justification=:left)
-	Label(pose_delta_layout[1, 3], text="=\n=\n=", justification=:left)
-	Label(pose_delta_layout[1, 4], text=@lift(let 
-		s = repr("text/plain", round.([typeof(1.0°)], reverse(rad2deg.((params($cam_rot_pert) - params(cam_rot_est)).*rad)); digits=1))
-		split(s, '\n')[2:end] |> x->join(x, '\n')
-	end), halign=:right)
-
-
-	passed = @lift compute_integrity_statistic(
-        $(cam_pose_est_pert)[(:pos, :rot)]...,
-        runway_corners,
-        $perturbed_observations, 
-        noise_cov
-    ).p_value > 0.05
-
-	# POSE VIEW
-	ax3 = Axis3(fig[1,1]; title="Pose Estimate", 
-				aspect=:data,
-			    xlabel="x = alongtrack [m]",
-			    ylabel="y = crosstrack [m]",
-			    zlabel="z = altitude [m]"
-			   )
-	## Plot Aircraft
-	meshargs = (;
-		marker=aircraft_model, 
-		markersize=@lift($(show_runway.checked) ? 3 : 1/3),
-	)
-	meshscatter!(ax3, [cam_pos_est .|> _ustrip(m)];
-			     color=c1, label="Reference", rotation=to_corrected_quat(cam_rot_est),
-				 meshargs...)
-	meshscatter!(ax3, @lift([$cam_pos_pert .|> _ustrip(m)]);
-			     color=@lift((($(passed) ? :green : :red), 1.0)),
-		         label="Perturbed", rotation=@lift(to_corrected_quat($cam_rot_pert)),
-				 meshargs...)
-	axislegend(ax3)
-	on(cam_pos_pert) do _
-		reset_limits!(ax3)
-	end
-	
-	## Maybe show Runway
-	poly!(ax3, [pt .|> _ustrip(m) for pt in cycle(runway_corners)], visible=show_runway.checked)
-	on(show_runway.checked) do _; reset_limits!(ax3); end
-
-	# PROJECTION VIEW
-	ax = Axis(fig[1,2]; yreversed=true,
-			  title="Perturbed Observations", aspect=DataAspect())
-	## Plot original and perturbed runway projection
-	scatterlines!(ax, [obs .|> _ustrip(px) for obs in cycle(true_observations)])
-    scatterlines!(ax, @lift([obs .|> _ustrip(px) 
-							 for obs in cycle(yobs_pts .+ $yperturb_pts .+ $yrand_pts .+ $yfi_pts)]);
-				  color=(:yellow, 0.5), linestyle=:dash)
-
-	## Plot various arrows, incrementally summing up
-	arrows2d!(ax, [obs .|> _ustrip(px) for obs in yobs_pts],
-			    yperturb_pts;
-			  color=:red
-		   )
-	arrows2d!(ax, @lift([obs .|> _ustrip(px) for obs in (yobs_pts .+ $yperturb_pts)]),
-			    yrand_pts;
-			  color=c7
-		   )
-	arrows2d!(ax, @lift([obs .|> _ustrip(px) for obs in (yobs_pts .+ $yperturb_pts .+ $yrand_pts)]),
-			yfi_pts;
-		  color=c4
-	   )
-	on(yperturb_pts) do _; reset_limits!(ax); end
-	on(yrand_pts) do _; reset_limits!(ax); end
-	on(yfi_pts) do _; reset_limits!(ax); end
-			
-	fig
-end
-
-# ╔═╡ f73e286b-261f-42cc-bc06-8d269709e615
-md"### `compute_worst_case_fault_direction_and_slope`"
-
-# ╔═╡ 05fd4f82-3e37-4f50-83ed-66474a8f3003
-let H_=copy(H), alphaidx=1, fault_indices=[1, 2]
-H = H_*px/m |> UnitfulMatrix
-	# 1. Define extraction vector s₀ for the state of interest (alpha)
-	α = let alpha = zeros(6); alpha[alphaidx] = 1; alpha end
-	S_0 = pinv(H)
-	s_0 = S_0' * α
-	
-	# 2. Define Parity Projection Matrix P
-	# P = I - H(HᵀH)⁻¹Hᵀ = I - H S₀
-	proj_parity = I - H * S_0
-
-	# 3. Define Fault Selection Matrix A
-	n = size(H, 1)
-	nf = length(fault_indices)
-	A_i = sparse(collect(fault_indices), 1:nf, ones(nf), n, nf) |> Matrix
-
-	# 4. Compute Slope Squared (Eq 32)
-	# The term m_Xi in the paper is Aᵀ s₀
-	m_Xi = A_i' * s_0
-	
-	# The central term (Aᵀ (I - H S₀) A)⁻¹
-	# This measures how "visible" faults in this subspace are to the parity check
-	visibility_matrix = A_i' * proj_parity * A_i
-
-
-end
-
-# ╔═╡ f80aee26-b1d2-4183-aec8-2187f9c2cdfe
-begin
-	f_wo_noise, g_wo_noise = RunwayLib.compute_worst_case_fault_direction_and_slope_wo_noise(1, [1, 2], H)
-	g_wo_noise = g_wo_noise * m / px
-	
-	f_w_noise, g_w_noise = RunwayLib.compute_worst_case_fault_direction_and_slope(1, [1, 2], H, noise_cov)
-	g_w_noise = g_w_noise * m
-	
-	@show  g_wo_noise * px_std, g_w_noise
-	@assert isapprox(g_wo_noise * px_std, g_w_noise; rtol=1e-4)
-
-	@show  f_wo_noise, f_w_noise
-	@assert isapprox(f_wo_noise, f_w_noise; rtol=1e-4)
-end
-
 # ╔═╡ 58a21d5e-8a66-45b2-8202-aee966463df3
 function estimate_pose_with_faultmagnitude(ø, (; alphaidx, fi_indices, H, noisy_observations))
 	# Get the worst case direction vector (normalized)
@@ -365,12 +174,6 @@ function estimate_pose_with_faultmagnitude(ø, (; alphaidx, fi_indices, H, noisy
 	cam_pose_est_faulty, faulty_observations
 end
 
-# ╔═╡ 74da0f12-790e-419c-9ffd-3bde66b13de8
-2.0*I(length(runway_corners)*2)
-
-# ╔═╡ 9b3596e1-e006-44b1-a2d2-75eeaae9fa24
-noise_cov
-
 # ╔═╡ 6e9e1c89-01f2-447d-8335-ad26881a6773
 function integrity_root_objective(ø_nounits, (; alphaidx, fi_indices, H, noisy_observations))
 	cam_pose_est_faulty, faulty_observations = estimate_pose_with_faultmagnitude(ø_nounits*px, (; alphaidx, fi_indices, H, noisy_observations))
@@ -388,6 +191,9 @@ end
 
 # ╔═╡ 09c40df5-f975-4d86-ae81-4a35a67f647b
 md"# Analytic vs Experimental Validation"
+
+# ╔═╡ df5a6bf7-3f5b-4804-99de-291bdabeacdb
+lines(-100:1:100, ø->integrity_root_objective(ø, (; alphaidx, fi_indices, H=H0, noisy_observations)) ; axis=(; xlabel="slider", ylabel="p value"))
 
 # ╔═╡ 18ebe84e-5710-48b7-9849-130b5b55715c
 function get_analytic_max_error(alphaidx, fi_indices, H, px_std)
@@ -438,79 +244,6 @@ function get_experimental_max_error(alphaidx, fi_indices, H, noisy_observations,
 		end
 		experimental_max_error
 	end |> sort
-end
-
-# ╔═╡ ef5eb470-af13-4491-a5a4-d634e41bf6f6
-begin
-	alphaidx = 1
-	#fi_indices = [5, 6, 3, 4]
-	fi_indices = [3, 4]
-	
-	# 1. Compute the Slope g [meters / pixel]
-	# This tells us: for every 1 unit of detectable parity noise, how much position error occurs?
-	# Note that since we include the noise cov, this is weighted by the standard pixel deviation, so we get [m] = [m / px] * px
-	slope_g = RunwayLib.compute_worst_case_fault_direction_and_slope(alphaidx, fi_indices, H, noise_cov)[2] * m
-
-	# 2. Determine the Detection Threshold (T)
-	# The monitor checks if SSE < T². 
-	# We need the T corresponding to our p-value requirement (alpha=0.05).
-	dof = size(H, 1) - size(H, 2) # Degrees of Freedom = Measurements - States
-	T_chisq = quantile(Chisq(dof), 0.95)  # [px^2 / std_px^2]
-	
-	# 3. Calculate Analytic Max Error
-	# Max Error = Slope * sqrt(Threshold)
-	analytic_max_error = slope_g * sqrt(T_chisq)
-	                   # [m] * sqrt([px^2 / std_px^2])
-
-	
-	md"""
-	## Analytic Results
-	Based on Eq (32) and the Chi-Squared threshold:
-	
-	*   **Failure Mode Slope ($g_{Fi}$):** $(round(typeof(1.0*m), slope_g, digits=4))
-	*   **$\chi^2$ Threshold ($T^2$):** $(round(T_chisq, digits=2))
-	*   **Worst Case Error (Analytic):** $(round(typeof(1.0m), analytic_max_error, digits=4))
-	"""
-
-end
-
-
-# ╔═╡ df5a6bf7-3f5b-4804-99de-291bdabeacdb
-lines(-100:1:100, ø->integrity_root_objective(ø, (; alphaidx, fi_indices, H, noisy_observations)) ; axis=(; xlabel="slider", ylabel="p value"))
-
-# ╔═╡ 5aaf7a5a-6cf9-4a1e-9825-e8fc2d6e3d75
-begin
-	# Define the function for the line search: p_value - 0.05 = 0
-	# We search for the fault magnitude 'mag' that puts us exactly on the detection boundary.
-	
-	# Perform Line Search
-	# We look for a root between 0 and 100 pixels of fault magnitude
-	experimental_max_error_tpl = map([
-				(0.0, 100.0),
-				(-100.0, 0.0)
-			]) do tspan
-		ps = (; alphaidx, fi_indices, H, noisy_observations)
-		prob = IntervalNonlinearProblem(integrity_root_objective, tspan, ps)
-		sol = solve(prob)
-		@assert BracketingNonlinearSolve.SciMLBase.successful_retcode(sol)
-		ø_at_boundary = sol.u*px
-		
-		# Calculate the actual Position Error at this boundary magnitude
-		cam_pose_est_faulty, _ = estimate_pose_with_faultmagnitude(ø_at_boundary, ps)
-		experimental_max_error = abs((cam_pose_est_faulty.pos - cam_pos_est)[alphaidx])
-		(; experimental_max_error, ø_at_boundary)
-	end
-	experimental_max_error, ø_at_boundary = sort(experimental_max_error_tpl; by=first) |> last
-
-	md"""
-	## Experimental Verification
-	Found the detection boundary via line search:
-	
-	*   **Fault Magnitude at Boundary:** $(round(ø_at_boundary, digits=2)) px
-	*   **Worst Case Error (Experiment):** $(round(typeof(1.0m), experimental_max_error, digits=4))
-	
-	*Diff: $(round(typeof(1.0m), abs(analytic_max_error - experimental_max_error), digits=5))*
-	"""
 end
 
 # ╔═╡ a5214c33-0e64-4ac2-8484-ca03bbf660ad
@@ -674,7 +407,7 @@ end
 
 # 2. Computations (The Pipeline)
 function do_computations(ui, ctx)
-	(; Q, px, drand, H, true_observations, noisy_observations, runway_corners) = ctx
+	(; px_std, true_observations, noisy_observations, runway_corners) = ctx
     (; sl1, sl2, sl3, sl4, cbs, axismenu, do_estimate_rot) = ui
     cb1, cb2, cb3, cb4 = cbs
 
@@ -695,6 +428,10 @@ function do_computations(ui, ctx)
     cam_rot_est_noisy = @lift $(cam_pose_est_noisy).rot
 
     H = @lift RunwayLib.compute_H($cam_pos_est_noisy, $cam_rot_est_noisy, ctx.runway_corners)
+	Q = @lift let
+		Qt = nullspace($(H)')
+		Qt'
+	end
 
     # Helper Logic
     fi_indices = @lift let
@@ -706,8 +443,9 @@ function do_computations(ui, ctx)
     
     # Points Calculations
     yobs_pts = Point2.(true_observations)
-    yperturb = @lift Q' * [$(sl1.value); $(sl2.value)]
+    yperturb = @lift $(Q)' * [$(sl1.value); $(sl2.value)]
     yperturb_pts = @lift ProjectionPoint.(eachcol(reshape($yperturb, 2, :))) * px
+	drand = normalize(randn(Random.MersenneTwister(1), 8))
     yrand_pts = @lift ProjectionPoint.(eachcol(reshape($(sl3.value) * drand, 2, :))) * px
     f_i = @lift RunwayLib.compute_worst_case_fault_direction_and_slope($alphaidx, $fi_indices, $H, noise_cov)[1]
 	
@@ -851,7 +589,7 @@ function setup_plots(fig, ui, data, ctx)
     on(_ -> reset_limits!(ax), data.yrand_pts)
     on(_ -> reset_limits!(ax), data.yfi_pts)
 end
-context = (; Q, px, drand, H, true_observations, noisy_observations, runway_corners, cam_pos, cam_rot, aircraft_model, px_std)
+context = (; true_observations, noisy_observations, runway_corners, cam_pos, cam_rot, aircraft_model, px_std)
 # 4. Main Orchestrator
 with_theme(theme_black()) do
 	fig = Figure(; size=(1200, 600))
@@ -863,21 +601,6 @@ with_theme(theme_black()) do
 	fig
 end
 end
-
-# ╔═╡ 3c32bf9d-a030-4a72-a202-371a480f588e
-H_ = SMatrix{8,6}(H)
-
-# ╔═╡ 690e2430-c79c-4415-be5e-64ad1264f3b6
-let
-	f_i_test, g_slope_test = RunwayLib.compute_worst_case_fault_direction_and_slope(4, SA[1], H_, noise_cov)
-	@assert f_i_test isa StaticArray
-	# #@assert g_slope_test isa SMatrix
-	# println(f_i_test)
-	println(typeof(g_slope_test))
-end
-
-# ╔═╡ 769f2646-e4a2-4535-9abd-c3009f458437
-H_[SA[1,2], :]
 
 # ╔═╡ Cell order:
 # ╠═46af6473-88bf-49b9-8dc9-0a72e995f784
@@ -895,33 +618,18 @@ H_[SA[1,2], :]
 # ╠═b377ee57-1d61-4787-bb9d-ed2b760ef23d
 # ╠═c6a57e0f-50c7-461a-a6e8-9281991b9e44
 # ╠═b027b7ad-098e-4048-97d1-f4ce311c5ac4
-# ╠═128eddd5-1607-4188-b824-747c34ad5572
 # ╠═36e1df5f-9cf1-43d1-a2a4-9e63c56ae7c8
-# ╠═49755fa4-babc-43a7-86db-2afcc96b18f7
-# ╠═56e87bb5-b7e6-45c1-a2cb-95e0aaf2a000
 # ╠═59a0ab1e-0360-4d24-9320-fb3966062b9d
 # ╠═120a3051-4909-4e65-a35d-82e76b706567
 # ╠═b495605a-ffe7-4783-a490-1d635731da0a
-# ╟─61a7fd31-94a6-43a2-9089-6dc7398d14d6
-# ╠═a530d3e4-22db-4744-8b39-5947be16772c
-# ╠═f73e286b-261f-42cc-bc06-8d269709e615
-# ╠═05fd4f82-3e37-4f50-83ed-66474a8f3003
-# ╠═f80aee26-b1d2-4183-aec8-2187f9c2cdfe
 # ╠═58a21d5e-8a66-45b2-8202-aee966463df3
-# ╠═74da0f12-790e-419c-9ffd-3bde66b13de8
-# ╠═9b3596e1-e006-44b1-a2d2-75eeaae9fa24
 # ╠═6e9e1c89-01f2-447d-8335-ad26881a6773
 # ╟─09c40df5-f975-4d86-ae81-4a35a67f647b
 # ╠═df5a6bf7-3f5b-4804-99de-291bdabeacdb
 # ╠═18ebe84e-5710-48b7-9849-130b5b55715c
 # ╟─982214a6-fd01-4166-aefe-36f051067be2
 # ╠═8a4de21a-acbc-4ce0-9315-6cc86376e3b1
-# ╠═ef5eb470-af13-4491-a5a4-d634e41bf6f6
-# ╠═5aaf7a5a-6cf9-4a1e-9825-e8fc2d6e3d75
 # ╠═a5214c33-0e64-4ac2-8484-ca03bbf660ad
-# ╠═5c6760d3-7aed-4a17-a5e6-5dbf420fc6e1
+# ╟─5c6760d3-7aed-4a17-a5e6-5dbf420fc6e1
 # ╟─76ad9899-7dd2-4795-b1b6-b44e34b747af
 # ╠═25348c41-f099-459c-9b19-250a66a01cab
-# ╠═3c32bf9d-a030-4a72-a202-371a480f588e
-# ╠═690e2430-c79c-4415-be5e-64ad1264f3b6
-# ╠═769f2646-e4a2-4535-9abd-c3009f458437
