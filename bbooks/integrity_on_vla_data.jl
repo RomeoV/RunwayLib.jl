@@ -30,6 +30,7 @@ begin
     # Explicit imports to resolve ambiguity with Makie and for integrity functions
     import RunwayLib: px, compute_H, compute_worst_case_fault_direction_and_slope
 	using PlutoUI
+	using LinearAlgebra
 end
 
 # ╔═╡ a1b2c3d4-0002-0000-0000-000000000002
@@ -190,6 +191,7 @@ function compute_protection_levels(cam_pos, cam_rot, pf; alpha=0.05)
                 pl = abs(g_slope) * sqrt(chi2_thresh)
                 max_pl = max(max_pl, pl)
             catch
+				@warn "Numerical issue"
                 # Numerical issue, skip this fault hypothesis
             end
         end
@@ -285,8 +287,60 @@ Noise model: $(@bind noise_source Select(["covariance" => "Covariance from CSV",
 
 $(noise_source == "confidence" ? md"global sigma: $(@bind global_sigma Slider(1:10; show_value=true, default=5))" : md"")
 
-alpha (integrity threshold): $(@bind alpha_val Select([0.01 => "0.01 (99%)", 0.05 => "0.05 (95%)", 0.1 => "0.1 (90%)"]; default=0.05))
+alpha (integrity threshold): $(@bind alpha_val Select([0.01 => "0.01 (99%)", 0.05 => "0.05 (95%)", 0.1 => "0.1 (90%)", 0.2 => "0.2 (80%)"]; default=0.05))
 """
+
+# ╔═╡ a1b2c3d4-0014-0000-0000-000000000014
+# Build noise model based on selection
+noise_model = if noise_source == "covariance"
+    make_noise_model_from_covariance(row)
+else
+    make_noise_model_from_confidence(row, global_sigma)
+end
+
+# ╔═╡ a1b2c3d4-0014-0001-0000-000000000001
+# Run pose estimation using PointFeatures with noise model
+result = estimatepose6dof(PointFeatures(runway_corners, observed_corners, CAMERA_CONFIG_OFFSET, noise_model))
+
+# ╔═╡ a1b2c3d4-0015-0000-0000-000000000015
+# Extract estimated pose
+cam_pos_est, cam_rot_est = result[:pos], result[:rot]
+
+# ╔═╡ a1b2c3d4-0019-0000-0000-000000000019
+# Our estimate
+est = (
+    along_track = ustrip(m, cam_pos_est.x),
+    cross_track = ustrip(m, cam_pos_est.y),
+    height = ustrip(m, cam_pos_est.z),
+)
+
+# ╔═╡ a1b2c3d4-0020-0000-0000-000000000020
+# Position comparison
+let
+    println("=== Position Comparison ===")
+    println("                  Along-track    Cross-track    Height")
+    println("Ground Truth:     $(round(gt.along_track, digits=1))m    $(round(gt.cross_track, digits=1))m    $(round(gt.height, digits=1))m")
+    println("Pipeline Pred:    $(round(pipeline.along_track, digits=1))m    $(round(pipeline.cross_track, digits=1))m    $(round(pipeline.height, digits=1))m")
+    println("Our Estimate:     $(round(est.along_track, digits=1))m    $(round(est.cross_track, digits=1))m    $(round(est.height, digits=1))m")
+    println()
+    println("=== Errors ===")
+    println("Pipeline error:   $(round(pipeline.error, digits=2))m")
+    println("Our error:        $(round(est.along_track - gt.along_track, digits=2))m (along-track)")
+end
+
+# ╔═╡ a1b2c3d4-0022-0000-0000-000000000022
+# Rotation comparison (convention mapping TBD)
+let
+    import Rotations: params
+    (yaw, pitch, roll) = params(cam_rot_est) .|> rad2deg
+
+    println("=== Rotation Comparison ===")
+    println("                  Pitch       Roll        Yaw")
+    println("Ground Truth:     $(round(gt.pitch, digits=2))°    $(round(gt.roll, digits=2))°    $(round(gt.yaw, digits=2))°")
+    println("Our Estimate:     $(round(pitch, digits=2))°    $(round(roll, digits=2))°    $(round(yaw, digits=2))°")
+    println()
+    println("Note: Rotation convention mapping needs verification")
+end
 
 # ╔═╡ a1b2c3d4-0023-0000-0000-000000000003
 # Process trajectory - estimate pose for each valid row, including integrity info
@@ -346,6 +400,12 @@ function process_trajectory_threaded(df_traj; use_covariance=true, global_sigma=
             gt_within_cross = abs(est_cross - gt_cross) <= pl.crosstrack
             gt_within_alt = abs(est_height - gt_height) <= pl.altitude
 
+            # Extract corner covariances (trace = xx + yy as uncertainty magnitude)
+            cov_bl = parse_num(row.pred_kp_uncertainty_bottom_left_xx_px2) + parse_num(row.pred_kp_uncertainty_bottom_left_yy_px2)
+            cov_tl = parse_num(row.pred_kp_uncertainty_top_left_xx_px2) + parse_num(row.pred_kp_uncertainty_top_left_yy_px2)
+            cov_tr = parse_num(row.pred_kp_uncertainty_top_right_xx_px2) + parse_num(row.pred_kp_uncertainty_top_right_yy_px2)
+            cov_br = parse_num(row.pred_kp_uncertainty_bottom_right_xx_px2) + parse_num(row.pred_kp_uncertainty_bottom_right_yy_px2)
+
             (
                 gt_along = gt_along,
                 gt_cross = gt_cross,
@@ -364,6 +424,10 @@ function process_trajectory_threaded(df_traj; use_covariance=true, global_sigma=
                 gt_within_along = gt_within_along,
                 gt_within_cross = gt_within_cross,
                 gt_within_alt = gt_within_alt,
+                cov_bottom_left = cov_bl,
+                cov_top_left = cov_tl,
+                cov_top_right = cov_tr,
+                cov_bottom_right = cov_br,
             )
         catch e
             nothing  # Skip rows that fail
@@ -371,77 +435,6 @@ function process_trajectory_threaded(df_traj; use_covariance=true, global_sigma=
     end
 
     filter(!isnothing, results)
-end
-
-# ╔═╡ a1b2c3d4-0023-0000-0000-000000000005
-md"""
-### Error Plots
-
-Showing alongtrack, crosstrack, and altitude errors as we approach the runway.
-The x-axis represents frame index (time progression toward runway).
-"""
-
-# ╔═╡ a1b2c3d4-0025-0000-0000-000000000001
-md"""
-## Integrity Monitoring Plots
-
-These plots show the protection level bounds computed from worst-case fault analysis.
-- **Shaded band**: Protection level bounds `[estimate - PL, estimate + PL]`
-- **Line**: Estimated value
-- **Dots**: Ground truth (to validate if within bounds)
-- **Color**: Green = integrity passes, Red = integrity fails
-"""
-
-# ╔═╡ a1b2c3d4-0014-0000-0000-000000000014
-# Build noise model based on selection
-noise_model = if noise_source == "covariance"
-    make_noise_model_from_covariance(row)
-else
-    make_noise_model_from_confidence(row, global_sigma)
-end
-
-# ╔═╡ a1b2c3d4-0014-0001-0000-000000000001
-# Run pose estimation using PointFeatures with noise model
-result = estimatepose6dof(PointFeatures(runway_corners, observed_corners, CAMERA_CONFIG_OFFSET, noise_model))
-
-# ╔═╡ a1b2c3d4-0015-0000-0000-000000000015
-# Extract estimated pose
-cam_pos_est, cam_rot_est = result[:pos], result[:rot]
-
-# ╔═╡ a1b2c3d4-0019-0000-0000-000000000019
-# Our estimate
-est = (
-    along_track = ustrip(m, cam_pos_est.x),
-    cross_track = ustrip(m, cam_pos_est.y),
-    height = ustrip(m, cam_pos_est.z),
-)
-
-# ╔═╡ a1b2c3d4-0020-0000-0000-000000000020
-# Position comparison
-let
-    println("=== Position Comparison ===")
-    println("                  Along-track    Cross-track    Height")
-    println("Ground Truth:     $(round(gt.along_track, digits=1))m    $(round(gt.cross_track, digits=1))m    $(round(gt.height, digits=1))m")
-    println("Pipeline Pred:    $(round(pipeline.along_track, digits=1))m    $(round(pipeline.cross_track, digits=1))m    $(round(pipeline.height, digits=1))m")
-    println("Our Estimate:     $(round(est.along_track, digits=1))m    $(round(est.cross_track, digits=1))m    $(round(est.height, digits=1))m")
-    println()
-    println("=== Errors ===")
-    println("Pipeline error:   $(round(pipeline.error, digits=2))m")
-    println("Our error:        $(round(est.along_track - gt.along_track, digits=2))m (along-track)")
-end
-
-# ╔═╡ a1b2c3d4-0022-0000-0000-000000000022
-# Rotation comparison (convention mapping TBD)
-let
-    import Rotations: params
-    (yaw, pitch, roll) = params(cam_rot_est) .|> rad2deg
-
-    println("=== Rotation Comparison ===")
-    println("                  Pitch       Roll        Yaw")
-    println("Ground Truth:     $(round(gt.pitch, digits=2))°    $(round(gt.roll, digits=2))°    $(round(gt.yaw, digits=2))°")
-    println("Our Estimate:     $(round(pitch, digits=2))°    $(round(roll, digits=2))°    $(round(yaw, digits=2))°")
-    println()
-    println("Note: Rotation convention mapping needs verification")
 end
 
 # ╔═╡ a1b2c3d4-0023-0000-0000-000000000004
@@ -452,6 +445,14 @@ trajectory_results = let
     process_trajectory_threaded(df_good[1:min(1500, nrow(df_good)), :];
         use_covariance=use_cov, global_sigma=sigma, alpha=alpha_val)
 end
+
+# ╔═╡ a1b2c3d4-0023-0000-0000-000000000005
+md"""
+### Error Plots
+
+Showing alongtrack, crosstrack, and altitude errors as we approach the runway.
+The x-axis represents frame index (time progression toward runway).
+"""
 
 # ╔═╡ a1b2c3d4-0023-0000-0000-000000000006
 # Create stacked error plots
@@ -484,6 +485,17 @@ let
     fig
 end
 
+# ╔═╡ a1b2c3d4-0025-0000-0000-000000000001
+md"""
+## Integrity Monitoring Plots
+
+These plots show the protection level bounds computed from worst-case fault analysis.
+- **Shaded band**: Protection level bounds `[estimate - PL, estimate + PL]`
+- **Line**: Estimated value
+- **Dots**: Ground truth (to validate if within bounds)
+- **Color**: Green = integrity passes, Red = integrity fails
+"""
+
 # ╔═╡ a1b2c3d4-0025-0000-0000-000000000002
 # Integrity statistics summary
 let
@@ -504,7 +516,7 @@ let
 end
 
 # ╔═╡ a1b2c3d4-0025-0000-0000-000000000003
-# Integrity monitoring plots with protection levels
+# Integrity monitoring plots with protection levels and corner covariances
 let
     n = length(trajectory_results)
     indices = 1:n
@@ -521,14 +533,19 @@ let
     pl_cross = [r.pl_cross for r in trajectory_results]
     pl_alt = [r.pl_alt for r in trajectory_results]
 
+    # Corner covariances (trace)
+    cov_bl = [r.cov_bottom_left for r in trajectory_results]
+    cov_tl = [r.cov_top_left for r in trajectory_results]
+    cov_tr = [r.cov_top_right for r in trajectory_results]
+    cov_br = [r.cov_bottom_right for r in trajectory_results]
+
     passes = [r.integrity_passes for r in trajectory_results]
     colors = [p ? :green : :red for p in passes]
 
-    fig = Figure(size=(900, 800))
+    fig = Figure(size=(900, 1000))
 
     # Along-track plot
     ax1 = Axis(fig[1, 1], ylabel="Along-track [m]", title="Integrity Monitoring: $(selected_flight) (α=$(alpha_val))")
-    # Shade the protection level band
     band!(ax1, indices, est_along .- pl_along, est_along .+ pl_along, color=(:gray, 0.3))
     lines!(ax1, indices, est_along, color=:blue, linewidth=1, label="Estimate")
     scatter!(ax1, indices, gt_along, color=colors, markersize=4, label="GT")
@@ -540,23 +557,28 @@ let
     scatter!(ax2, indices, gt_cross, color=colors, markersize=4)
 
     # Altitude plot
-    ax3 = Axis(fig[3, 1], xlabel="Frame index", ylabel="Altitude [m]")
+    ax3 = Axis(fig[3, 1], ylabel="Altitude [m]")
     band!(ax3, indices, est_height .- pl_alt, est_height .+ pl_alt, color=(:gray, 0.3))
     lines!(ax3, indices, est_height, color=:blue, linewidth=1)
     scatter!(ax3, indices, gt_height, color=colors, markersize=4)
 
-    linkxaxes!(ax1, ax2, ax3)
+    # Corner covariance plot
+    ax4 = Axis(fig[4, 1], xlabel="Frame index", ylabel="Cov trace [px²]",
+               title="Keypoint Uncertainty (covariance trace)")
+    lines!(ax4, indices, cov_bl, color=:purple, linewidth=1, label="Near-left")
+    lines!(ax4, indices, cov_tl, color=:orange, linewidth=1, label="Far-left")
+    lines!(ax4, indices, cov_tr, color=:cyan, linewidth=1, label="Far-right")
+    lines!(ax4, indices, cov_br, color=:magenta, linewidth=1, label="Near-right")
+
+    linkxaxes!(ax1, ax2, ax3, ax4)
     hidexdecorations!(ax1, grid=false)
     hidexdecorations!(ax2, grid=false)
-
-    # Force equal row heights
-    for i in 1:3
-        rowsize!(fig.layout, i, Relative(1/3))
-    end
+    hidexdecorations!(ax3, grid=false)
 
     # Legend
     Legend(fig[1, 2], ax1, framevisible=false)
     Label(fig[2, 2], "Green = passes\nRed = fails", fontsize=10)
+    Legend(fig[4, 2], ax4, framevisible=false)
 
     fig
 end
