@@ -1,3 +1,5 @@
+# using BracketingNonlinearSolve
+using SparseArrays
 using LinearAlgebra
 using Distributions
 using Rotations: RotZYX, params
@@ -108,3 +110,191 @@ function compute_integrity_statistic(
 
     return (; stat, p_value, dofs, residual_norm)
 end
+
+# =============================================================================
+# compute_worst_case_fault_direction_and_slope
+# =============================================================================
+
+"""
+    compute_worst_case_fault_direction_and_slope(
+        alpha_idx::Int,
+        fault_indices::AbstractVector{Int},
+        H::AbstractMatrix,
+        noise_cov::AbstractMatrix,
+    )
+
+Computes the worst-case fault direction and corresponding failure mode slope
+for a selected pose parameter and fault subset.
+
+# Arguments
+- `alpha_idx::Int`: Monitored parameter index
+  - 1 = along-track position
+  - 2 = cross-track position
+  - 3 = height above runway
+  - 4 = yaw
+  - 5 = pitch
+  - 6 = roll
+- `fault_indices::AbstractVector{Int}`: Indices of measurements in fault subset
+- `H::AbstractMatrix`: Jacobian matrix (ndof columns)
+- `noise_cov::AbstractMatrix`: Measurement noise covariance matrix
+
+# Returns
+- `f_dir`: Worst-case fault direction (normalized vector)
+- `g_slope`: Failure mode slope (quantifies sensitivity to faults in this direction)
+
+!!! note
+    The Jacobian `H` must have the correct number of columns for the degrees of
+    freedom (3 for position-only, 6 for full pose estimation).
+"""
+function compute_worst_case_fault_direction_and_slope(
+    alpha_idx::Int,
+    fault_indices::AbstractVector{Int},
+    H::AbstractMatrix,
+    noise_cov::AbstractMatrix,
+)
+
+    @assert 1 <= alpha_idx <= size(H, 2) "alpha_idx must be 1-ndof"
+    @assert all(1 .<= fault_indices .<= size(H, 1)) "fault_indices must in `1:size(H, 1)`"
+
+    # Define extraction vector s₀ for the state of interest (alpha)
+    ndof = size(H, 2)
+    α = SVector(ntuple(i -> i == alpha_idx ? 1.0 : 0.0, Val(ndof)))
+
+    # Compute S₀ = (HᵀH)⁻¹Hᵀ
+    S_0 = pinv(H)
+    s_0 = S_0' * α
+
+    # Whiten residuals using noise covariance
+    # For χ² test: r_whitened = L^(-T) * r where LL^T = Σ
+    L, _ = cholesky(noise_cov)
+    Linv = inv(L)
+
+    # Define Parity Projection Matrix, P = I - H(HᵀH)⁻¹Hᵀ = I - H S₀
+    proj_parity = I - H * S_0
+    proj_parity_Linv = proj_parity * Linv
+
+    # Define Fault Selection Matrix A_i
+    n_measurements = size(H, 1)
+    n_faults = length(fault_indices)
+    A_i = (
+        sparse(collect(fault_indices), 1:n_faults, ones(n_faults), n_measurements, n_faults)
+    ) |> SMatrix{n_measurements, n_faults}
+
+    # Compute the central term, (Aᵀ (I - H S₀) A)⁻¹
+    # This measures how "visible" faults in this subspace are to the parity check
+    visibility_matrix = A_i' * proj_parity_Linv * proj_parity_Linv' * A_i
+
+    # Compute m_Xi = Aᵀ s₀
+    m_Xi = A_i' * s_0
+
+    # Compute worst-case fault direction f_dir and normalize
+    f_dir = A_i * (visibility_matrix \ m_Xi) |> normalize
+
+    # Compute Slope Squared (Eq 32)
+    g_slope_squared = m_Xi' * (visibility_matrix \ m_Xi)
+    @assert g_slope_squared >= 0 "Computed negative slope squared, numerical issue?"
+    g_slope = sqrt(g_slope_squared)
+
+    return f_dir, g_slope
+end
+
+# =============================================================================
+# compute_worst_case_fault_direction_and_slope
+# =============================================================================
+function compute_worst_case_fault_direction_and_slope_wo_noise(
+    alpha_idx::Int,
+    fault_indices::AbstractVector{Int},
+    H::AbstractMatrix,
+)
+
+    @assert 1 <= alpha_idx <= size(H, 2) "alpha_idx must be 1-ndof"
+    @assert all(1 .<= fault_indices .<= size(H, 1)) "fault_indices must in `1:size(H, 1)`"
+
+    # Define extraction vector s₀ for the state of interest (alpha)
+    ndof = size(H, 2)
+    α = SVector(ntuple(i -> i == alpha_idx ? 1.0 : 0.0, Val(ndof)))
+
+    # Compute S₀ = (HᵀH)⁻¹Hᵀ
+    S_0 = pinv(H)
+    s_0 = S_0' * α
+
+    # Whiten residuals using noise covariance
+    # For χ² test: r_whitened = L^(-T) * r where LL^T = Σ
+    # L, _ = cholesky(noise_cov)
+    # Linv = inv(L)
+
+    # Define Parity Projection Matrix, P = I - H(HᵀH)⁻¹Hᵀ = I - H S₀
+    proj_parity = I - H * S_0
+    # proj_parity_Linv = proj_parity * Linv
+
+    # Define Fault Selection Matrix A_i
+    n_measurements = size(H, 1)
+    n_faults = length(fault_indices)
+    A_i = (
+        sparse(collect(fault_indices), 1:n_faults, ones(n_faults), n_measurements, n_faults)
+    ) |> SMatrix{n_measurements, n_faults}
+
+    # Compute the central term, (Aᵀ (I - H S₀) A)⁻¹
+    # This measures how "visible" faults in this subspace are to the parity check
+    # visibility_matrix = A_i' * proj_parity_Linv * proj_parity_Linv' * A_i
+    visibility_matrix = A_i' * proj_parity * A_i
+
+    # Compute m_Xi = Aᵀ s₀
+    m_Xi = A_i' * s_0
+
+    # Compute worst-case fault direction f_dir and normalize
+    f_dir = A_i * (visibility_matrix \ m_Xi) |> normalize
+
+    # Compute Slope Squared (Eq 32)
+    g_slope_squared = m_Xi' * (visibility_matrix \ m_Xi)
+    @assert g_slope_squared >= 0 "Computed negative slope squared, numerical issue?"
+    g_slope = sqrt(g_slope_squared)
+
+    return f_dir, g_slope
+end
+
+# """
+#     compute_worst_case_fault_direction_and_slope(
+#         alpha_idx::Int,
+#         fault_indices::AbstractVector{Int},
+#         H::AbstractMatrix,
+#     )
+
+# Compute worst-case fault direction and failure mode slope for 3-DOF or 6-DOF, depending on the columns of `H`.
+
+# # Arguments
+# - `alpha_idx::Int`: Parameter index (1=x, 2=y, 3=z, 4=yaw, 5=pitch, 6=roll)
+# - `fault_indices::AbstractVector{Int}`: Measurement indices in fault subset
+# - `H::AbstractMatrix`: Jacobian matrix (should have ndof columns)
+# - `px_std::Float64`: Standard deviation of pixel noise
+# - `alpha::Float64=0.05`: Probability of false alarm (default 0.05)
+
+# # Returns
+# - `f_i`: Worst-case fault direction vector
+# - `slope_g`: Failure mode slope
+
+# References (Eq. 32-33, Joerger et al. 2014):
+# Worst-Case Fault Direction (f_i): f_i = (A) (Aᵀ P A)⁻¹ (Aᵀ s₀)
+# Worst-Case Failure Mode Slope (g): slope_g² = (s₀ᵀ A) (Aᵀ P A)⁻¹ (Aᵀ s₀)
+# """
+# function get_analytic_protection_level(
+#     alpha_idx::Int,
+#     fault_indices::AbstractVector{Int},
+#     H::AbstractMatrix,
+#     px_std::Float64,
+#     alpha::Float64 = 0.05,
+# )
+
+#     @assert 1 <= alpha_idx <= size(H, 2) "alpha_idx must be 1-ndof"
+#     @assert all(1 .<= fault_indices .<= size(H, 1)) "fault_indices must in `1:size(H, 1)`"
+
+#     # Compute worst-case fault direction and slope
+#     g_slope = compute_worst_case_fault_direction_and_slope(alphaidx, fi_indices, H)[2]
+
+#     # 2. Determine the Detection Threshold (T)
+# 	# The monitor checks if SSE < T². 
+# 	# We need the T corresponding to our p-value requirement (alpha=0.05).
+# 	dof = size(H, 1) - size(H, 2) # Degrees of Freedom = Measurements - States
+# 	T_chisq = quantile(Chisq(dof), 0.95)  # [px^2 / std_px^2]
+
+# end

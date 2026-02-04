@@ -99,6 +99,10 @@ export PointFeatures, LineFeatures, NO_LINES
 
 # Export integrity monitoring functions
 export compute_integrity_statistic, check_integrity, compute_jacobian, compute_residual
+export compute_worst_case_fault_direction_and_slope
+export compute_worst_case_fault_direction_and_slope_3dof, compute_worst_case_fault_direction_and_slope_6dof
+export compute_worst_case_fault_direction_and_slope_with_noise
+export compute_worst_case_fault_direction_and_slope_wo_noise
 
 function load_runway_database(filename)
     error("load_runway_database not yet implemented")
