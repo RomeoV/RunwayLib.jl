@@ -49,9 +49,10 @@ Stanford Intelligent Systems Laboratory (SISL), Stanford University
 **Abstract**
 
 > This notebook demonstrates how to:
-> 1. **Estimate aircraft pose** under uncertainty using point and line features.
-> 2. **Calculate an integrity score** and analyze its statistical properties, such as maintaining a 5% false alarm rate.
-> 3. **Compute integrity bounds** to provide safety guarantees for vision-based landing systems.
+> 1. **Set up a specific scenario** for a vision-based landing system.
+>2. **Estimate aircraft pose** under uncertainty using point and line features.
+> 3. **Perform an integrity check** using a RAIM-based approach to detect measurement faults by comparing reprojection errors against predicted uncertainties.
+> 4. **Compute integrity bounds** to estimate worst-case deviations in pose space before triggering the integrity check.
 """
 
 # ╔═╡ e56ca9f7-9c84-4985-89a9-a6f3d60111aa
@@ -70,15 +71,18 @@ pluto-editor main {
 }
 """
 
+# ╔═╡ 776ea664-0cd5-4797-ac2c-f38f4a928ee3
+Random.seed!(123)
+
 # ╔═╡ 9612a518-b17a-467a-a6c8-6661aff7a1d8
 PlutoUI.TableOfContents()
 
 # ╔═╡ 09c592ab-17a5-4829-a646-6edb2cb9541e
 md"""
 # Problem Set-up
-Here, we will define a toy set-up with four known world coordinates for the runway corners, as well as a known camera position and rotation. Then, we will project where the true observations will be on the camera screen given the camera position, rotation, and known world points.
+To begin, we define a ground-truth scenario consisting of four known world coordinates for the runway corners, alongside the aircraft's true camera position and orientation. By projecting these 3D world points into the 2D image plane, we establish where the true observations should appear on the camera sensor.
 
-Since our observations of the runway corners come from a computer vision-based system, we don't observe the true location of the runway corners but rather some noisy estimate of them. To simulate this noise, we perturb the true observations of the runway corners in random directions to obtain "noisy observations".
+In practice, vision-based systems provide noisy estimates rather than perfect measurements. To simulate this real-world uncertainty, we perturb the true pixel coordinates with random noise to generate the "noisy observations" used throughout this demonstration.
 """
 
 # ╔═╡ 308735e9-c796-4404-9b07-e65b3451f9be
@@ -96,7 +100,7 @@ begin
 	cam_rot = RotZYX(roll=1.5°, pitch=5°, yaw=0°)
 
 	# Choose the noise level
-	noise_level = 2.0
+	noise_level = 1.0
 	sigmas = noise_level * ones(length(runway_corners))
 	noise_cov = Diagonal(repeat(sigmas .^ 2, inner=2))
 
@@ -104,7 +108,7 @@ begin
 	true_observations = [project(cam_pos, cam_rot, p) for p in runway_corners]
 
 	# We don't observe the true location of the runway corners, but 
-	# rather some noisy estimate of them. Here, we simulate noise.
+	# rather some noisy estimate of them. Here, we simulate noise
 	noisy_observations = [p + ProjectionPoint(noise_level*randn(2)px) for p in true_observations]
 	
 end
@@ -144,7 +148,6 @@ begin
     camconf_offset = CameraConfig{:offset}(focal_length, pixel_size, 4096.0px, 2048.0px)
 	
 	# Project a specific world point (e.g., the first runway corner) to 2D
-	# Replacing the undefined 'world_pt' with 'runway_corners[1]'
 	project(cam_pos, cam_rot, runway_corners[1], camconf_offset)
 end
 
@@ -162,13 +165,13 @@ Lines are defined with respect to the **offset origin** (top-left) and are repre
 
 # ╔═╡ cf5b9e5a-9449-4d03-b65c-8ee34f0cdbd6
 begin
-	# 1. Define the line segments using your existing runway corners
+	# 1. Define the line segments using the runway corners
 	line_pts = [
 		(runway_corners[1], runway_corners[2]), # Left edge
 		(runway_corners[3], runway_corners[4]), # Right edge
 	]
 	
-	# 2. Project and convert the first line as an example
+	# 2. Project and convert the first line
 	# Note: Ensure you use camconf_offset for line features
 	p1, p2 = line_pts[1]
 	proj1 = project(cam_pos, cam_rot, p1, camconf_offset)
@@ -188,7 +191,7 @@ begin
 	end
 	
 	# Just like with the runway corners, we don't observe the true location 
-	# of the lines but rather some noisy estimate of them.
+	# of the lines but rather some noisy estimate of them
 	observed_lines = [
 	  Line(
 		r + 1px*randn(),
@@ -290,12 +293,12 @@ reprojected_observations = [project(cam_pos_est, cam_rot_est, p) for p in runway
 md"""
 In our [paper](https://arxiv.org/abs/2508.09732), we formalize this idea by comparing the reprojection error of the estimated pose to the magnitude of the predicted uncertainties. To do this, we adapt an algorithm often used in GNSS called Receiver Autonomous Integrity Monitoring. More details in the [documentation](https://romeov.github.io/RunwayLib.jl/dev/integrity_check/).
 
-The `integrity_statistic` function computes the RAIM-adaptation statistic, the p-value of the null hypothesis, and the degrees of freedom, along with some other information. 
+The `integrity_statistic` function computes the RAIM-adaptation statistic, the p-value of the null hypothesis, and the degrees of freedom, and the residual norm. 
 """
 
 # ╔═╡ c457014a-eacc-4892-a246-a4a1a2f2541b
 integrity_statistic = compute_integrity_statistic(
-    cam_pos, cam_rot,
+    cam_pos_est, cam_rot_est,
     runway_corners,
     noisy_observations,
     noise_cov
@@ -323,21 +326,26 @@ end
 # ╔═╡ 449bf3a9-8593-4e06-b6ea-9ecded426aa4
 begin
 	# 1. Dynamically apply the fault from the slider
-	# We use the 'fault_mag' variable bound in the previous cell
 	faulty_observations = copy(noisy_observations)
 	faulty_observations[1] += ProjectionPoint(fault_mag * px, 0.0px)
+
+	(cam_pos_faulty, cam_rot_faulty) = estimatepose6dof(
+		PointFeatures(runway_corners, faulty_observations) #faulty_observations)
+	)[(:pos, :rot)]
 	
 	# 2. Run the integrity check
-	# This re-calculates automatically as you drag the slider
 	fault_stat = compute_integrity_statistic(
-		cam_pos, cam_rot, runway_corners, faulty_observations, noise_cov
+		cam_pos_faulty, cam_rot_faulty, runway_corners, faulty_observations, noise_cov
 	)
 	
 	# 3. Display the results reactively
 	md"""
-	With a **$(fault_mag)px** artificial disturbance, the integrity statistic is **$(round(fault_stat.stat, digits=2))** with a p-value of **$(round(fault_stat.p_value, digits=2))**. 
+	With a **$(fault_mag)px** artificial disturbance, the integrity statistic is **$(round(fault_stat.stat, digits=2))** with a p-value of **$(round(fault_stat.p_value, digits=2))** and a residual norm of **$(round(fault_stat.residual_norm, digits=2))**. 
+
+	The true camera position: $(cam_pos[1], cam_pos[2], cam_pos[3]). \
+	The estimated (faulty) camera position: $(round(ustrip(cam_pos_faulty[1]), digits=1), round(ustrip(cam_pos_faulty[2]), digits=1), round(ustrip(cam_pos_faulty[3]), digits=1)).
 	
-	Status: **$(fault_stat.p_value < 0.05 ? "❌ FAULT DETECTED (Untrustworthy)" : "✅ NOMINAL (Integrity Passed)")**
+	Status: **$(fault_stat.p_value < 0.05 ? "FAULT DETECTED (Untrustworthy)" : "NOMINAL (Integrity Passed)")**
 	"""
 end
 
@@ -348,7 +356,7 @@ md"""
 To verify the integrity monitor, we compare the **integrity statistic** under nominal conditions against its theoretical **Chi-squared ($\chi^2$) distribution**.
 
 * **Empirical Histogram (Blue)**: Data from 1,000 Monte Carlo simulations using the `noise_level` from the problem set-up.
-* **Theoretical Curve (Red)**: The expected PDF for the calculated degrees of freedom.
+* **Theoretical Curve (Red)**: The expected PDF for the calculated degrees of freedom (DOF). The DOF is the total number of measurements minus the DOF in the estimate. Here, we have 8 measurements (4 corners * 2 measurements / corner) and estimate a 6-DOF pose, so our DOF is 2. 
 
 The alignment confirms that our noise covariance is correctly calibrated. A right-shifted histogram would indicate underestimated sensor noise.
 """
@@ -367,7 +375,7 @@ begin
 
 	# 2. Plotting (Assumes WGLMakie is active)
 	f = Figure()
-	ax = Axis(f[1,1], title="Empirical Stats vs. Chi-squared (df=$(fault_stat.dofs))",
+	ax = Axis(f[1,1], title="Empirical Stats vs. Chi-squared (DOF=$(fault_stat.dofs))",
 		xlabel="Statistic Value", ylabel="Density")
 	
 	# Histogram of empirical samples
@@ -383,7 +391,7 @@ end
 
 # ╔═╡ 3fb311c4-69ce-4ef5-a9f6-88f6f7e7f473
 md"""
-## 3. False Alarm and False Miss Rates
+## 3. False Alarm Rate
 To calculate these rates, we compare the statistics to a threshold ($T$) derived from our $5\%$ false alarm requirement.
 """
 
@@ -397,8 +405,8 @@ begin
 	actual_far = sum(empirical_stats .> T_threshold) / n_samples
 	
 	# 3. Calculate False Miss Rate (FMR)
-	# This requires defining a specific "Missed" fault size (e.g., 10px)
-	fault_size = 60.0
+	# This requires defining a specific "Missed" fault size (e.g., 60px)
+	fault_size = 10.0
 	miss_samples = map(1:n_samples) do _
 		new_noisy_obs = [p + ProjectionPoint(noise_level * randn(2)px) for p in true_observations]
 		new_noisy_obs[1] += ProjectionPoint(fault_size*px, 0.0px)
@@ -529,6 +537,7 @@ end
 # ╟─e56ca9f7-9c84-4985-89a9-a6f3d60111aa
 # ╟─1821382b-4378-4e78-88e9-0cd4a4a699c8
 # ╠═b4fee6f9-7344-4d8c-b16e-33eff1cede68
+# ╟─776ea664-0cd5-4797-ac2c-f38f4a928ee3
 # ╟─9612a518-b17a-467a-a6c8-6661aff7a1d8
 # ╟─09c592ab-17a5-4829-a646-6edb2cb9541e
 # ╠═308735e9-c796-4404-9b07-e65b3451f9be
@@ -538,24 +547,24 @@ end
 # ╠═cf5b9e5a-9449-4d03-b65c-8ee34f0cdbd6
 # ╠═f692b3ae-6611-4905-bd74-70779155cc9f
 # ╟─78b0a026-3f8f-4af2-afea-2c451976d7f0
-# ╠═afe48040-9b95-42e5-8961-9e8ecdc1662b
+# ╟─afe48040-9b95-42e5-8961-9e8ecdc1662b
 # ╠═6c6ccd8d-f5a7-41c4-9e16-0148a1b7462a
-# ╠═c3c9e87c-4a30-4e15-a085-02d2330f795d
+# ╟─c3c9e87c-4a30-4e15-a085-02d2330f795d
 # ╠═60f7b871-f48d-4a95-8f7c-82022a0a4daf
-# ╠═d12b5fc0-7819-444a-b297-402448b9960e
+# ╟─d12b5fc0-7819-444a-b297-402448b9960e
 # ╠═95b02000-cb5a-4e5f-8984-61850448ec0f
 # ╟─abb49dbf-be2b-442c-a6bf-f3038303f6c3
 # ╠═0c865680-4ed3-4429-824b-1a93e3b30ca9
 # ╟─7af47b79-8e9a-4bcf-9b30-882d5eb317c2
 # ╠═c457014a-eacc-4892-a246-a4a1a2f2541b
-# ╠═e04102c1-f310-46db-ae08-87bdd66ec11f
+# ╟─e04102c1-f310-46db-ae08-87bdd66ec11f
 # ╟─bd2b813e-e7dc-4616-8bcd-b189a00e087b
 # ╠═449bf3a9-8593-4e06-b6ea-9ecded426aa4
 # ╟─0c897c1b-0e57-4292-89e1-7ee356bd1fa0
-# ╠═26f751af-4fd6-4caa-8534-d2401ffa1fb4
+# ╟─26f751af-4fd6-4caa-8534-d2401ffa1fb4
 # ╟─3fb311c4-69ce-4ef5-a9f6-88f6f7e7f473
 # ╠═5839d7b4-a97f-484b-bdd6-d8446ebe9114
-# ╠═25806775-15b4-4a89-852a-4e3f27bf623d
+# ╟─25806775-15b4-4a89-852a-4e3f27bf623d
 # ╠═5befb9d5-53bc-4367-9543-0c62894cea9c
 # ╟─a3b64e53-8b18-44c2-84be-83802065b5b5
 # ╠═1a11b8c8-7534-4f19-a072-b9eb8c94f095
