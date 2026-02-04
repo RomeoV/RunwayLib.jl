@@ -28,6 +28,7 @@ begin
 	using PlutoUI
 	using IntervalSets
 	using RunwayLib.StaticArrays
+	import RunwayLib: compute_worst_case_fault_direction_and_slope
 end
 
 # ╔═╡ 46af6473-88bf-49b9-8dc9-0a72e995f784
@@ -345,9 +346,6 @@ begin
 	@assert isapprox(f_wo_noise, f_w_noise; rtol=1e-4)
 end
 
-# ╔═╡ cec1de54-e52a-4db1-98bb-3cde27699672
-Revise.retry()
-
 # ╔═╡ 58a21d5e-8a66-45b2-8202-aee966463df3
 function estimate_pose_with_faultmagnitude(ø, (; alphaidx, fi_indices, H, noisy_observations))
 	# Get the worst case direction vector (normalized)
@@ -393,9 +391,10 @@ md"# Analytic vs Experimental Validation"
 
 # ╔═╡ 18ebe84e-5710-48b7-9849-130b5b55715c
 function get_analytic_max_error(alphaidx, fi_indices, H, px_std)
+	@show alphaidx " FROM ANALYTIC"
 	
 	slope_g = RunwayLib.compute_worst_case_fault_direction_and_slope(alphaidx, fi_indices, H, noise_cov)[2] * m
-	g_wo_noise = RunwayLib.compute_worst_case_fault_direction_and_slope_wo_noise(1, [1, 2], H)[2] * m / px
+	g_wo_noise = RunwayLib.compute_worst_case_fault_direction_and_slope_wo_noise(alphaidx, fi_indices, H)[2] * m / px
 	
 	# 2. Determine the Detection Threshold (T)
 	# The monitor checks if SSE < T². 
@@ -411,8 +410,15 @@ function get_analytic_max_error(alphaidx, fi_indices, H, px_std)
 	analytic_max_error = slope_g * sqrt(T_chisq)
 end
 
+# ╔═╡ 982214a6-fd01-4166-aefe-36f051067be2
+md"""
+## Get experimental error function
+"""
+
 # ╔═╡ 8a4de21a-acbc-4ce0-9315-6cc86376e3b1
-function get_experimental_max_error(alphaidx, fi_indices, H, noisy_observations, cam_pos_est)
+function get_experimental_max_error(alphaidx, fi_indices, H, noisy_observations, cam_pose_est)
+	@show alphaidx
+	@show sum(H)
 	experimental_max_error_tpl = map([
 				(0.0, 100.0),
 				(-100.0, 0.0)
@@ -425,13 +431,14 @@ function get_experimental_max_error(alphaidx, fi_indices, H, noisy_observations,
 		
 		# Calculate the actual Position Error at this boundary magnitude
 		cam_pose_est_faulty, _ = estimate_pose_with_faultmagnitude(ø_at_boundary, ps)
-		experimental_max_error = abs((cam_pose_est_faulty.pos - cam_pos_est)[alphaidx])
+		experimental_max_error = if alphaidx <= 3 
+			(cam_pose_est_faulty.pos - cam_pose_est.pos)[alphaidx]
+		else 
+			reverse(params(cam_pose_est_faulty.rot) - params(cam_pose_est.rot))[alphaidx - 3]
+		end
 		experimental_max_error
 	end |> sort
 end
-
-# ╔═╡ 200f9f96-cd3f-46dc-a52e-9a80c8f2f7ce
-Revise.retry()
 
 # ╔═╡ ef5eb470-af13-4491-a5a4-d634e41bf6f6
 begin
@@ -695,7 +702,7 @@ function do_computations(ui, ctx)
         sort([(1:2:8)[idx]; (2:2:8)[idx]])
     end
 
-    alphaidx = @lift Dict(1=>1, 2=>2, 3=>3, 4=>6, 5=>5, 6=>4)[$(axismenu.i_selected)]
+    alphaidx = @lift(Dict(1=>1, 2=>2, 3=>3, 4=>6, 5=>5, 6=>4)[$(axismenu.i_selected)])
     
     # Points Calculations
     yobs_pts = Point2.(true_observations)
@@ -738,8 +745,13 @@ function do_computations(ui, ctx)
         noise_cov
     ).p_value > 0.05
 
+	@info "HELLO"
+	on(alphaidx) do alphaidx
+		@info "WORLD"
+		@info "From the viz: $(alphaidx)"
+	end
 	analytic_worst_case = @lift get_analytic_max_error($alphaidx, $fi_indices, $H, ctx.px_std)
-	experimental_worst_case = @lift get_experimental_max_error($alphaidx, $fi_indices, $H, ctx.noisy_observations, $cam_pos_est_noisy)
+	experimental_worst_case = @lift get_experimental_max_error($alphaidx, $fi_indices, $H, ctx.noisy_observations, $cam_pose_est_noisy)
 
     return (; yobs_pts, yperturb_pts, yrand_pts, yfi_pts, 
               perturbed_observations, cam_pose_est_pert, 
@@ -895,7 +907,6 @@ H_[SA[1,2], :]
 # ╠═f73e286b-261f-42cc-bc06-8d269709e615
 # ╠═05fd4f82-3e37-4f50-83ed-66474a8f3003
 # ╠═f80aee26-b1d2-4183-aec8-2187f9c2cdfe
-# ╠═cec1de54-e52a-4db1-98bb-3cde27699672
 # ╠═58a21d5e-8a66-45b2-8202-aee966463df3
 # ╠═74da0f12-790e-419c-9ffd-3bde66b13de8
 # ╠═9b3596e1-e006-44b1-a2d2-75eeaae9fa24
@@ -903,8 +914,8 @@ H_[SA[1,2], :]
 # ╟─09c40df5-f975-4d86-ae81-4a35a67f647b
 # ╠═df5a6bf7-3f5b-4804-99de-291bdabeacdb
 # ╠═18ebe84e-5710-48b7-9849-130b5b55715c
+# ╟─982214a6-fd01-4166-aefe-36f051067be2
 # ╠═8a4de21a-acbc-4ce0-9315-6cc86376e3b1
-# ╠═200f9f96-cd3f-46dc-a52e-9a80c8f2f7ce
 # ╠═ef5eb470-af13-4491-a5a4-d634e41bf6f6
 # ╠═5aaf7a5a-6cf9-4a1e-9825-e8fc2d6e3d75
 # ╠═a5214c33-0e64-4ac2-8484-ca03bbf660ad
