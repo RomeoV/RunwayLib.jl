@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.20.20
+# v0.20.21
 
 using Markdown
 using InteractiveUtils
@@ -28,7 +28,7 @@ begin
 	using PlutoUI
 	using IntervalSets
 	using RunwayLib.StaticArrays
-	import RunwayLib: compute_worst_case_fault_direction_and_slope
+	import RunwayLib: compute_worst_case_fault_direction_and_slope, _uconvert
 end
 
 # ╔═╡ 46af6473-88bf-49b9-8dc9-0a72e995f784
@@ -117,9 +117,6 @@ H0 = RunwayLib.compute_H(cam_pos, cam_rot, runway_corners)
 # ╔═╡ 36e1df5f-9cf1-43d1-a2a4-9e63c56ae7c8
 cycle(xs::AbstractVector) = xs[[eachindex(xs); first(eachindex(xs))]]
 
-# ╔═╡ 59a0ab1e-0360-4d24-9320-fb3966062b9d
-aircraft_model = load(joinpath("assets", "A320NeoV2_lowpoly.stl"));
-
 # ╔═╡ 120a3051-4909-4e65-a35d-82e76b706567
 function setup_corner_selections(figpos)
 	gl = GridLayout(figpos, tellwidth = false)
@@ -197,10 +194,9 @@ lines(-100:1:100, ø->integrity_root_objective(ø, (; alphaidx, fi_indices, H=H0
 
 # ╔═╡ 18ebe84e-5710-48b7-9849-130b5b55715c
 function get_analytic_max_error(alphaidx, fi_indices, H, px_std)
-	@show alphaidx " FROM ANALYTIC"
-	
-	slope_g = RunwayLib.compute_worst_case_fault_direction_and_slope(alphaidx, fi_indices, H, noise_cov)[2] * m
-	g_wo_noise = RunwayLib.compute_worst_case_fault_direction_and_slope_wo_noise(alphaidx, fi_indices, H)[2] * m / px
+    unit = (alphaidx <= 3 ? m : rad)
+	slope_g = RunwayLib.compute_worst_case_fault_direction_and_slope(alphaidx, fi_indices, H, noise_cov)[2] * unit
+	g_wo_noise = RunwayLib.compute_worst_case_fault_direction_and_slope_wo_noise(alphaidx, fi_indices, H)[2] * unit / px
 	
 	# 2. Determine the Detection Threshold (T)
 	# The monitor checks if SSE < T². 
@@ -214,6 +210,7 @@ function get_analytic_max_error(alphaidx, fi_indices, H, px_std)
 	sigma_val = px_std
 	@assert isapprox(slope_g * sqrt(T_chisq), g_wo_noise * sigma_val * sqrt(T_chisq); rtol=1e-4)
 	analytic_max_error = slope_g * sqrt(T_chisq)
+    analytic_max_error
 end
 
 # ╔═╡ 982214a6-fd01-4166-aefe-36f051067be2
@@ -221,10 +218,15 @@ md"""
 ## Get experimental error function
 """
 
+# ╔═╡ 99dc4716-4809-4581-9e62-08c95eba6885
+"Returns [roll, pitch, yaw] in degrees (unitful)."
+rpy(R::RotZYX) = uconvert.(°, reverse(params(R))*rad)
+
+# ╔═╡ e7e2b951-391e-49e7-ab2b-58d5be1d22b3
+@assert all(rpy(RotZYX(roll=10°, pitch=5°, yaw=1°)) .== [10°, 5°, 1°])
+
 # ╔═╡ 8a4de21a-acbc-4ce0-9315-6cc86376e3b1
 function get_experimental_max_error(alphaidx, fi_indices, H, noisy_observations, cam_pose_est)
-	@show alphaidx
-	@show sum(H)
 	experimental_max_error_tpl = map([
 				(0.0, 100.0),
 				(-100.0, 0.0)
@@ -240,10 +242,11 @@ function get_experimental_max_error(alphaidx, fi_indices, H, noisy_observations,
 		experimental_max_error = if alphaidx <= 3 
 			(cam_pose_est_faulty.pos - cam_pose_est.pos)[alphaidx]
 		else 
-			reverse(params(cam_pose_est_faulty.rot) - params(cam_pose_est.rot))[alphaidx - 3]
+			(rpy(cam_pose_est_faulty.rot) - rpy(cam_pose_est.rot))[alphaidx - 3] .|> _uconvert(rad)
 		end
 		experimental_max_error
 	end |> sort
+    experimental_max_error_tpl
 end
 
 # ╔═╡ a5214c33-0e64-4ac2-8484-ca03bbf660ad
@@ -324,8 +327,7 @@ let
 	analytic_max_error_3 = slope_3 * sqrt(T_chisq_3)
 	new_sigma_val = 2.0*px
 	@assert isapprox(analytic_max_error_3, slope_3_wo_noise * px_std * sqrt(T_chisq_3); rtol=1e-4)
-	@show slope_3_wo_noise * new_sigma_val * sqrt(T_chisq_3), slope_3_wo_noise * old_sigma_val * sqrt(T_chisq_3)
-	
+
 	# 2. Calculate Experimental Max Error
 	search_params = (; 
 		alphaidx=target_alphaidx, 
@@ -483,13 +485,19 @@ function do_computations(ui, ctx)
         noise_cov
     ).p_value > 0.05
 
-	@info "HELLO"
-	on(alphaidx) do alphaidx
-		@info "WORLD"
-		@info "From the viz: $(alphaidx)"
-	end
-	analytic_worst_case = @lift get_analytic_max_error($alphaidx, $fi_indices, $H, ctx.px_std)
-	experimental_worst_case = @lift get_experimental_max_error($alphaidx, $fi_indices, $H, ctx.noisy_observations, $cam_pose_est_noisy)
+    # this is a tricky part. the result can either be of type meters, or of type radians.
+    # however, when we create the `analytic_worst_case` observable, it tries to infer the type and drops the union,
+    # leading to a silent error later.
+    # We follow https://discourse.julialang.org/t/makie-observable-lift-functions/121202/6
+    # and use `map!` to fix this.
+	analytic_worst_case = Observable{Union{typeof(1.0m), typeof(1.0rad)}}()
+    map!(analytic_worst_case, alphaidx, fi_indices, H) do alphaidx_, fi_indices_, H_
+        get_analytic_max_error(alphaidx_, fi_indices_, H_, ctx.px_std)
+    end
+	experimental_worst_case = Observable{Union{Vector{typeof(1.0m)}, Vector{typeof(1.0rad)}}}()
+    map!(experimental_worst_case, alphaidx, fi_indices, H, cam_pose_est_noisy) do alphaidx_, fi_indices_, H_, cam_pose_est_noisy_
+        get_experimental_max_error(alphaidx_, fi_indices_, H_, ctx.noisy_observations, cam_pose_est_noisy_)
+    end
 
     return (; yobs_pts, yperturb_pts, yrand_pts, yfi_pts, 
               perturbed_observations, cam_pose_est_pert, 
@@ -499,7 +507,8 @@ end
 
 # 3. Visualization
 function setup_plots(fig, ui, data, ctx)
-	(; aircraft_model, runway_corners, true_observations) = ctx
+	(; runway_corners, true_observations) = ctx
+    aircraft_model = load(joinpath("assets", "A320NeoV2_lowpoly.stl"));
     colors = Makie.wong_colors()
     c1, c4, c7 = colors[1], colors[4], colors[7]
     
@@ -512,7 +521,8 @@ function setup_plots(fig, ui, data, ctx)
     
     Label(pose_delta_layout[1, 1], text=@lift(let 
         diff = ($(data.cam_pos_est_pert) - cam_pos_est)
-        s = repr("text/plain", round.([typeof(1.0m)], diff; digits=2))
+		unit = (eltype(diff) <: Unitful.Length ? typeof(1.0m) : typeof(1.0°))
+        s = repr("text/plain", round.(unit, diff; digits=2))
         split(s, '\n')[2:end] |> x->join(x, '\n')
     end), halign=:right)
     
@@ -524,21 +534,23 @@ function setup_plots(fig, ui, data, ctx)
     Label(pose_delta_layout[1, 3], text="=\n=\n=", justification=:left)
     
     Label(pose_delta_layout[1, 4], text=@lift(let 
-        diff = params($(data.cam_rot_est_pert)) - params($(data.cam_rot_est_noisy))
-        s = repr("text/plain", round.([typeof(1.0°)], reverse(rad2deg.(diff.*rad)); digits=1))
+        diff = rpy($(data.cam_rot_est_pert)) - rpy($(data.cam_rot_est_noisy))
+        s = repr("text/plain", round.([typeof(1.0°)], diff; digits=1))
         split(s, '\n')[2:end] |> x->join(x, '\n')
     end), halign=:right)
 
 	## Worst case
 	worst_case_layout = GridLayout(pose_delta_layout[0:1, 5])
 	Label(worst_case_layout[1,1], text="Analytic Worst Case", font=:bold, halign=:left)
-	Label(worst_case_layout[2,1], text=@lift(let
-		worst_case_rnd = round(typeof(1.0m), $(data.analytic_worst_case); sigdigits=2)
-		string(0m±worst_case_rnd)
-	end), valign=:top, halign=:left)
+	 Label(worst_case_layout[2,1], text=@lift(let val = $(data.analytic_worst_case)
+	 	unit = (val isa Unitful.Length ? m : °)
+	 	worst_case_rnd = round(unit, val; sigdigits=2)
+	 	string(0unit±worst_case_rnd)
+	 end), valign=:top, halign=:left)
 	Label(worst_case_layout[3,1], text="Line Search Worst Case", font=:bold, halign=:left)
-	Label(worst_case_layout[4,1], text=@lift(let
-		worst_case_tpl = round.(typeof(1.0m), $(data.experimental_worst_case); sigdigits=2)
+	Label(worst_case_layout[4,1], text=@lift(let vals = $(data.experimental_worst_case)
+		unit = (first(vals) isa Unitful.Length ? m : °)
+		worst_case_tpl = round.(unit, vals; sigdigits=2)
 		string(worst_case_tpl[1] .. worst_case_tpl[2])
 	end), valign=:top, halign=:left)
 	rowgap!(worst_case_layout, 0)
@@ -589,11 +601,11 @@ function setup_plots(fig, ui, data, ctx)
     on(_ -> reset_limits!(ax), data.yrand_pts)
     on(_ -> reset_limits!(ax), data.yfi_pts)
 end
-context = (; true_observations, noisy_observations, runway_corners, cam_pos, cam_rot, aircraft_model, px_std)
+context = (; true_observations, noisy_observations, runway_corners, cam_pos, cam_rot, px_std)
 # 4. Main Orchestrator
 with_theme(theme_black()) do
 	fig = Figure(; size=(1200, 600))
-	
+
 	ui = setup_ui(fig, context)
 	data = do_computations(ui, context)
 	setup_plots(fig, ui, data, context)
@@ -603,7 +615,7 @@ end
 end
 
 # ╔═╡ Cell order:
-# ╠═46af6473-88bf-49b9-8dc9-0a72e995f784
+# ╟─46af6473-88bf-49b9-8dc9-0a72e995f784
 # ╠═b5b8f3c8-c4dc-11f0-82e6-e3e1218a8fd8
 # ╟─64d2c0fd-2542-4b2c-80f6-134ed8434c3b
 # ╠═47423636-18d6-42cb-85e6-4a0909dc168d
@@ -619,7 +631,6 @@ end
 # ╠═c6a57e0f-50c7-461a-a6e8-9281991b9e44
 # ╠═b027b7ad-098e-4048-97d1-f4ce311c5ac4
 # ╠═36e1df5f-9cf1-43d1-a2a4-9e63c56ae7c8
-# ╠═59a0ab1e-0360-4d24-9320-fb3966062b9d
 # ╠═120a3051-4909-4e65-a35d-82e76b706567
 # ╠═b495605a-ffe7-4783-a490-1d635731da0a
 # ╠═58a21d5e-8a66-45b2-8202-aee966463df3
@@ -628,6 +639,8 @@ end
 # ╠═df5a6bf7-3f5b-4804-99de-291bdabeacdb
 # ╠═18ebe84e-5710-48b7-9849-130b5b55715c
 # ╟─982214a6-fd01-4166-aefe-36f051067be2
+# ╠═99dc4716-4809-4581-9e62-08c95eba6885
+# ╠═e7e2b951-391e-49e7-ab2b-58d5be1d22b3
 # ╠═8a4de21a-acbc-4ce0-9315-6cc86376e3b1
 # ╠═a5214c33-0e64-4ac2-8484-ca03bbf660ad
 # ╟─5c6760d3-7aed-4a17-a5e6-5dbf420fc6e1
