@@ -145,6 +145,8 @@ function compute_zero_fault_protection_level(
         Δy = x0,
         pos_ref,
         stat_ref,
+        stat = ev_final.sr.stat,
+        norm2 = ev_final.norm2,
         chi2_bound,
         feasible,
     )
