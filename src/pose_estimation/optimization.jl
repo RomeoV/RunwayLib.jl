@@ -172,7 +172,7 @@ function estimatepose3dof(
     u₀ = initial_guess_pos .|> _ustrip(m)
 
     ps = PoseOptimizationParams3DOF(point_features, line_features, known_attitude)
-    cache = isnothing(cache) ? makecache(u₀, ps) : (reinit!(cache, nominal2optvar(u₀, ps); p=ps):cache)
+    cache = isnothing(cache) ? makecache(u₀, ps) : (reinit!(cache, nominal2optvar(u₀, ps); p=ps); cache)
     solve!(cache; solveargs...)
     sol = (; u=optvar2nominal(cache.u, ps), retcode=cache.retcode)
 
