@@ -138,7 +138,7 @@ function estimatepose6dof(
     !successful_retcode(sol.retcode) && throw(OptimizationFailedError(sol.retcode, sol))
     pos = WorldPoint(sol.u[1:3]m)
     rot = RotZYX(roll=sol.u[4]rad, pitch=sol.u[5]rad, yaw=sol.u[6]rad)
-    return (; pos, rot)
+    return (; pos, rot, cache)
 end
 
 # Convenience dispatch for points and projections
@@ -179,7 +179,7 @@ function estimatepose3dof(
     !successful_retcode(sol.retcode) && throw(OptimizationFailedError(sol.retcode, sol))
     pos = WorldPoint(sol.u[1:3]m)
     rot = known_attitude
-    return (; pos, rot)
+    return (; pos, rot, cache)
 end
 
 # Convenience dispatch for points and projections

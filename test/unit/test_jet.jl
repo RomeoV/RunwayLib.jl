@@ -86,19 +86,42 @@ using StaticArrays
 
         # Test the pose estimation functions
         @testset "estimatepose functions" begin
-            @test_nowarn estimatepose6dof(
-                runway_corners, projections, camera_matrix,
-            )
-            @test_opt stacktrace_types_limit = 3 estimatepose6dof(
-                runway_corners, projections, camera_matrix,
-            )
+            @testset "cold cache" begin
+                (; cache) = @test_nowarn estimatepose6dof(
+                    runway_corners, projections, camera_matrix,
+                )
+                @test_opt stacktrace_types_limit = 3 estimatepose6dof(
+                    runway_corners, projections, camera_matrix,
+                )
+                @test_opt stacktrace_types_limit = 3 estimatepose6dof(
+                    runway_corners, projections, camera_matrix; cache
+                )
 
-            @test_nowarn estimatepose3dof(
-                runway_corners, projections, true_rot, camera_matrix,
-            )
-            @test_opt stacktrace_types_limit = 3 estimatepose3dof(
-                runway_corners, projections, true_rot, camera_matrix,
-            )
+                (; cache) = @test_nowarn estimatepose3dof(
+                    runway_corners, projections, true_rot, camera_matrix,
+                )
+                @test_opt stacktrace_types_limit = 3 estimatepose3dof(
+                    runway_corners, projections, true_rot, camera_matrix,
+                )
+                @test_opt stacktrace_types_limit = 3 estimatepose3dof(
+                    runway_corners, projections, true_rot, camera_matrix; cache
+                )
+            end
+            # @testset "warm cache" begin
+            #     @test_nowarn estimatepose6dof(
+            #         runway_corners, projections, camera_matrix; cache=cache6dof
+            #     )
+            #     @test_opt stacktrace_types_limit = 3 estimatepose6dof(
+            #         runway_corners, projections, camera_matrix; cache=cache6dof
+            #     )
+
+            #     @test_nowarn estimatepose3dof(
+            #         runway_corners, projections, true_rot, camera_matrix,
+            #     )
+            #     @test_opt stacktrace_types_limit = 3 estimatepose3dof(
+            #         runway_corners, projections, true_rot, camera_matrix,
+            #     )
+            # end
         end
     end
 end
