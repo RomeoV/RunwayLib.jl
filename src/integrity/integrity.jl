@@ -76,7 +76,7 @@ end
 function compute_parity_residual(cam_pos::WorldPoint, cam_rot::RotZYX, pf::PointFeatures)
     predicted_pts = [project(cam_pos, cam_rot, pt, pf.camconfig) for pt in pf.runway_corners]
     H = compute_H(cam_pos, cam_rot, pf)
-    delta_zs = (pf.observed_corners .- predicted_pts) |> _reduce(vcat)
+    delta_zs = SVector.(pf.observed_corners .- predicted_pts) |> _reduce(vcat)
     (I - H * pinv(H)) * delta_zs
 end
 
@@ -172,8 +172,19 @@ function compute_integrity_statistic(
     noise_cov::AbstractMatrix,
     camconfig=CAMERA_CONFIG_OFFSET
 )
-    pf = PointFeatures(world_pts, observed_pts, camconfig, noise_cov)
-    compute_integrity_statistic(cam_pos, cam_rot, pf, NO_LINES)
+    @assert length(world_pts) == length(observed_pts) "Number of world points must equal number of observations"
+
+    # Compute predicted projections
+    predicted_pts = [project(cam_pos, cam_rot, pt, camconf)
+                     for pt in world_pts]
+
+    # Compute Jacobian matrix
+    H = compute_H(cam_pos, cam_rot, world_pts, camconf)
+
+    # Compute observation residuals (observed - predicted)
+    delta_zs = SVector.(observed_pts .- predicted_pts) |> _reduce(vcat)
+    r = (I - H * pinv(H)) * delta_zs
+    return r
 end
 
 # NoiseModel convenience wrapper

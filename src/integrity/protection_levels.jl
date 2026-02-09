@@ -60,6 +60,7 @@ function compute_zero_fault_protection_level(
     pose_ref = estimatepose3dof(PointFeatures(world_pts, observed_pts), NO_LINES, cam_rot)
     pos_ref = pose_ref.pos
     pos_ref_stripped = ustrip.(m, pos_ref)
+    pose_cache = pose_ref.cache  # reuse solver cache for all subsequent calls
 
     # Baseline integrity statistic
     stat_bl = compute_integrity_statistic(pos_ref, cam_rot, world_pts, observed_pts, noise_cov)
@@ -68,17 +69,22 @@ function compute_zero_fault_protection_level(
     chi2_bound = quantile(Chisq(dof), 1 - prob)
 
     # Flatten observations and extract noise scale
-    obs_flat = reduce(vcat, [SVector(ustrip(px, p.x), ustrip(px, p.y)) for p in observed_pts])
-    σ_val = sqrt(noise_cov[1, 1])  # assume diagonal with equal variance
+    obs_flat = reduce(vcat, SVector.(observed_pts))
+    σ_val = sqrt(noise_cov[1, 1])px  # assume diagonal with equal variance
 
     # Tiny relaxation so the log-barrier is finite at Δy=0 (where stat = stat_ref exactly)
     stat_bound = stat_ref + 1e-4
 
     # --- Closures over the problem data ---
     function _eval_perturbation(Δy)
-        perturbed_flat = obs_flat + Δy * σ_val
-        perturbed_obs = [ProjectionPoint(el * px) for el in eachcol(reshape(perturbed_flat, 2, :))]
-        pose = estimatepose3dof(PointFeatures(world_pts, perturbed_obs), NO_LINES, cam_rot)
+        # perturbed_flat = obs_flat + Δy * σ_val
+        # perturbed_obs = observed_pts .+ [ProjectionPoint(el * px) for el in eachcol(reshape(perturbed_flat, 2, :))]
+        perturbed_obs = observed_pts .+
+            [
+                ProjectionPoint(el...) * σ_val
+                for el in eachcol(reshape(Δy, Size(2, length(observed_pts))))
+            ]
+        pose = estimatepose3dof(PointFeatures(world_pts, perturbed_obs), NO_LINES, cam_rot; cache=pose_cache)
         sr = compute_integrity_statistic(pose.pos, pose.rot, world_pts, perturbed_obs, noise_cov)
         return (; pose, sr, norm2=sum(Δy .^ 2))
     end
@@ -93,7 +99,7 @@ function compute_zero_fault_protection_level(
     end
 
     # --- Progressive Nelder-Mead ---
-    x0 = zeros(n_obs)
+    x0 = false.*similar(ustrip.(px, reduce(vcat, SVector.(observed_pts))))
     for μ in μ_schedule
         optf = OptimizationFunction(_penalized_objective)
         prob_opt = OptimizationProblem(optf, x0, μ)
