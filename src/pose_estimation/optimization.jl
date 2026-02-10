@@ -1,3 +1,9 @@
+# Type-stable flattening: static vcat for StaticVectors, reinterpret for dynamic
+_flatten(v::StaticVector{<:Any, <:SVector}) = reduce(vcat, v)
+_flatten(v::StaticVector{<:Any, <:FieldVector}) = reduce(vcat, map(SVector, v))
+_flatten(v::AbstractVector{<:StaticVector{N,T}}) where {N,T} = reinterpret(T, v)
+_flatten(v::AbstractVector{<:AbstractVector}) = reduce(vcat, v)
+
 include("./pointfeatures.jl")
 include("./linefeatures.jl")
 
@@ -32,10 +38,10 @@ struct PoseOptimizationParams3DOF{
 end
 
 "From optimization space into regular space."
-optvar2nominal(x::AT, ps::PoseOptimizationParams3DOF) where {AT} = SA[-exp(x[1]); x[2]; exp(x[3])] |> AT
+@stable optvar2nominal(x::AT, ps::PoseOptimizationParams3DOF) where {AT} = SA[-exp(x[1]); x[2]; exp(x[3])] |> AT
 # For some reason this solution introduces an allocation which costs 15% performance for one solve...
 # We don't see this issue for [`nominal2optvar`](@ref) although it should be the same...
-optvar2nominal(x::AT, ps::PoseOptimizationParams6DOF) where {AT} = reduce(
+@stable optvar2nominal(x::AT, ps::PoseOptimizationParams6DOF) where {AT} = reduce(
     vcat, (
         SA[-exp(x[1]); x[2]; exp(x[3])],
         # RotZYX(RodriguesParam(x[4], x[5], x[6])) |> Rotations.params,
@@ -43,7 +49,7 @@ optvar2nominal(x::AT, ps::PoseOptimizationParams6DOF) where {AT} = reduce(
     )
 ) |> AT
 # So we instead implement it like this for StaticArrays
-optvar2nominal(x::AT, ps::PoseOptimizationParams6DOF) where {AT<:StaticArray} = SA[
+@stable optvar2nominal(x::AT, ps::PoseOptimizationParams6DOF) where {AT<:StaticArray} = SA[
     -exp(x[1]);
     x[2];
     exp(x[3]);
@@ -53,8 +59,8 @@ optvar2nominal(x::AT, ps::PoseOptimizationParams6DOF) where {AT<:StaticArray} = 
 ]
 
 "From regular space into optimization space."
-nominal2optvar(x::AT, ps::PoseOptimizationParams3DOF) where {AT} = SA[log(-x[1]); x[2]; log(x[3])] |> AT
-nominal2optvar(x::AT, ps::PoseOptimizationParams6DOF) where {AT} = reduce(
+@stable nominal2optvar(x::AT, ps::PoseOptimizationParams3DOF) where {AT} = SA[log(-x[1]); x[2]; log(x[3])] |> AT
+@stable nominal2optvar(x::AT, ps::PoseOptimizationParams6DOF) where {AT} = reduce(
     vcat, (
         SA[log(-x[1]); x[2]; log(x[3])],
         # RodriguesParam(RotZYX(x[4], x[5], x[6])) |> Rotations.params,
@@ -76,7 +82,7 @@ Unified optimization function for pose estimation.
 # Returns
 - Weighted reprojection error vector combining point and line features
 """
-function pose_optimization_objective(
+@stable function pose_optimization_objective(
     optvar::AbstractVector{T},
     ps::AbstractPoseOptimizationParams
 ) where {T<:Real}

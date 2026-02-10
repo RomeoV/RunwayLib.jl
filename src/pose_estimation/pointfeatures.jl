@@ -49,29 +49,15 @@ Compute weighted point feature residuals.
 # Returns
 - Weighted reprojection error vector
 """
-function pose_optimization_objective_points(
+@stable function pose_optimization_objective_points(
     cam_pos::WorldPoint,
     cam_rot::Rotation,
     point_features::PointFeatures
 )
-    # Project runway corners to image coordinates
-    # WARNING: Don't remove this `let` statement without checking JET tests for type inference.
-    # For some reason it's necessary for type inference to work.
-    projected_corners = let cam_pos = cam_pos
-        [
-            project(cam_pos, cam_rot, corner, point_features.camconfig)
-            for corner in point_features.runway_corners
-        ]
-    end
+    projected_corners = [project(cam_pos, cam_rot, corner, point_features.camconfig)
+                         for corner in point_features.runway_corners]
 
-    # Compute reprojection errors and convert to SVector for proper vcat behavior
-    corner_errors = [
-        SVector(proj - obs)
-        for (proj, obs) in zip(projected_corners, point_features.observed_corners)
-    ]
-
-    # Flatten corner errors and apply weighting
-    corner_errors_vec = reduce(vcat, corner_errors)
+    corner_errors_vec = _flatten(projected_corners .- point_features.observed_corners)
     Linv = point_features.Linv
     # `Linv` has units 1/px, but adding it directly to `Linv` has some issue, so we just divide here.
     weighted_errors = (Linv * corner_errors_vec) ./ px
