@@ -58,37 +58,36 @@ Compute weighted line feature residuals.
 # Returns
 - Weighted line error vector (empty if no lines)
 """
-function pose_optimization_objective_lines(
+# Fast path for empty line features (NO_LINES) — trivially type-stable
+@stable function pose_optimization_objective_lines(
+    ::WorldPoint, ::Rotation,
+    ::LineFeatures{<:Any,<:Any,<:Any,<:StaticVector{0},<:StaticVector{0}}
+)
+    return SVector{0,Float64}()
+end
+
+@stable function pose_optimization_objective_lines(
     cam_pos::WorldPoint,
     cam_rot::Rotation,
     line_features::LineFeatures
 )
-    # Project line endpoints to image coordinates and compute line parameters
-    projected_lines = [
-        # Project both endpoints of each line
-        let p1 = project(cam_pos, cam_rot, endpoints[1], line_features.camconfig),
-            p2 = project(cam_pos, cam_rot, endpoints[2], line_features.camconfig)
-            # Convert projected endpoints to line representation (r, theta)
-            getline(p1, p2)
-        end
-        for endpoints in line_features.world_line_endpoints
-    ]
+    projected_lines = [let
+        p1 = project(cam_pos, cam_rot, endpoints[1], line_features.camconfig)
+        p2 = project(cam_pos, cam_rot, endpoints[2], line_features.camconfig)
+        getline(p1, p2)
+    end for endpoints in line_features.world_line_endpoints]
 
-    # Compute line errors
-    line_errors = [
-        comparelines(lpred, lobs)
-        for (lpred, lobs) in zip(projected_lines, line_features.observed_lines)
-    ]
+    line_errors = [comparelines(pl, ol)
+                   for (pl, ol) in zip(projected_lines, line_features.observed_lines)]
 
-    # Flatten line errors and apply weighting
-    line_errors_vec = reduce(vcat, line_errors; init=SVector{0,Float64}())
+    line_errors_vec = _flatten(line_errors)
     Linv = line_features.Linv
     weighted_errors = Linv * line_errors_vec
 
     return ustrip.(NoUnits, weighted_errors)
 end
 
-function comparelines(l1::Line, l2::Line)
+@stable function comparelines(l1::Line, l2::Line)
     (r1, theta1) = let
         (; r, theta) = l1
         ustrip(px, r), ustrip(rad, theta)
