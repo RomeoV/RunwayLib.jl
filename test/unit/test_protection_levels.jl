@@ -27,6 +27,24 @@ function eval_perturbation_external(Δy, obs_flat, σ_val, world_pts, cam_rot, n
     return (; pose, sr, norm2=sum(Δy .^ 2))
 end
 
+function check_single_direction(result, obs_flat, σ_val, runway_corners, rot)
+    @test result.protection_level ≥ 0
+    @test result.feasible
+
+    ev = eval_perturbation_external(
+        result.Δy, obs_flat, σ_val, runway_corners, rot, noise_cov
+    )
+    @test ev.sr.stat ≤ result.stat_ref + 1e-6
+    @test ev.norm2 ≤ result.chi2_bound + 1e-6
+
+    Δy_scaled = 1.05 * result.Δy
+    ev_scaled = eval_perturbation_external(
+        Δy_scaled, obs_flat, σ_val, runway_corners, rot, noise_cov
+    )
+    @test ev_scaled.sr.stat > result.stat_ref ||
+          sum(Δy_scaled .^ 2) > result.chi2_bound
+end
+
 @testset "Zero-fault protection levels" begin
     runway_corners = [
         WorldPoint(0.0m, -25.0m, 0.0m),
@@ -50,37 +68,30 @@ end
         for obs_idx in 1:n_obs_per_scenario
             noisy = clean .+ [ProjectionPoint(px_std * randn(2)px) for _ in clean]
 
-            # Flatten for external evaluation
             obs_flat = reduce(vcat, [SVector(ustrip(px, p.x), ustrip(px, p.y)) for p in noisy])
             σ_val = px_std
 
-            for alpha_idx in 1:3, direction in [+1, -1]
-                result = compute_zero_fault_protection_level(
-                    runway_corners, noisy, noise_cov, rot;
-                    alpha_idx, direction, prob=0.01,
-                )
-
-                @testset "scenario=$scenario_idx obs=$obs_idx α=$alpha_idx dir=$direction" begin
-                    # 1. Solution found with non-negative PL
-                    @test result.protection_level ≥ 0
-
-                    # 2. Solution is feasible
-                    @test result.feasible
-
-                    # 3. Verify constraints externally
-                    ev = eval_perturbation_external(
-                        result.Δy, obs_flat, σ_val, runway_corners, rot, noise_cov
+            for alpha_idx in 1:3
+                @testset "scenario=$scenario_idx obs=$obs_idx α=$alpha_idx" begin
+                    # Test direction=0 (both)
+                    result = compute_zero_fault_protection_level(
+                        runway_corners, noisy, noise_cov, rot;
+                        alpha_idx, prob=0.01,
                     )
-                    @test ev.sr.stat ≤ result.stat_ref + 1e-6
-                    @test ev.norm2 ≤ result.chi2_bound + 1e-6
 
-                    # 4. Scaling Δy by 1.05 violates at least one constraint
-                    Δy_scaled = 1.05 * result.Δy
-                    ev_scaled = eval_perturbation_external(
-                        Δy_scaled, obs_flat, σ_val, runway_corners, rot, noise_cov
-                    )
-                    @test ev_scaled.sr.stat > result.stat_ref ||
-                          sum(Δy_scaled .^ 2) > result.chi2_bound
+                    @testset "lo (dir=-1)" begin
+                        check_single_direction(
+                            merge(result.lo, (; stat_ref=result.stat_ref, chi2_bound=result.chi2_bound)),
+                            obs_flat, σ_val, runway_corners, rot,
+                        )
+                    end
+
+                    @testset "hi (dir=+1)" begin
+                        check_single_direction(
+                            merge(result.hi, (; stat_ref=result.stat_ref, chi2_bound=result.chi2_bound)),
+                            obs_flat, σ_val, runway_corners, rot,
+                        )
+                    end
                 end
             end
         end
