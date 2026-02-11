@@ -334,7 +334,7 @@ function compute_zero_fault_protection_level(
         perturbed_obs = observed_pts .+
             [
                 ProjectionPoint(el...) * σ_val
-                for el in eachcol(reshape(Δy, Size(2, length(observed_pts))))
+                for el in eachcol(reshape(Δy, 2, length(observed_pts)))
             ]
         pose = estimatepose3dof(PointFeatures(world_pts, perturbed_obs), NO_LINES, cam_rot; cache=pose_cache)
         sr = compute_integrity_statistic(pose.pos, pose.rot, world_pts, perturbed_obs, noise_cov)

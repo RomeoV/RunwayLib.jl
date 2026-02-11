@@ -114,6 +114,31 @@ end
         end
     end
 
+    @testset "NelderMead vs Ipopt consistency" begin
+        rng = MersenneTwister(123)
+        pos = sample_aircraft_pos(rng)
+        rot = sample_aircraft_rot(rng)
+        clean = [project(pos, rot, c) for c in runway_corners]
+        noisy = clean .+ [ProjectionPoint(px_std * randn(rng, 2)px) for _ in clean]
+
+        for alpha_idx in 1:3
+            @testset "α=$alpha_idx" begin
+                r_ipopt = compute_zero_fault_protection_level_grad(
+                    runway_corners, noisy, noise_cov, rot; alpha_idx, prob=0.01)
+                r_nm = compute_zero_fault_protection_level(
+                    runway_corners, noisy, noise_cov, rot; alpha_idx, prob=0.01)
+
+                for dir in (:lo, :hi)
+                    pl_ipopt = getfield(r_ipopt, dir).protection_level
+                    pl_nm = getfield(r_nm, dir).protection_level
+                    # Within 3% relative tolerance (or 0.1m absolute for small PLs)
+                    @test isapprox(pl_ipopt, pl_nm; rtol=0.03, atol=0.1) ||
+                          abs(pl_ipopt) > abs(pl_nm)  # Ipopt finding larger PL is also fine
+                end
+            end
+        end
+    end
+
     @testset "JET type stability" begin
         pos = WorldPoint(-800.0m, 5.0m, 120.0m)
         rot = RotZYX(0.02, 0.05, 0.01)
