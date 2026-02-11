@@ -1,8 +1,9 @@
-using SparseArrays
+# using BracketingNonlinearSolve
 using LinearAlgebra
 using Distributions
 using Rotations: RotZYX, params
 using StaticArrays
+using SparseArrays: sparse
 using DifferentiationInterface
 using ADTypes
 
@@ -76,8 +77,10 @@ end
 function compute_parity_residual(cam_pos::WorldPoint, cam_rot::RotZYX, pf::PointFeatures)
     predicted_pts = [project(cam_pos, cam_rot, pt, pf.camconfig) for pt in pf.runway_corners]
     H = compute_H(cam_pos, cam_rot, pf)
-    delta_zs = (pf.observed_corners .- predicted_pts) |> _reduce(vcat)
-    (I - H * pinv(H)) * delta_zs
+    delta_zs = SVector.(pf.observed_corners .- predicted_pts) |> _reduce(vcat)
+    # Parity projection: (I - H pinv(H)) δz = δz - H ((H'H) \ (H'δz))
+    # Using LU instead of SVD-based pinv for AD compatibility (works with Dual numbers)
+    delta_zs - H * ((H' * H) \ (H' * delta_zs))
 end
 
 function compute_parity_residual(cam_pos::WorldPoint, cam_rot::RotZYX, lf::LineFeatures)
@@ -93,7 +96,7 @@ function compute_parity_residual(cam_pos::WorldPoint, cam_rot::RotZYX, lf::LineF
 
     H = compute_H(cam_pos, cam_rot, lf)
     delta_zs = reduce(vcat, [comparelines(pred, obs) for (pred, obs) in zip(predicted_lines, lf.observed_lines)])
-    (I - H * pinv(H)) * delta_zs
+    delta_zs - H * ((H' * H) \ (H' * delta_zs))
 end
 
 # =============================================================================
@@ -186,7 +189,7 @@ compute_integrity_statistic(
 ) = compute_integrity_statistic(cam_pos, cam_rot, world_pts, observed_pts, Matrix(covmatrix(noise_cov)), camconfig)
 
 # =============================================================================
-# compute_worst_case_fault_direction_and_slope
+# Worst-case fault direction and slope
 # =============================================================================
 
 """
@@ -215,10 +218,6 @@ for a selected pose parameter and fault subset.
 # Returns
 - `f_dir`: Worst-case fault direction (normalized vector)
 - `g_slope`: Failure mode slope (quantifies sensitivity to faults in this direction)
-
-!!! note
-    The Jacobian `H` must have the correct number of columns for the degrees of
-    freedom (3 for position-only, 6 for full pose estimation).
 """
 function compute_worst_case_fault_direction_and_slope(
     alpha_idx::Int,
@@ -226,45 +225,32 @@ function compute_worst_case_fault_direction_and_slope(
     H::AbstractMatrix,
     noise_cov::AbstractMatrix,
 )
-
     @assert 1 <= alpha_idx <= size(H, 2) "alpha_idx must be 1-ndof"
     @assert all(1 .<= fault_indices .<= size(H, 1)) "fault_indices must in `1:size(H, 1)`"
 
-    # Define extraction vector s₀ for the state of interest (alpha)
     ndof = size(H, 2)
     α = SVector(ntuple(i -> i == alpha_idx ? 1.0 : 0.0, Val(ndof)))
 
-    # Compute S₀ = (HᵀH)⁻¹Hᵀ
-    S_0 = pinv(H)
+    S_0 = (H' * H) \ H'
     s_0 = S_0' * α
 
-    # Whiten residuals using noise covariance
-    # For χ² test: r_whitened = L^(-T) * r where LL^T = Σ
     L, _ = cholesky(noise_cov)
     Linv = inv(L)
 
-    # Define Parity Projection Matrix, P = I - H(HᵀH)⁻¹Hᵀ = I - H S₀
     proj_parity = I - H * S_0
     proj_parity_Linv = proj_parity * Linv
 
-    # Define Fault Selection Matrix A_i
     n_measurements = size(H, 1)
     n_faults = length(fault_indices)
     A_i = (
         sparse(collect(fault_indices), 1:n_faults, ones(n_faults), n_measurements, n_faults)
     ) |> SMatrix{n_measurements, n_faults}
 
-    # Compute the central term, (Aᵀ (I - H S₀) A)⁻¹
-    # This measures how "visible" faults in this subspace are to the parity check
     visibility_matrix = A_i' * proj_parity_Linv * proj_parity_Linv' * A_i
-
-    # Compute m_Xi = Aᵀ s₀
     m_Xi = A_i' * s_0
 
-    # Compute worst-case fault direction f_dir and normalize
     f_dir = A_i * (visibility_matrix \ m_Xi) |> normalize
 
-    # Compute Slope Squared (Eq 32)
     g_slope_squared = m_Xi' * (visibility_matrix \ m_Xi)
     @assert g_slope_squared >= 0 "Computed negative slope squared, numerical issue?"
     g_slope = sqrt(g_slope_squared)

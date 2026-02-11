@@ -11,7 +11,7 @@ using StaticArrays: StaticArrays, FieldVector, SA, Size, SArray, SVector, SMatri
 import NonlinearSolveBase
 include("piracy.jl")
 using NonlinearSolveFirstOrder: LevenbergMarquardt, NonlinearLeastSquaresProblem, NonlinearFunction,
-    reinit!, solve!
+    reinit!, solve!, solve
 using TypedTables: TypedTables, Table
 using Unitful: Unitful, @u_str, @unit, NoUnits, Quantity, dimension, uconvert,
     ustrip, Length
