@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["Romeo Valentin <romeov@stanford.edu>"]
 
 [workspace]
-projects = ["test", "benchmark", "juliac", "docs"]
+projects = ["test", "benchmark", "juliac", "docs", "libs/RunwayLibProtectionLevels"]
 
 [deps]
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"

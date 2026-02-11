@@ -77,7 +77,9 @@ function compute_parity_residual(cam_pos::WorldPoint, cam_rot::RotZYX, pf::Point
     predicted_pts = [project(cam_pos, cam_rot, pt, pf.camconfig) for pt in pf.runway_corners]
     H = compute_H(cam_pos, cam_rot, pf)
     delta_zs = SVector.(pf.observed_corners .- predicted_pts) |> _reduce(vcat)
-    (I - H * pinv(H)) * delta_zs
+    # Parity projection: (I - H pinv(H)) δz = δz - H ((H'H) \ (H'δz))
+    # Using LU instead of SVD-based pinv for AD compatibility (works with Dual numbers)
+    delta_zs - H * ((H' * H) \ (H' * delta_zs))
 end
 
 function compute_parity_residual(cam_pos::WorldPoint, cam_rot::RotZYX, lf::LineFeatures)
@@ -93,7 +95,7 @@ function compute_parity_residual(cam_pos::WorldPoint, cam_rot::RotZYX, lf::LineF
 
     H = compute_H(cam_pos, cam_rot, lf)
     delta_zs = reduce(vcat, [comparelines(pred, obs) for (pred, obs) in zip(predicted_lines, lf.observed_lines)])
-    (I - H * pinv(H)) * delta_zs
+    delta_zs - H * ((H' * H) \ (H' * delta_zs))
 end
 
 # =============================================================================
@@ -235,7 +237,7 @@ function compute_worst_case_fault_direction_and_slope(
     α = SVector(ntuple(i -> i == alpha_idx ? 1.0 : 0.0, Val(ndof)))
 
     # Compute S₀ = (HᵀH)⁻¹Hᵀ
-    S_0 = pinv(H)
+    S_0 = (H' * H) \ H'
     s_0 = S_0' * α
 
     # Whiten residuals using noise covariance
