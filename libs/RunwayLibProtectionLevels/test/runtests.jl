@@ -106,7 +106,7 @@ end
                             # If feasible, position error should not exceed PL in either direction
                             pos_err = ustrip(m, ev.pose.pos[alpha_idx]) - ustrip(m, result.pos_ref[alpha_idx])
                             @test pos_err ≤ result.hi.protection_level + 0.5  # small tolerance for Ipopt approx
-                            @test -pos_err ≤ result.lo.protection_level + 0.5
+                            @test pos_err ≥ result.lo.protection_level - 0.5
                         end
                     end
                 end

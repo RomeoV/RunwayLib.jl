@@ -132,7 +132,7 @@ function _solve_direction(
     pos_sol = _solve_pose(obs_sol, corners, cam_rot, pose_cache, Val(N))
     stat_sol = _compute_stat(pos_sol, obs_sol, corners, cam_rot, cov, Linv, Val(N))
     norm2_sol = sum(sol.u .^ 2)
-    pl = dir * (pos_sol[alpha_idx] - pos_ref_m[alpha_idx])
+    pl = pos_sol[alpha_idx] - pos_ref_m[alpha_idx]
     feasible = stat_sol ≤ stat_bound + 1e-6 && norm2_sol ≤ chi2_bound + 1e-4
 
     return (; protection_level=pl, Δy=sol.u, stat=stat_sol, norm2=norm2_sol, feasible)
