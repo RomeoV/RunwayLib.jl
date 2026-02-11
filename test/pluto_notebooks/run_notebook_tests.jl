@@ -14,6 +14,11 @@ and return true if no cells failed.
 function run_notebook_test(notebookfile)
     Pluto.activate_notebook_environment(notebookfile)
     Pkg.develop(; name="RunwayLib", path=RUNWAYLIB_PKGDIR)
+    # Dev workspace subpackages if the notebook depends on them
+    pl_path = joinpath(RUNWAYLIB_PKGDIR, "libs", "RunwayLibProtectionLevels")
+    if haskey(Pkg.project().dependencies, "RunwayLibProtectionLevels")
+        Pkg.develop(; name="RunwayLibProtectionLevels", path=pl_path)
+    end
 
     session = Pluto.ServerSession()
     notebook = Pluto.SessionActions.open(session, notebookfile; run_async=false)
