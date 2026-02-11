@@ -3,6 +3,7 @@ using LinearAlgebra
 using Distributions
 using Rotations: RotZYX, params
 using StaticArrays
+using SparseArrays: sparse
 using DifferentiationInterface
 using ADTypes
 
@@ -186,3 +187,73 @@ compute_integrity_statistic(
     noise_cov::NoiseModel,
     camconfig=CAMERA_CONFIG_OFFSET
 ) = compute_integrity_statistic(cam_pos, cam_rot, world_pts, observed_pts, Matrix(covmatrix(noise_cov)), camconfig)
+
+# =============================================================================
+# Worst-case fault direction and slope
+# =============================================================================
+
+"""
+    compute_worst_case_fault_direction_and_slope(
+        alpha_idx::Int,
+        fault_indices::AbstractVector{Int},
+        H::AbstractMatrix,
+        noise_cov::AbstractMatrix,
+    )
+
+Computes the worst-case fault direction and corresponding failure mode slope
+for a selected pose parameter and fault subset.
+
+# Arguments
+- `alpha_idx::Int`: Monitored parameter index
+  - 1 = along-track position
+  - 2 = cross-track position
+  - 3 = height above runway
+  - 4 = yaw
+  - 5 = pitch
+  - 6 = roll
+- `fault_indices::AbstractVector{Int}`: Indices of measurements in fault subset
+- `H::AbstractMatrix`: Jacobian matrix (ndof columns)
+- `noise_cov::AbstractMatrix`: Measurement noise covariance matrix
+
+# Returns
+- `f_dir`: Worst-case fault direction (normalized vector)
+- `g_slope`: Failure mode slope (quantifies sensitivity to faults in this direction)
+"""
+function compute_worst_case_fault_direction_and_slope(
+    alpha_idx::Int,
+    fault_indices::AbstractVector{Int},
+    H::AbstractMatrix,
+    noise_cov::AbstractMatrix,
+)
+    @assert 1 <= alpha_idx <= size(H, 2) "alpha_idx must be 1-ndof"
+    @assert all(1 .<= fault_indices .<= size(H, 1)) "fault_indices must in `1:size(H, 1)`"
+
+    ndof = size(H, 2)
+    α = SVector(ntuple(i -> i == alpha_idx ? 1.0 : 0.0, Val(ndof)))
+
+    S_0 = (H' * H) \ H'
+    s_0 = S_0' * α
+
+    L, _ = cholesky(noise_cov)
+    Linv = inv(L)
+
+    proj_parity = I - H * S_0
+    proj_parity_Linv = proj_parity * Linv
+
+    n_measurements = size(H, 1)
+    n_faults = length(fault_indices)
+    A_i = (
+        sparse(collect(fault_indices), 1:n_faults, ones(n_faults), n_measurements, n_faults)
+    ) |> SMatrix{n_measurements, n_faults}
+
+    visibility_matrix = A_i' * proj_parity_Linv * proj_parity_Linv' * A_i
+    m_Xi = A_i' * s_0
+
+    f_dir = A_i * (visibility_matrix \ m_Xi) |> normalize
+
+    g_slope_squared = m_Xi' * (visibility_matrix \ m_Xi)
+    @assert g_slope_squared >= 0 "Computed negative slope squared, numerical issue?"
+    g_slope = sqrt(g_slope_squared)
+
+    return f_dir, g_slope
+end
