@@ -5,6 +5,7 @@ authors = ["Romeo Valentin <romeov@stanford.edu>"]
 
 [deps]
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
+Chairmarks = "0ca39b1e-fe0b-4e98-acfc-b1656634c4de"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -19,5 +20,6 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 
 [compat]
+Chairmarks = "1.3.1"
 OptimizationIpopt = "1.1.0"
 julia = "1.11"
