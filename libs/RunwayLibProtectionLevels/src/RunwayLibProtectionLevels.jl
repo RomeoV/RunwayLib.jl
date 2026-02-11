@@ -1,31 +1,35 @@
 """
-Gradient-based zero-fault protection level computation using Ipopt.
+Protection level computation for runway pose estimation.
 
-Uses a bilevel optimization: NonlinearSolve (inner pose solver with IFT) +
-Ipopt (outer constrained optimizer). ~30x faster than the derivative-free
-NelderMead approach in RunwayLib.
+Provides both gradient-based (Ipopt, ~30x faster) and derivative-free (NelderMead)
+zero-fault protection level solvers, plus worst-case fault direction analysis.
 """
 module RunwayLibProtectionLevels
 
 using RunwayLib
 using Unitful, Unitful.DefaultSymbols
 using StaticArrays
+using SparseArrays
 using LinearAlgebra
 using Distributions: quantile, Chisq
 using Rotations: RotZYX
 using Printf: @sprintf
 
-using SciMLBase: NonlinearLeastSquaresProblem, solve as nls_solve
+using SciMLBase: NonlinearLeastSquaresProblem, solve as nls_solve, successful_retcode
 using NonlinearSolveFirstOrder: LevenbergMarquardt
+using BracketingNonlinearSolve: IntervalNonlinearProblem, solve as bracket_solve
 
 using Optimization: OptimizationFunction, OptimizationProblem, solve as opt_solve
+using OptimizationOptimJL: NelderMead
 using OptimizationIpopt
 using ADTypes: AutoForwardDiff
 
-import RunwayLib: compute_whitened_parity_residual, PointFeatures, px, NO_LINES,
-    CAMERA_CONFIG_OFFSET, estimatepose3dof
+import RunwayLib: compute_whitened_parity_residual, compute_integrity_statistic,
+    PointFeatures, px, NO_LINES, CAMERA_CONFIG_OFFSET, estimatepose3dof
 
 export compute_zero_fault_protection_level_grad
+export compute_zero_fault_protection_level
+export compute_worst_case_fault_direction_and_slope
 
 # =============================================================================
 # Helpers
@@ -252,6 +256,236 @@ function _print_summary(::Val{D}, result, alpha_idx) where {D}
     _print_row(io, label, result, result.stat_ref, result.chi2_bound)
     println(io, "  └─────┴────────────┴─────────────────────┴───────────────────┴─────┘")
     println(io, "  Zero-fault PL (Ipopt): α=$alpha_idx ($(_ALPHA_LABELS[alpha_idx])), dir=$D")
+end
+
+# =============================================================================
+# NelderMead-based protection level (derivative-free, slower but robust)
+# =============================================================================
+
+"""
+    compute_zero_fault_protection_level(
+        world_pts, observed_pts, noise_cov, cam_rot;
+        alpha_idx=1, direction=0, prob=0.01, μ_schedule=[10.0, 1.0, 0.1], maxiters=10_000,
+    )
+
+Compute the zero-fault hypothesis protection level via constrained optimization.
+
+Finds the worst-case observation perturbation `Δy` (in whitened coordinates) that
+maximizes (or minimizes) position error along axis `alpha_idx`, subject to:
+1. The integrity statistic does not increase beyond the baseline value
+2. The perturbation norm stays within the χ² bound at probability `prob`
+
+Uses Nelder-Mead with log-barrier penalties and progressive tightening, followed by
+a line search to push the solution to the constraint boundary.
+
+# Arguments
+- `world_pts`: Known 3D feature locations (runway corners)
+- `observed_pts`: Observed 2D projections (with noise)
+- `noise_cov`: Measurement noise covariance matrix (in pixels²)
+- `cam_rot`: Known camera attitude (3-DOF mode)
+- `alpha_idx`: Position component (1=along-track, 2=cross-track, 3=altitude)
+- `direction`: 0 for both directions (default), +1 to maximize, -1 to minimize
+- `prob`: Probability for χ² bound (default 0.01)
+- `μ_schedule`: Log-barrier penalty schedule (large=relaxed, small=tight)
+- `maxiters`: Max iterations per Nelder-Mead stage
+
+# Returns
+For `direction=0`: NamedTuple `(; lo, hi, pos_ref, stat_ref, chi2_bound)` where
+`lo` and `hi` each contain `(; protection_level, Δy, stat, norm2, feasible)`.
+
+For `direction=±1`: flat NamedTuple with all fields.
+"""
+function compute_zero_fault_protection_level(
+    world_pts::AbstractVector{<:WorldPoint},
+    observed_pts::AbstractVector{<:ProjectionPoint},
+    noise_cov::AbstractMatrix,
+    cam_rot::RotZYX;
+    alpha_idx::Int = 1,
+    direction::Int = 0,
+    prob::Float64 = 0.01,
+    μ_schedule = [10.0, 1.0, 0.1],
+    maxiters::Int = 10_000,
+    verbose::Bool = false,
+)
+    @assert alpha_idx in 1:3 "alpha_idx must be 1 (along-track), 2 (cross-track), or 3 (altitude)"
+    @assert direction in (-1, 0, 1) "direction must be 0 (both), +1, or -1"
+
+    # Baseline pose estimate (3-DOF, fixed rotation)
+    pose_ref = estimatepose3dof(PointFeatures(world_pts, observed_pts), NO_LINES, cam_rot)
+    pos_ref = pose_ref.pos
+    pos_ref_stripped = ustrip.(m, pos_ref)
+    pose_cache = pose_ref.cache
+
+    # Baseline integrity statistic
+    stat_bl = compute_integrity_statistic(pos_ref, cam_rot, world_pts, observed_pts, noise_cov)
+    stat_ref = stat_bl.stat
+    dof = stat_bl.dofs
+    chi2_bound = quantile(Chisq(dof), 1 - prob)
+
+    # Noise scale (assume diagonal with equal variance)
+    σ_val = sqrt(noise_cov[1, 1])px
+
+    # Tiny relaxation so the log-barrier is finite at Δy=0
+    stat_bound = stat_ref + 1e-4
+
+    n_solves = Ref(0)
+    function _eval_perturbation(Δy)
+        n_solves[] += 1
+        perturbed_obs = observed_pts .+
+            [
+                ProjectionPoint(el...) * σ_val
+                for el in eachcol(reshape(Δy, Size(2, length(observed_pts))))
+            ]
+        pose = estimatepose3dof(PointFeatures(world_pts, perturbed_obs), NO_LINES, cam_rot; cache=pose_cache)
+        sr = compute_integrity_statistic(pose.pos, pose.rot, world_pts, perturbed_obs, noise_cov)
+        return (; pose, sr, norm2=sum(Δy .^ 2))
+    end
+
+    function _constraint_margin(t, Δy_dir)
+        ev = _eval_perturbation(t * Δy_dir)
+        return max(ev.sr.stat - stat_ref, ev.norm2 - chi2_bound)
+    end
+
+    function _project_to_boundary(Δy_dir)
+        norm(Δy_dir) < 1e-12 && return Δy_dir
+        margin = _constraint_margin(1.0, Δy_dir)
+        abs(margin) ≤ 1e-8 && return Δy_dir
+
+        if margin < 0
+            t_hi = 1.5
+            while _constraint_margin(t_hi, Δy_dir) < 0
+                t_hi *= 1.5
+            end
+            t_lo = 1.0
+        else
+            t_lo, t_hi = 0.5, 1.0
+            for _ in 1:50
+                _constraint_margin(t_lo, Δy_dir) < 0 && break
+                t_lo *= 0.5
+            end
+            _constraint_margin(t_lo, Δy_dir) ≥ 0 && return t_lo * Δy_dir
+        end
+        t_sol = bracket_solve(IntervalNonlinearProblem(_constraint_margin, (t_lo, t_hi), Δy_dir))
+        return successful_retcode(t_sol) ? t_sol.u * Δy_dir : Δy_dir
+    end
+
+    function _solve_direction_nm(dir::Int, x0)
+        x0 = _project_to_boundary(x0)
+
+        function _penalized_objective(Δy, μ)
+            ev = _eval_perturbation(Δy)
+            obj = dir * -(ustrip(m, ev.pose.pos[alpha_idx]) - pos_ref_stripped[alpha_idx])
+            slack_stat = stat_bound - ev.sr.stat
+            slack_norm = chi2_bound - ev.norm2
+            (slack_stat ≤ 0 || slack_norm ≤ 0) && return 1e10
+            return obj + μ * (-log(slack_stat) - log(slack_norm))
+        end
+
+        for μ in μ_schedule
+            optf = OptimizationFunction(_penalized_objective)
+            prob_opt = OptimizationProblem(optf, x0, μ)
+            sol = opt_solve(prob_opt, NelderMead(); maxiters)
+            successful_retcode(sol.retcode) || @warn "NM did not converge at μ=$μ: $(sol.retcode)"
+            x0 = sol.u
+        end
+
+        x0 = _project_to_boundary(x0)
+
+        ev_final = _eval_perturbation(x0)
+        pos_error = ustrip(m, ev_final.pose.pos[alpha_idx]) - pos_ref_stripped[alpha_idx]
+        feasible = ev_final.sr.stat ≤ stat_ref + 1e-6 && ev_final.norm2 ≤ chi2_bound + 1e-6
+
+        return (; protection_level=pos_error, Δy=x0,
+                  stat=ev_final.sr.stat, norm2=ev_final.norm2, feasible)
+    end
+
+    x0 = false .* similar(ustrip.(px, reduce(vcat, SVector.(observed_pts))))
+    shared = (; pos_ref, stat_ref, chi2_bound)
+
+    _nm_dispatch(::Val{D}, x0) where {D} = merge(_solve_direction_nm(D, x0), shared)
+    function _nm_dispatch(::Val{0}, x0)
+        lo = _solve_direction_nm(-1, x0)
+        hi = _solve_direction_nm(1, -lo.Δy)
+        merge((; lo, hi), shared)
+    end
+
+    result = _nm_dispatch(Val(direction), x0)
+    verbose && _print_summary(Val(direction), result, alpha_idx)
+    return merge(result, (; n_solves=n_solves[]))
+end
+
+# =============================================================================
+# Worst-case fault direction and slope
+# =============================================================================
+
+"""
+    compute_worst_case_fault_direction_and_slope(
+        alpha_idx::Int,
+        fault_indices::AbstractVector{Int},
+        H::AbstractMatrix,
+        noise_cov::AbstractMatrix,
+    )
+
+Computes the worst-case fault direction and corresponding failure mode slope
+for a selected pose parameter and fault subset.
+
+# Arguments
+- `alpha_idx::Int`: Monitored parameter index
+  - 1 = along-track position
+  - 2 = cross-track position
+  - 3 = height above runway
+  - 4 = yaw
+  - 5 = pitch
+  - 6 = roll
+- `fault_indices::AbstractVector{Int}`: Indices of measurements in fault subset
+- `H::AbstractMatrix`: Jacobian matrix (ndof columns)
+- `noise_cov::AbstractMatrix`: Measurement noise covariance matrix
+
+# Returns
+- `f_dir`: Worst-case fault direction (normalized vector)
+- `g_slope`: Failure mode slope (quantifies sensitivity to faults in this direction)
+
+!!! note
+    The Jacobian `H` must have the correct number of columns for the degrees of
+    freedom (3 for position-only, 6 for full pose estimation).
+"""
+function compute_worst_case_fault_direction_and_slope(
+    alpha_idx::Int,
+    fault_indices::AbstractVector{Int},
+    H::AbstractMatrix,
+    noise_cov::AbstractMatrix,
+)
+    @assert 1 <= alpha_idx <= size(H, 2) "alpha_idx must be 1-ndof"
+    @assert all(1 .<= fault_indices .<= size(H, 1)) "fault_indices must in `1:size(H, 1)`"
+
+    ndof = size(H, 2)
+    α = SVector(ntuple(i -> i == alpha_idx ? 1.0 : 0.0, Val(ndof)))
+
+    S_0 = (H' * H) \ H'
+    s_0 = S_0' * α
+
+    L, _ = cholesky(noise_cov)
+    Linv = inv(L)
+
+    proj_parity = I - H * S_0
+    proj_parity_Linv = proj_parity * Linv
+
+    n_measurements = size(H, 1)
+    n_faults = length(fault_indices)
+    A_i = (
+        sparse(collect(fault_indices), 1:n_faults, ones(n_faults), n_measurements, n_faults)
+    ) |> SMatrix{n_measurements, n_faults}
+
+    visibility_matrix = A_i' * proj_parity_Linv * proj_parity_Linv' * A_i
+    m_Xi = A_i' * s_0
+
+    f_dir = A_i * (visibility_matrix \ m_Xi) |> normalize
+
+    g_slope_squared = m_Xi' * (visibility_matrix \ m_Xi)
+    @assert g_slope_squared >= 0 "Computed negative slope squared, numerical issue?"
+    g_slope = sqrt(g_slope_squared)
+
+    return f_dir, g_slope
 end
 
 end # module
