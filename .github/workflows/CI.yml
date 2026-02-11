@@ -40,6 +40,33 @@ jobs:
         env:
           GROUP: ${{ matrix.group }}
 
+  test-protection-levels:
+    name: Protection Levels - Julia ${{ matrix.version }}
+    runs-on: ${{ vars.USE_SELF_HOSTED == 'true' && 'self-hosted' || 'ubuntu-latest' }}
+    timeout-minutes: 60
+    permissions:
+      actions: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        version:
+          - '1'
+          - '1.12'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: ${{ matrix.version }}
+      - uses: julia-actions/cache@v2
+      - name: Test RunwayLibProtectionLevels
+        run: |
+          julia --project=libs/RunwayLibProtectionLevels -e '
+            using Pkg
+            Pkg.instantiate()
+            Pkg.test()
+          '
+
   python-smoke-test:
     name: Python Interface Smoke Test - Julia ${{ matrix.version }}
     runs-on: ubuntu-latest
