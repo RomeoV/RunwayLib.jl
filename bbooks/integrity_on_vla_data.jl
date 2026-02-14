@@ -543,7 +543,9 @@ function unitfree_protection_level(cam_pos, cam_rot, pf, lf=NO_LINES;
 		alphaidx, fault_indices, Hbow, I(n_meas)
 	)
 
-	# DOF: 2 per point + 2 per line (line has 3 residual components but only 2 true DOF)
+	# DOF: 2 per point + 2 per line. Lines have 3 residual components [Δr, Δcosθ, Δsinθ]
+	# but only 2 true DOF because cos²θ + sin²θ = 1 constrains the representation.
+	# Adding a correlated measurement doesn't add a degree of freedom.
 	n_pts = length(pf.runway_corners)
 	dof = (2n_pts + 2n_lines) - size(H, 2)
 	num_stds_y = sqrt(quantile(Chisq(dof), 1-alpha))
@@ -573,7 +575,7 @@ Corners (always on): $(@bind use_corners CheckBox(default=true))
 
 Edge lines: $(@bind use_bottom_line CheckBox()) bottom  $(@bind use_top_line CheckBox()) top  $(@bind use_left_line CheckBox()) left  $(@bind use_right_line CheckBox()) right  $(@bind use_cl_line CheckBox()) centerline
 
-Line noise σ\_r [px]: $(@bind line_noise_scale Slider(5.0:5.0:200.0; show_value=true, default=30.0))
+Line noise σ\_r [px] (σ\_cosθ, σ\_sinθ derived from line angle): $(@bind line_noise_scale Slider(5.0:5.0:200.0; show_value=true, default=30.0))
 """
 
 # ╔═╡ 0c38cf96-0947-11f1-90b5-43dc33093ab5
@@ -656,13 +658,23 @@ unitfree_pf, unitfree_lf, feature_status = let
 			for (_, _, _, _, x1c, y1c, x2c, y2c) in selected_edges
 		]
 		# Per-line covariance: 3 diagonal entries [σ²_r, σ²_cosθ, σ²_sinθ]
-		# Slider sets σ_r; angular sigmas scaled by empirical ratio (~1:3000)
+		# The angular sigmas depend on the line angle θ because:
+		#   Δcosθ ≈ -sin(θ₀)·Δθ  and  Δsinθ ≈ cos(θ₀)·Δθ
+		# So σ_cosθ = |sin(θ₀)| · σ_θ  and  σ_sinθ = |cos(θ₀)| · σ_θ
+		# where σ_θ ≈ σ_r / line_length_px (endpoint noise → angle noise).
 		σ_r = line_noise_scale  # px
-		σ_cosθ = σ_r / 3000
-		σ_sinθ = σ_r / 3000
-		line_cov_block = [σ_r^2, σ_cosθ^2, σ_sinθ^2]
-		n_sel = length(selected_edges)
-		line_cov = Diagonal(repeat(line_cov_block, n_sel))
+		ε_floor = 1e-6  # floor to avoid singular covariance
+		line_cov_diag = Float64[]
+		for line in observed_lines
+			θ = ustrip(rad, line.theta)
+			# Estimate line length from r and image size (~4000px diagonal)
+			line_len = 3000.0  # approximate effective line length in px
+			σ_θ = σ_r / line_len
+			σ_cosθ = max(abs(sin(θ)) * σ_θ, ε_floor)
+			σ_sinθ = max(abs(cos(θ)) * σ_θ, ε_floor)
+			append!(line_cov_diag, [σ_r^2, σ_cosθ^2, σ_sinθ^2])
+		end
+		line_cov = Diagonal(line_cov_diag)
 		lf = LineFeatures(world_endpoints, observed_lines, CAMERA_CONFIG_OFFSET, line_cov)
 	else
 		lf = NO_LINES
