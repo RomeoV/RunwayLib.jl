@@ -145,12 +145,14 @@ function compute_integrity_statistic(
     n_parameters::Int=6
 )
     n_point_obs = 2 * length(pf.runway_corners)
-    n_line_obs = 3 * length(lf.world_line_endpoints)
-    n_observations = n_point_obs + n_line_obs
+    n_line_obs = length(lf.world_line_endpoints)
+    # Lines have 3 residual components [Δr, Δcosθ, Δsinθ] but only 2 true DOF
+    # because cos²θ + sin²θ = 1 constrains the representation.
+    n_effective_obs = n_point_obs + 2 * n_line_obs
 
-    @assert n_observations > n_parameters "Need more observations than parameters for integrity monitoring"
+    @assert n_effective_obs > n_parameters "Need more observations than parameters for integrity monitoring"
 
-    dofs = n_observations - n_parameters
+    dofs = n_effective_obs - n_parameters
 
     # Compute whitened parity residuals
     r_points = compute_whitened_parity_residual(cam_pos, cam_rot, pf)

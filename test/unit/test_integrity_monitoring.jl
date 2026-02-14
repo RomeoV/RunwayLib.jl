@@ -567,7 +567,7 @@ end
 
             stats = compute_integrity_statistic(true_pos, true_rot, point_features, line_features)
 
-            @test stats.dofs == 8  # 14 observations - 6 parameters
+            @test stats.dofs == 6  # (8 point + 2×2 line) - 6 parameters; lines have 2 effective DOF
             @test stats.stat >= 0
             @test 0 <= stats.p_value <= 1
             @test isfinite(stats.stat)
