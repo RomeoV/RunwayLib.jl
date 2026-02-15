@@ -47,6 +47,7 @@ makedocs(
         "caches.md",
         "performance_tips.md",
         "benchmarks.md",
+        "sarray-benchmarks.md",
         "uncertainty_predictions.md",
         "api_reference.md",
     ],
