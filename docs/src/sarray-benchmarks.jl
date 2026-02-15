@@ -80,33 +80,15 @@ let cache = estimatepose6dof(pf_sa, lf_sa).cache
 end
 
 ## Including lines w/ 3dof
-line_pts = [
-    (runway_corners[1], runway_corners[2]),
-    (runway_corners[3], runway_corners[4]),
-]
-true_lines = map(line_pts) do (p1, p2)
-    proj1 = project(cam_pos, cam_rot, p1)
-    proj2 = project(cam_pos, cam_rot, p2)
-    getline(proj1, proj2)
-end
-observed_lines = [
-  Line(
-    r + 1px*randn(),
-    theta + deg2rad(1°)*randn()
-  )
-  for (; r, theta) in true_lines
-]
-lf_arr = LineFeatures(line_pts, observed_lines)
-lf_sa = LineFeatures(SVector{2}(line_pts), SVector{2}(observed_lines))
 
-minimum(@be (pf_arr, lf_arr) estimatepose6dof(_...))
-minimum(@be (pf_sa, lf_sa) estimatepose6dof(_...))
+minimum(@be (pf_arr, lf_arr) estimatepose3dof(_..., cam_rot))
+minimum(@be (pf_sa, lf_sa) estimatepose3dof(_..., cam_rot))
 
 # with caches preallocated
-let cache = estimatepose6dof(pf_arr, lf_arr).cache
-    minimum(@be (pf_arr, lf_arr) estimatepose6dof(_...; cache=cache))
+let cache = estimatepose3dof(pf_arr, lf_arr, cam_rot).cache
+    minimum(@be (pf_arr, lf_arr) estimatepose3dof(_..., cam_rot; cache))
 end
 
-let cache = estimatepose6dof(pf_sa, lf_sa).cache
-    minimum(@be (pf_sa, lf_sa) estimatepose6dof(_...; cache))
+let cache = estimatepose3dof(pf_sa, lf_sa, cam_rot).cache
+    minimum(@be (pf_sa, lf_sa) estimatepose3dof(_..., cam_rot; cache))
 end
