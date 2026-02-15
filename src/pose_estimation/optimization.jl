@@ -105,7 +105,7 @@ Unified optimization function for pose estimation.
     line_residuals = pose_optimization_objective_lines(cam_pos, cam_rot, ps.line_features)
 
     # Combine residuals
-    return reduce(vcat, (point_residuals, line_residuals)) |> Array
+    return reduce(vcat, (point_residuals, line_residuals))
 end
 
 """
