@@ -47,6 +47,7 @@ makedocs(
         "caches.md",
         "performance_tips.md",
         "benchmarks.md",
+        "sarray-benchmarks.md",
         "uncertainty_predictions.md",
         "api_reference.md",
     ],
@@ -57,5 +58,7 @@ makedocs(
 # See "Hosting Documentation" and deploydocs() in the Documenter manual
 # for more information.
 deploydocs(
-    repo="github.com/RomeoV/RunwayLib.jl.git"
+    repo="github.com/RomeoV/RunwayLib.jl.git",
+    devbranch="master",
+    push_preview=true
 )

@@ -81,3 +81,6 @@ LoadMKL_JLL = false
 
 [targets]
 test = ["Test"]
+
+[sources]
+NonlinearSolveBase = {url="https://github.com/RomeoV/NonlinearSolve.jl", subdir="lib/NonlinearSolveBase", rev="fix-Jcache-assignment"}
