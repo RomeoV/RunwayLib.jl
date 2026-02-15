@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>RunwayLib.jl: Fast Pose Estimation and Runtime Assurance for Runway Landings. · RunwayLib</title><meta name="title" content="RunwayLib.jl: Fast Pose Estimation and Runtime Assurance for Runway Landings. · RunwayLib"/><meta property="og:title" content="RunwayLib.jl: Fast Pose Estimation and Runtime Assurance for Runway Landings. · RunwayLib"/><meta property="twitter:title" content="RunwayLib.jl: Fast Pose Estimation and Runtime Assurance for Runway Landings. · RunwayLib"/><meta name="description" content="Documentation for RunwayLib."/><meta property="og:description" content="Documentation for RunwayLib."/><meta property="twitter:description" content="Documentation for RunwayLib."/><script data-outdated-warner src="assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="assets/documenter.js"></script><script src="search_index.js"></script><script src="siteinfo.js"></script><script src="../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="assets/themeswap.js"></script><link href="assets/citations.css" rel="stylesheet" type="text/css"/></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href>RunwayLib</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li class="is-active"><a class="tocitem" href>RunwayLib.jl: Fast Pose Estimation and Runtime Assurance for Runway Landings.</a><ul class="internal"><li><a class="tocitem" href="#Getting-Started"><span>Getting Started</span></a></li><li><a class="tocitem" href="#Using-Line-Features"><span>Using Line Features</span></a></li></ul></li><li><a class="tocitem" href="camera_model/">Camera Model</a></li><li><a class="tocitem" href="python_interface/">Python Interface</a></li><li><a class="tocitem" href="C_interface/">C Interface</a></li><li><a class="tocitem" href="noise_models/">Noise Models</a></li><li><a class="tocitem" href="integrity_check/">Integrity Check</a></li><li><a class="tocitem" href="caches/">Using Caches</a></li><li><a class="tocitem" href="performance_tips/">Performance Tips</a></li><li><a class="tocitem" href="benchmarks/">Benchmarks</a></li><li><a class="tocitem" href="uncertainty_predictions/">Computing Pose Uncertainty</a></li><li><a class="tocitem" href="api_reference/">API Reference</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>RunwayLib.jl: Fast Pose Estimation and Runtime Assurance for Runway Landings.</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>RunwayLib.jl: Fast Pose Estimation and Runtime Assurance for Runway Landings.</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/RomeoV/RunwayLib.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/RomeoV/RunwayLib.jl/blob/master/docs/src/index.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="RunwayLib.jl"><a class="docs-heading-anchor" href="#RunwayLib.jl">RunwayLib.jl</a><a id="RunwayLib.jl-1"></a><a class="docs-heading-anchor-permalink" href="#RunwayLib.jl" title="Permalink"></a></h1><h2 id="Getting-Started"><a class="docs-heading-anchor" href="#Getting-Started">Getting Started</a><a id="Getting-Started-1"></a><a class="docs-heading-anchor-permalink" href="#Getting-Started" title="Permalink"></a></h2><pre><code class="language-julia hljs">using RunwayLib, Unitful.DefaultSymbols, Rotations
+
+runway_corners = [
+    WorldPoint(0.0m, 50m, 0m),     # near left
+    WorldPoint(3000.0m, 50m, 0m),  # far left
+    WorldPoint(3000.0m, -50m, 0m),  # far right
+    WorldPoint(0.0m, -50m, 0m),    # near right
+]
+
+cam_pos = WorldPoint(-2000.0m, 12m, 150m)
+cam_rot = RotZYX(roll=1.5°, pitch=5°, yaw=0°)
+
+true_observations = [project(cam_pos, cam_rot, p) for p in runway_corners]
+noisy_observations = [p + ProjectionPoint(2.0*randn(2)px) for p in true_observations]
+
+(cam_pos_est, cam_rot_est) = estimatepose6dof(
+    PointFeatures(runway_corners, noisy_observations)
+)[(:pos, :rot)]
+
+cam_pos_est</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">3-element WorldPoint{Float64{m}} with indices SOneTo(3):
+ -1988.9171972026531 m
+ 9.000083679474974 m
+ 149.0536140431886 m</code></pre><p>We can extract roll-pitch-yaw as</p><pre><code class="language-julia hljs">import Rotations: params
+(yaw, pitch, roll) = params(cam_rot_est)
+@show rad2deg(roll*rad)
+@show rad2deg(pitch*rad)
+@show rad2deg(yaw*rad)
+;</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">rad2deg(roll * rad) = 2.111653997061791°
+rad2deg(pitch * rad) = 4.9979194365442385°
+rad2deg(yaw * rad) = 0.07287633272234004°</code></pre><h2 id="Using-Line-Features"><a class="docs-heading-anchor" href="#Using-Line-Features">Using Line Features</a><a id="Using-Line-Features-1"></a><a class="docs-heading-anchor-permalink" href="#Using-Line-Features" title="Permalink"></a></h2><p>Besides point features we can additionally include line features which can typically improve our altitude and crosstrack estimations, but usually can&#39;t improve our alongtrack estimation much because the line projections are constant along the glidepath. See <a href="camera_model/#Line-Projections">Line Projections</a> for more information on the line parameterization.</p><pre><code class="language-julia hljs">line_pts = [
+    (runway_corners[1], runway_corners[2]),
+    (runway_corners[3], runway_corners[4]),
+]
+true_lines = map(line_pts) do (p1, p2)
+    proj1 = project(cam_pos, cam_rot, p1)
+    proj2 = project(cam_pos, cam_rot, p2)
+    getline(proj1, proj2)
+end
+observed_lines = [
+  Line(
+    r + 1px*randn(),
+    theta + deg2rad(1°)*randn()
+  )
+  for (; r, theta) in true_lines
+]
+
+# now with additional line features
+(cam_pos_est, cam_rot_est) = estimatepose6dof(
+    PointFeatures(runway_corners, noisy_observations),
+    LineFeatures(line_pts, observed_lines)
+)[(:pos, :rot)]
+
+cam_pos_est</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">3-element WorldPoint{Float64{m}} with indices SOneTo(3):
+ -1995.1768034305317 m
+ 9.956978961498848 m
+ 149.95855350660037 m</code></pre></article><nav class="docs-footer"><a class="docs-footer-nextpage" href="camera_model/">Camera Model »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Sunday 15 February 2026 04:18">Sunday 15 February 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
