@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.20.21
+# v0.20.20
 
 using Markdown
 using InteractiveUtils
@@ -36,6 +36,9 @@ begin
 	using RunwayLib.StaticArrays: SA
 end
 
+# ╔═╡ d0125c2f-4222-4ca9-998a-5cebb630b593
+PlutoUI.TableOfContents()
+
 # ╔═╡ a1b2c3d4-0002-0000-0000-000000000002
 md"""
 # Pose Estimation on VLA Flight Data
@@ -65,8 +68,6 @@ names(df_raw)
 # ╔═╡ 7e52a693-c474-4631-af9c-c3c01767d90f
 let
 	row = first(eachrow(df_raw))
-	row.gt_label_runway_centerline_edge_start_y_px, row.pred_edge_centerline_start_y_px,
-	row.pred_edge_centerline_start_y_px
 end
 
 # ╔═╡ ae66ebfc-5949-4119-b0c7-059a1bc5434a
@@ -94,7 +95,7 @@ Select which flight test to analyze:
 # ╔═╡ a1b2c3d4-0004-0002-0000-000000000001
 md"Flight Test: $(@bind selected_flight Select([\"FT113\", \"FT216\"]; default=\"FT113\"))"
 
-# ╔═╡ a1b2c3d4-0005-0000-0000-000000000005
+# ╔═╡ a2fd010e-abe6-44a2-b889-e55d2d758850
 # Filter for selected trajectory and rows with valid keypoint detections
 df = let
     pred_cols = [
@@ -273,7 +274,8 @@ function compute_protection_levels(cam_pos, cam_rot, pf::PointFeatures;
 
     # Compute max protection level over all single-fault hypotheses
     bounds = map(1:3) do alpha_idx  # alongtrack, crosstrack, altitude
-		fault_hypotheses = (1:2, 3:4, 5:6, 7:8)
+		n_pts = div(n_meas, 2)
+		fault_hypotheses = [2i-1:2i for i in 1:n_pts]
         max_pl = maximum(fault_hypotheses) do fault_idx
 			_, g_slope = compute_worst_case_fault_direction_and_slope(
 				alpha_idx, fault_idx, Matrix(H), noise_cov
@@ -291,20 +293,7 @@ md"""
 Let's find a row with good quality data (low pipeline error) and compare our estimate.
 """
 
-# ╔═╡ a1b2c3d4-0010-0000-0000-000000000010
-# ╠═╡ disabled = true
-#=╠═╡
-# Filter for rows with valid and reasonable along_track_error
-df_good = let
-    df_with_errors = filter(row -> !ismissing(row.along_track_error_m) &&
-                                   row.along_track_error_m != "1,000,000", df)
-    errors = [parse_num(row.along_track_error_m) for row in eachrow(df_with_errors)]
-    good_mask = abs.(errors) .< 100  # rows where pipeline error < 100m
-    df_with_errors[good_mask, :]
-end
-  ╠═╡ =#
-
-# ╔═╡ b2958518-1c72-4ed4-9a8b-cf2f271db480
+# ╔═╡ f62c3bf2-70e5-47b5-a72a-52292332cfa3
 df_good = df
 
 # ╔═╡ a1b2c3d4-0011-0000-0000-000000000011
@@ -534,8 +523,10 @@ function unitfree_protection_level(cam_pos, cam_rot, pf, lf=NO_LINES;
 	H = compute_H(cam_pos, cam_rot, pf, lf)
 
 	Ly = cholesky(Σy).L
-	Σx = inv(H' * (Σy \ H)) |> hermitianpart
-	@assert issymmetric(Σx)
+	Σx = inv(H' * (Σy \ H)) 
+	@assert Σx ≈ Σx'#|> hermitianpart
+    Σx = (Σx + Σx')/2
+	@assert ishermitian(Σx)
 
 	n_meas = size(H, 1)
 	Hbow = inv(Ly) * H * Diagonal(sqrt.(diag(Σx)))
@@ -668,13 +659,14 @@ unitfree_pf, unitfree_lf, feature_status = let
 		for line in observed_lines
 			θ = ustrip(rad, line.theta)
 			# Estimate line length from r and image size (~4000px diagonal)
-			line_len = 3000.0  # approximate effective line length in px
+			line_len = 300.0  # approximate effective line length in px
 			σ_θ = σ_r / line_len
 			σ_cosθ = max(abs(sin(θ)) * σ_θ, ε_floor)
 			σ_sinθ = max(abs(cos(θ)) * σ_θ, ε_floor)
 			append!(line_cov_diag, [σ_r^2, σ_cosθ^2, σ_sinθ^2])
 		end
 		line_cov = Diagonal(line_cov_diag)
+		display(line_cov)
 		lf = LineFeatures(world_endpoints, observed_lines, CAMERA_CONFIG_OFFSET, line_cov)
 	else
 		lf = NO_LINES
@@ -908,7 +900,7 @@ cov(noise_model.noisedistribution) |> diag
 # ╔═╡ a1b2c3d4-0023-0000-0000-000000000003
 # Process trajectory - estimate pose for each valid row, including integrity info
 # Uses threading via OhMyThreads for parallel processing
-function process_trajectory_threaded(df_traj; use_covariance=true, global_sigma=5.0, alpha=0.05)
+function process_trajectory_threaded(df_traj; use_covariance=true, global_sigma=1.0, alpha=0.05)
     rows = collect(eachrow(df_traj))
 
     results = tmap(rows) do row
@@ -993,7 +985,8 @@ function process_trajectory_threaded(df_traj; use_covariance=true, global_sigma=
                 cov_bottom_right = cov_br,
             )
         catch e
-            nothing  # Skip rows that fail
+            @warn "Row failed" exception=(e, catch_backtrace())
+            nothing
         end
     end
 
@@ -1004,7 +997,7 @@ end
 # Process trajectory with threading
 trajectory_results = let
     use_cov = noise_source == "covariance"
-    sigma = noise_source == "confidence" ? global_sigma : 5.0
+    sigma = noise_source == "confidence" ? global_sigma : 1.0
     process_trajectory_threaded(df_good[1:min(1500, nrow(df_good)), :];
         use_covariance=use_cov, global_sigma=sigma, alpha=alpha_val)
 end
@@ -1196,6 +1189,7 @@ end
 # ╔═╡ Cell order:
 # ╠═3745f4fa-fbfa-11f0-8bbf-cd24cef3b17f
 # ╠═a1b2c3d4-0001-0000-0000-000000000001
+# ╠═d0125c2f-4222-4ca9-998a-5cebb630b593
 # ╟─a1b2c3d4-0002-0000-0000-000000000002
 # ╠═a1b2c3d4-0003-0000-0000-000000000003
 # ╠═a1b2c3d4-0004-0000-0000-000000000004
@@ -1206,7 +1200,7 @@ end
 # ╠═68d9df40-6870-4fa0-aa91-97bf15b839b8
 # ╟─a1b2c3d4-0004-0001-0000-000000000001
 # ╠═a1b2c3d4-0004-0002-0000-000000000001
-# ╠═a1b2c3d4-0005-0000-0000-000000000005
+# ╠═a2fd010e-abe6-44a2-b889-e55d2d758850
 # ╟─a1b2c3d4-0005-0001-0000-000000000001
 # ╟─a1b2c3d4-0006-0000-0000-000000000006
 # ╠═a1b2c3d4-0007-0000-0000-000000000007
@@ -1218,8 +1212,7 @@ end
 # ╟─a1b2c3d4-0008-0003-0000-000000000003
 # ╠═a1b2c3d4-0024-0000-0000-000000000001
 # ╟─a1b2c3d4-0009-0000-0000-000000000009
-# ╠═a1b2c3d4-0010-0000-0000-000000000010
-# ╠═b2958518-1c72-4ed4-9a8b-cf2f271db480
+# ╠═f62c3bf2-70e5-47b5-a72a-52292332cfa3
 # ╠═a1b2c3d4-0011-0000-0000-000000000011
 # ╠═a1b2c3d4-0012-0000-0000-000000000012
 # ╠═a1b2c3d4-0013-0000-0000-000000000013
@@ -1236,9 +1229,9 @@ end
 # ╟─a1b2c3d4-0021-0000-0000-000000000021
 # ╠═a1b2c3d4-0022-0000-0000-000000000022
 # ╠═dca746d9-5a4a-4386-830f-0bada1377367
-# ╠═2e86ab6e-0949-11f1-a7b4-430f374d1f1a
-# ╠═b6f1746a-0945-11f1-8bc5-d36f304c5851
-# ╠═0c38d900-0947-11f1-bbb0-000000000001
+# ╟─2e86ab6e-0949-11f1-a7b4-430f374d1f1a
+# ╟─b6f1746a-0945-11f1-8bc5-d36f304c5851
+# ╟─0c38d900-0947-11f1-bbb0-000000000001
 # ╠═f640d1b4-ac63-4110-96d5-559287b43ae7
 # ╟─0c38cd0a-0947-11f1-8be0-afa504b38a75
 # ╟─0c38cf96-0947-11f1-90b5-43dc33093ab5
