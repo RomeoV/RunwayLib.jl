@@ -55,6 +55,7 @@ PLs = map(1:n_kp) do k
 
     σ²ₖ  = α' * Pₖ * α           # subset solution variance
     σ²_Δk = σ²ₖ - σ²₀             # solution separation variance
+    @assert σ²_Δk > 0
 
     σ_Δk = sqrt(max(σ²_Δk, 0.0))  # guard against numerical noise
     σₖ   = sqrt(σ²ₖ)

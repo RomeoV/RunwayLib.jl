@@ -44,6 +44,7 @@ makedocs(
         "C_interface.md",
         "noise_models.md",
         "integrity_check.md",
+        "solution_separation.md",
         "caches.md",
         "performance_tips.md",
         "benchmarks.md",
