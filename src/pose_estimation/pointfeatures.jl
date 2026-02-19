@@ -1,7 +1,14 @@
 """
-    PointFeatures{T, T′, T′′, S, RC, OC, CC, M, M′}
+    PointFeatures{T, T′, T′′, RC, OC, CC, M, M′}
 
 Point feature observations and noise model for pose estimation.
+
+# Fields
+- `runway_corners`: Vector of WorldPoints defining runway corner positions in world space
+- `observed_corners`: Vector of ProjectionPoints from image observations
+- `camconfig`: Camera configuration
+- `cov`: Covariance matrix for observation errors
+- `Linv`: Inverted lower triangular part of covariance
 """
 struct PointFeatures{
     T,T′,T′′,
