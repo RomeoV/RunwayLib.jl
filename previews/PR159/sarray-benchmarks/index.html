@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>StaticArray Benchmarks · RunwayLib</title><meta name="title" content="StaticArray Benchmarks · RunwayLib"/><meta property="og:title" content="StaticArray Benchmarks · RunwayLib"/><meta property="twitter:title" content="StaticArray Benchmarks · RunwayLib"/><meta name="description" content="Documentation for RunwayLib."/><meta property="og:description" content="Documentation for RunwayLib."/><meta property="twitter:description" content="Documentation for RunwayLib."/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script><link href="../assets/citations.css" rel="stylesheet" type="text/css"/></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">RunwayLib</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">RunwayLib.jl: Fast Pose Estimation and Runtime Assurance for Runway Landings.</a></li><li><a class="tocitem" href="../camera_model/">Camera Model</a></li><li><a class="tocitem" href="../python_interface/">Python Interface</a></li><li><a class="tocitem" href="../C_interface/">C Interface</a></li><li><a class="tocitem" href="../noise_models/">Noise Models</a></li><li><a class="tocitem" href="../integrity_check/">Integrity Check</a></li><li><a class="tocitem" href="../caches/">Using Caches</a></li><li><a class="tocitem" href="../performance_tips/">Performance Tips</a></li><li><a class="tocitem" href="../benchmarks/">Benchmarks</a></li><li class="is-active"><a class="tocitem" href>StaticArray Benchmarks</a><ul class="internal"><li><a class="tocitem" href="#Setup"><span>Setup</span></a></li><li><a class="tocitem" href="#3dof-vs-6dof"><span>3dof vs 6dof</span></a></li><li><a class="tocitem" href="#Impact-of-StaticArrays"><span>Impact of StaticArrays</span></a></li><li><a class="tocitem" href="#With-line-angle-features"><span>With line angle features</span></a></li></ul></li><li><a class="tocitem" href="../uncertainty_predictions/">Computing Pose Uncertainty</a></li><li><a class="tocitem" href="../api_reference/">API Reference</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>StaticArray Benchmarks</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>StaticArray Benchmarks</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/RomeoV/RunwayLib.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/RomeoV/RunwayLib.jl/blob/master/docs/src/sarray-benchmarks.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="StaticArray-Benchmarks"><a class="docs-heading-anchor" href="#StaticArray-Benchmarks">StaticArray Benchmarks</a><a id="StaticArray-Benchmarks-1"></a><a class="docs-heading-anchor-permalink" href="#StaticArray-Benchmarks" title="Permalink"></a></h1><p>We explore the compute time requirements for pose estimation under different configurations: comparing <strong>3dof vs 6dof</strong>, the impact of <strong>StaticArrays</strong>, and solving with <strong>additional line angle features</strong>.</p><h2 id="Setup"><a class="docs-heading-anchor" href="#Setup">Setup</a><a id="Setup-1"></a><a class="docs-heading-anchor-permalink" href="#Setup" title="Permalink"></a></h2><pre><code class="language-julia hljs">using RunwayLib, Unitful.DefaultSymbols, Rotations
+using StaticArrays, Chairmarks, Printf, Markdown
+
+runway_corners = [
+    WorldPoint(0.0m, 50m, 0m),     # near left
+    WorldPoint(3000.0m, 50m, 0m),  # far left
+    WorldPoint(3000.0m, -50m, 0m),  # far right
+    WorldPoint(0.0m, -50m, 0m),    # near right
+]
+
+cam_pos = WorldPoint(-2000.0m, 12m, 150m)
+cam_rot = RotZYX(roll=1.5°, pitch=5°, yaw=0°)
+
+true_observations = [project(cam_pos, cam_rot, p) for p in runway_corners]
+noisy_observations = [p + ProjectionPoint(2.0*randn(2)px) for p in true_observations]
+
+fmt(t) = @sprintf(&quot;%.1f μs&quot;, t * 1e6)
+speedup(a, b) = @sprintf(&quot;%.2f×&quot;, a / b)
+
+pf_arr = PointFeatures(runway_corners, noisy_observations)</code></pre><h2 id="3dof-vs-6dof"><a class="docs-heading-anchor" href="#3dof-vs-6dof">3dof vs 6dof</a><a id="3dof-vs-6dof-1"></a><a class="docs-heading-anchor-permalink" href="#3dof-vs-6dof" title="Permalink"></a></h2><p>We first compare the two solver modes using regular <code>Vector</code>-backed <code>PointFeatures</code>.</p><pre><code class="language-julia hljs">b_6dof = minimum(@be pf_arr estimatepose6dof)
+b_3dof = minimum(@be pf_arr estimatepose3dof(_, NO_LINES, cam_rot))
+
+Markdown.parse(&quot;&quot;&quot;
+|                | 6dof            | 3dof            | Speedup          |
+|:---------------|:----------------|:----------------|:-----------------|
+| Regular arrays | $(fmt(b_6dof.time)) | $(fmt(b_3dof.time)) | $(speedup(b_6dof.time, b_3dof.time)) |
+&quot;&quot;&quot;)</code></pre><div class="markdown"><table><tr><th align="left"></th><th align="left">6dof</th><th align="left">3dof</th><th align="left">Speedup</th></tr><tr><td align="left">Regular arrays</td><td align="left">298.2 μs</td><td align="left">198.7 μs</td><td align="left">1.50×</td></tr></table>
+</div><h2 id="Impact-of-StaticArrays"><a class="docs-heading-anchor" href="#Impact-of-StaticArrays">Impact of StaticArrays</a><a id="Impact-of-StaticArrays-1"></a><a class="docs-heading-anchor-permalink" href="#Impact-of-StaticArrays" title="Permalink"></a></h2><p>Wrapping the point features in <code>SVector</code> allows the compiler to unroll loops and avoid heap allocations.</p><pre><code class="language-julia hljs">pf_sa = PointFeatures(SVector{4}(runway_corners), SVector{4}(noisy_observations))
+
+b_6dof_sa = minimum(@be pf_sa estimatepose6dof)
+b_3dof_sa = minimum(@be pf_sa estimatepose3dof(_, NO_LINES, cam_rot))
+
+Markdown.parse(&quot;&quot;&quot;
+|                  | 6dof            | 3dof            | Speedup          |
+|:-----------------|:----------------|:----------------|:-----------------|
+| Regular arrays   | $(fmt(b_6dof.time)) | $(fmt(b_3dof.time)) | $(speedup(b_6dof.time, b_3dof.time)) |
+| StaticArrays     | $(fmt(b_6dof_sa.time)) | $(fmt(b_3dof_sa.time)) | $(speedup(b_6dof_sa.time, b_3dof_sa.time)) |
+| SA speedup       | $(speedup(b_6dof.time, b_6dof_sa.time)) | $(speedup(b_3dof.time, b_3dof_sa.time)) |   |
+&quot;&quot;&quot;)</code></pre><div class="markdown"><table><tr><th align="left"></th><th align="left">6dof</th><th align="left">3dof</th><th align="left">Speedup</th></tr><tr><td align="left">Regular arrays</td><td align="left">298.2 μs</td><td align="left">198.7 μs</td><td align="left">1.50×</td></tr><tr><td align="left">StaticArrays</td><td align="left">165.0 μs</td><td align="left">88.5 μs</td><td align="left">1.86×</td></tr><tr><td align="left">SA speedup</td><td align="left">1.81×</td><td align="left">2.24×</td><td align="left"></td></tr></table>
+</div><h2 id="With-line-angle-features"><a class="docs-heading-anchor" href="#With-line-angle-features">With line angle features</a><a id="With-line-angle-features-1"></a><a class="docs-heading-anchor-permalink" href="#With-line-angle-features" title="Permalink"></a></h2><p>Adding observed runway edge angles as <code>LineFeatures</code> provides additional constraints to the solver.</p><pre><code class="language-julia hljs">line_pts = [
+    (runway_corners[1], runway_corners[2]),
+    (runway_corners[3], runway_corners[4]),
+]
+true_lines = map(line_pts) do (p1, p2)
+    proj1 = project(cam_pos, cam_rot, p1)
+    proj2 = project(cam_pos, cam_rot, p2)
+    getline(proj1, proj2)
+end
+observed_lines = [
+  Line(r + 1px*randn(), theta + deg2rad(1°)*randn())
+  for (; r, theta) in true_lines
+]
+
+lf_arr = LineFeatures(line_pts, observed_lines)
+lf_sa  = LineFeatures(SVector{2}(line_pts), SVector{2}(observed_lines))
+
+bl_6dof    = minimum(@be (pf_arr, lf_arr) estimatepose6dof(_...))
+bl_3dof    = minimum(@be (pf_arr, lf_arr) estimatepose3dof(_..., cam_rot))
+bl_6dof_sa = minimum(@be (pf_sa,  lf_sa)  estimatepose6dof(_...))
+bl_3dof_sa = minimum(@be (pf_sa,  lf_sa)  estimatepose3dof(_..., cam_rot))
+
+Markdown.parse(&quot;&quot;&quot;
+|                  | 6dof            | 3dof            | Speedup          |
+|:-----------------|:----------------|:----------------|:-----------------|
+| Regular arrays   | $(fmt(bl_6dof.time)) | $(fmt(bl_3dof.time)) | $(speedup(bl_6dof.time, bl_3dof.time)) |
+| StaticArrays     | $(fmt(bl_6dof_sa.time)) | $(fmt(bl_3dof_sa.time)) | $(speedup(bl_6dof_sa.time, bl_3dof_sa.time)) |
+| SA speedup       | $(speedup(bl_6dof.time, bl_6dof_sa.time)) | $(speedup(bl_3dof.time, bl_3dof_sa.time)) |   |
+&quot;&quot;&quot;)</code></pre><div class="markdown"><table><tr><th align="left"></th><th align="left">6dof</th><th align="left">3dof</th><th align="left">Speedup</th></tr><tr><td align="left">Regular arrays</td><td align="left">454.1 μs</td><td align="left">334.2 μs</td><td align="left">1.36×</td></tr><tr><td align="left">StaticArrays</td><td align="left">300.3 μs</td><td align="left">180.5 μs</td><td align="left">1.66×</td></tr><tr><td align="left">SA speedup</td><td align="left">1.51×</td><td align="left">1.85×</td><td align="left"></td></tr></table>
+</div></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../benchmarks/">« Benchmarks</a><a class="docs-footer-nextpage" href="../uncertainty_predictions/">Computing Pose Uncertainty »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Thursday 19 February 2026 04:37">Thursday 19 February 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
