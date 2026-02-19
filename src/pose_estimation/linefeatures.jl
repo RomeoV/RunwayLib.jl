@@ -1,5 +1,5 @@
 """
-    LineFeatures{T, T′′, S, WL, OL, CC, M, M′}
+    LineFeatures{T, T′, T′′, WL, OL, CC, M, M′}
 
 Line feature observations and noise model for pose estimation.
 
