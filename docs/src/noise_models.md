@@ -12,7 +12,7 @@ RunwayLib re-exports the noise model types from [`ProbabilisticParameterEstimato
 - [`UncorrGaussianNoiseModel`](@extref ProbabilisticParameterEstimators.UncorrGaussianNoiseModel) — independent Gaussian noise per measurement (or per 2D/3D group)
 - [`CorrGaussianNoiseModel`](@extref ProbabilisticParameterEstimators.CorrGaussianNoiseModel) — a single multivariate normal capturing cross-measurement correlations
 
-Every noise model supports [`covmatrix`](@extref ProbabilisticParameterEstimators.covmatrix) which returns the full covariance matrix.
+Every noise model supports `covmatrix` which returns the full covariance matrix.
 
 ## Choosing a Noise Model
 
@@ -85,10 +85,10 @@ If measurements are correlated across keypoints (e.g., due to shared image proce
 ```@example noise
 n = 8  # 4 keypoints × 2 coordinates
 Σ_full = Matrix{Float64}(4.0I, n, n)
-# Add cross-keypoint correlation
-for i in 1:2:n-1
-    Σ_full[i, i+2] = Σ_full[i+2, i] = 0.5  # correlate x-coords of adjacent keypoints
-end
+# Add correlation between x-coords of adjacent keypoints
+Σ_full[1, 3] = Σ_full[3, 1] = 0.5
+Σ_full[3, 5] = Σ_full[5, 3] = 0.5
+Σ_full[5, 7] = Σ_full[7, 5] = 0.5
 
 noise_model_corr = CorrGaussianNoiseModel(MvNormal(zeros(n), Σ_full))
 
