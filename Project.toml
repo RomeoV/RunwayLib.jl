@@ -39,6 +39,11 @@ Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 [weakdeps]
 PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
 
+[sources.NonlinearSolveBase]
+rev = "fix-Jcache-assignment"
+subdir = "lib/NonlinearSolveBase"
+url = "https://github.com/RomeoV/NonlinearSolve.jl"
+
 [extensions]
 PythonCallExt = "PythonCall"
 
@@ -58,7 +63,7 @@ LinearAlgebra = "1.11.0"
 LinearSolve = "3.25.0"
 Moshi = "0.3.7"
 NonlinearSolveBase = "1.13.0,2"
-NonlinearSolveFirstOrder = "1.8.0"
+NonlinearSolveFirstOrder = "1.8.0, 2"
 Polyester = "0.7.18"
 PolyesterWeave = "0.2.2"
 PrecompileTools = "1"
@@ -81,6 +86,3 @@ LoadMKL_JLL = false
 
 [targets]
 test = ["Test"]
-
-[sources]
-NonlinearSolveBase = {url="https://github.com/RomeoV/NonlinearSolve.jl", subdir="lib/NonlinearSolveBase", rev="fix-Jcache-assignment"}
