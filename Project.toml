@@ -39,6 +39,11 @@ Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 [weakdeps]
 PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
 
+[sources.NonlinearSolveBase]
+rev = "fix-Jcache-assignment"
+subdir = "lib/NonlinearSolveBase"
+url = "https://github.com/RomeoV/NonlinearSolve.jl"
+
 [extensions]
 PythonCallExt = "PythonCall"
 
@@ -47,7 +52,7 @@ ADTypes = "1.16.0"
 BenchmarkTools = "1.6.0"
 CEnum = "0.5.0"
 CSV = "0.10"
-DiffEqBase = "^6.179.0"
+DiffEqBase = "^6.179.0, 7"
 DifferentiationInterface = "0.7"
 DispatchDoctor = "0.4.28"
 Distributions = "0.25.120"
@@ -81,6 +86,3 @@ LoadMKL_JLL = false
 
 [targets]
 test = ["Test"]
-
-[sources]
-NonlinearSolveBase = {url="https://github.com/RomeoV/NonlinearSolve.jl", subdir="lib/NonlinearSolveBase", rev="fix-Jcache-assignment"}
